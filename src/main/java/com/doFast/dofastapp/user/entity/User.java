@@ -17,6 +17,8 @@ public class User {
 
     private String nickname;
 
+    private String password;
+
     public User() {}
 
     public User(String email, String nickname) {
@@ -32,6 +34,10 @@ public class User {
         return email;
     }
 
+    public String getPassword() {
+        return password;
+    }
+
     public String getNickname() {
         return nickname;
     }
@@ -42,6 +48,10 @@ public class User {
 
     public void setNickname(String nickname) {
         this.nickname = nickname;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 }
 

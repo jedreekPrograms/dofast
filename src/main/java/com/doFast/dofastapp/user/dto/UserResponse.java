@@ -6,6 +6,7 @@ public class UserResponse {
     private String email;
     private String nickname;
 
+
     public UserResponse(Long id, String email, String nickname) {
         this.id = id;
         this.email = email;
@@ -23,4 +24,6 @@ public class UserResponse {
     public String getNickname() {
         return nickname;
     }
+
+
 }
