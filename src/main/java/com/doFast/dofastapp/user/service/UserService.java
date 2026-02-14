@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.service;
 
 
+import com.doFast.dofastapp.user.dto.LoginRequest;
 import com.doFast.dofastapp.user.dto.UserRequest;
 import com.doFast.dofastapp.user.dto.UserResponse;
 import com.doFast.dofastapp.user.entity.User;
@@ -53,5 +54,17 @@ public class UserService {
                         user.getNickname()
                 ))
                 .collect(Collectors.toList());
+    }
+
+    public String login(LoginRequest request) {
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("Nie znaleziono użytkownika"));
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new RuntimeException("Niepoprawne hasło");
+        }
+
+        return "Zalogowano poprawnie";
     }
 }
