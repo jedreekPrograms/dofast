@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.service;
 
 
+import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.dto.LoginRequest;
 import com.doFast.dofastapp.user.dto.UserRequest;
 import com.doFast.dofastapp.user.dto.UserResponse;
@@ -17,10 +18,12 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtUtil = jwtUtil;
     }
 
     public UserResponse createUser(UserRequest request) {
@@ -65,6 +68,6 @@ public class UserService {
             throw new RuntimeException("Niepoprawne hasło");
         }
 
-        return "Zalogowano poprawnie";
+        return jwtUtil.generateToken(user.getEmail());
     }
 }
