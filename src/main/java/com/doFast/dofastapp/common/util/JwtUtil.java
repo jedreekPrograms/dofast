@@ -11,7 +11,7 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    private final String SECRET = "supertajnykluczxd";
+    private final String SECRET = "my-super-secret-jwt-key-256-bit-long!!";
     private final long EXPIRATION = 1000 * 60 * 60;
 
     private Key getSigningKey() {
