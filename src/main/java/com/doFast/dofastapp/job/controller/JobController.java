@@ -7,10 +7,9 @@ import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/jobs")
@@ -31,5 +30,10 @@ public class JobController {
         User user = (User) authentication.getPrincipal();
 
         return jobService.createJob(request, user);
+    }
+
+    @GetMapping
+    public List<JobResponse> getJobs() {
+        return jobService.getOpenJobs();
     }
 }

@@ -8,6 +8,9 @@ import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @Service
 public class JobService {
     private final JobRepository jobRepository;
@@ -36,5 +39,18 @@ public class JobService {
                 saved.getStatus().name()
         );
 
+    }
+
+    public List<JobResponse> getOpenJobs() {
+        return jobRepository.findByStatus(JobStatus.OPEN)
+                .stream()
+                .map(job -> new JobResponse(
+                        job.getId(),
+                        job.getTitle(),
+                        job.getDescription(),
+                        job.getPrice(),
+                        job.getStatus().name()
+                ))
+                .collect(Collectors.toList());
     }
 }
