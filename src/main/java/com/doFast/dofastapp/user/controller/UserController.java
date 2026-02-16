@@ -8,6 +8,8 @@ import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.user.service.UserService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -36,4 +38,20 @@ public class UserController {
     public String login(@RequestBody @Valid LoginRequest request) {
         return userService.login(request);
     }
+
+    @GetMapping("/me")
+    public UserResponse me() {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        User user = (User) authentication.getPrincipal();
+
+        return new UserResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getNickname()
+        );
+    }
+
 }

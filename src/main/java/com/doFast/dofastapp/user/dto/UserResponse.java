@@ -24,6 +24,4 @@ public class UserResponse {
     public String getNickname() {
         return nickname;
     }
-
-
 }
