@@ -1,4 +1,7 @@
 package com.doFast.dofastapp.common.enums;
 
-public class JobStatus {
+public enum JobStatus {
+    OPEN,
+    IN_PROGRESS,
+    DONE
 }
