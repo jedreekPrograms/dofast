@@ -6,7 +6,9 @@ import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
+import org.springframework.stereotype.Service;
 
+@Service
 public class JobService {
     private final JobRepository jobRepository;
 
