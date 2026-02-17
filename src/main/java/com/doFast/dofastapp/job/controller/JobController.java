@@ -47,4 +47,14 @@ public class JobController {
 
         return jobService.takeJob(id, user);
     }
+
+    @GetMapping("/my")
+    public List<JobResponse> getMyJobs() {
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        User user = (User) authentication.getPrincipal();
+
+        return jobService.getMyJobs(user);
+    }
 }

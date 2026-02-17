@@ -83,4 +83,19 @@ public class JobService {
                 saved.getTakenBy().getId()
         );
     }
+
+    public List<JobResponse> getMyJobs(User user) {
+        return jobRepository
+                .findByCreatedByOrTakenBy(user, user)
+                .stream()
+                .map(job -> new JobResponse(
+                        job.getId(),
+                        job.getTitle(),
+                        job.getDescription(),
+                        job.getPrice(),
+                        job.getStatus().name(),
+                        job.getTakenBy() != null ? job.getTakenBy().getId() : null
+                ))
+                .collect(Collectors.toList());
+    }
 }
