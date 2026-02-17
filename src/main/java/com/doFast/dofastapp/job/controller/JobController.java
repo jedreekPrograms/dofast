@@ -57,4 +57,15 @@ public class JobController {
 
         return jobService.getMyJobs(user);
     }
+
+    @PostMapping("/{id}/done")
+    public JobResponse markAsDone(@PathVariable Long id) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        User user = (User) authentication.getPrincipal();
+
+        return jobService.markAsDone(id, user);
+    }
 }

@@ -98,4 +98,31 @@ public class JobService {
                 ))
                 .collect(Collectors.toList());
     }
+
+    public JobResponse markAsDone(Long jobId, User currentUser) {
+
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Zlecenie nie istnieje"));
+
+        if (job.getStatus() != JobStatus.IN_PROGRESS) {
+            throw new RuntimeException("Zlecenie nie jest w trakcie");
+        }
+
+        if (!job.getCreatedBy().getId().equals(currentUser.getId())) {
+            throw new RuntimeException("Tylko autor może oznaczyć zlecenie jako wykonane");
+        }
+
+        job.setStatus(JobStatus.DONE);
+
+        Job saved = jobRepository.save(job);
+
+        return new JobResponse(
+                saved.getId(),
+                saved.getTitle(),
+                saved.getDescription(),
+                saved.getPrice(),
+                saved.getStatus().name(),
+                saved.getTakenBy() != null ? saved.getTakenBy().getId() : null
+        );
+    }
 }
