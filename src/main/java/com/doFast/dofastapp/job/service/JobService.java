@@ -36,7 +36,8 @@ public class JobService {
                 saved.getTitle(),
                 saved.getDescription(),
                 saved.getPrice(),
-                saved.getStatus().name()
+                saved.getStatus().name(),
+                saved.getTakenBy() != null ? job.getTakenBy().getId() : null
         );
 
     }
@@ -49,8 +50,37 @@ public class JobService {
                         job.getTitle(),
                         job.getDescription(),
                         job.getPrice(),
-                        job.getStatus().name()
+                        job.getStatus().name(),
+                        job.getTakenBy() != null ? job.getTakenBy().getId() : null
                 ))
                 .collect(Collectors.toList());
+    }
+
+    public JobResponse takeJob(Long jobId, User currentUser) {
+
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Zlecenie nie istnieje"));
+
+        if (job.getStatus() != JobStatus.OPEN) {
+            throw new RuntimeException("Zlecenie nie jest dostępne");
+        }
+
+        if (job.getCreatedBy().getId().equals(currentUser.getId())) {
+            throw new RuntimeException("Nie możesz wziąć własnego zlecenia");
+        }
+
+        job.setStatus(JobStatus.IN_PROGRESS);
+        job.setTakenBy(currentUser);
+
+        Job saved = jobRepository.save(job);
+
+        return new JobResponse(
+                saved.getId(),
+                saved.getTitle(),
+                saved.getDescription(),
+                saved.getPrice(),
+                saved.getStatus().name(),
+                saved.getTakenBy().getId()
+        );
     }
 }

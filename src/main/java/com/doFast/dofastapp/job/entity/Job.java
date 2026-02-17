@@ -25,6 +25,9 @@ public class Job {
     @ManyToOne
     private User createdBy;
 
+    @ManyToOne
+    private User takenBy;
+
     public Job() {}
 
     public Long getId() {
@@ -51,6 +54,10 @@ public class Job {
         return createdBy;
     }
 
+    public User getTakenBy() {
+        return takenBy;
+    }
+
     public void setTitle(String title) {
         this.title = title;
     }
@@ -69,5 +76,9 @@ public class Job {
 
     public void setCreatedBy(User createdBy) {
         this.createdBy = createdBy;
+    }
+
+    public void setTakenBy(User takenBy) {
+        this.takenBy = takenBy;
     }
 }

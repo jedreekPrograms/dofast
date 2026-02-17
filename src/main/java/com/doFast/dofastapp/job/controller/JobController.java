@@ -36,4 +36,15 @@ public class JobController {
     public List<JobResponse> getJobs() {
         return jobService.getOpenJobs();
     }
+
+    @PostMapping("/{id}/take")
+    public JobResponse takeJob(@PathVariable Long id) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        User user = (User) authentication.getPrincipal();
+
+        return jobService.takeJob(id, user);
+    }
 }
