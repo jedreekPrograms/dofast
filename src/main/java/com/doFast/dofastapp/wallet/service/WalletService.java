@@ -46,4 +46,12 @@ public class WalletService {
         wallet.setBalance(wallet.getBalance().subtract(amount));
         walletRepository.save(wallet);
     }
+
+    public boolean hasEnoughMoney(User user, BigDecimal amount) {
+
+        Wallet wallet = walletRepository.findByUser(user)
+                .orElseThrow(() -> new RuntimeException("Wallet nie istnieje"));
+
+        return wallet.getBalance().compareTo(amount) >= 0;
+    }
 }

@@ -23,6 +23,10 @@ public class TranscationService {
 
         User payer = job.getCreatedBy();
 
+        if (!walletService.hasEnoughMoney(payer, job.getPrice())) {
+            throw new RuntimeException("Brak środków na koncie");
+        }
+
         walletService.subtractMoney(payer, job.getPrice());
 
         Transaction tx = new Transaction();
