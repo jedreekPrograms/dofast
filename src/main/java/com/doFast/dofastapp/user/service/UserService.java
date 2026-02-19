@@ -7,6 +7,7 @@ import com.doFast.dofastapp.user.dto.UserRequest;
 import com.doFast.dofastapp.user.dto.UserResponse;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
+import com.doFast.dofastapp.wallet.service.WalletService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -19,11 +20,13 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final WalletService walletService;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil, WalletService walletService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.walletService = walletService;
     }
 
     public UserResponse createUser(UserRequest request) {
@@ -40,6 +43,7 @@ public class UserService {
         user.setPassword(hashedPassword);
 
         User saved = userRepository.save(user);
+        walletService.createWalletForUser(user);
 
         return new UserResponse(
                 saved.getId(),
