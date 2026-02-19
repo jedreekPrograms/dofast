@@ -1,4 +1,7 @@
 package com.doFast.dofastapp.common.enums;
 
-public class TransactionStatus {
+public enum TransactionStatus {
+    HELD,
+    RELEASED,
+    REFUNDED
 }
