@@ -68,4 +68,15 @@ public class JobController {
 
         return jobService.markAsDone(id, user);
     }
+
+    @PostMapping("/{id}/cancel")
+    public JobResponse cancelJob(@PathVariable Long id) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        User user = (User) authentication.getPrincipal();
+
+        return jobService.cancelJob(id, user);
+    }
 }

@@ -5,7 +5,7 @@ import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
-import com.doFast.dofastapp.payment.service.TranscationService;
+import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import org.springframework.stereotype.Service;
 
@@ -15,9 +15,9 @@ import java.util.stream.Collectors;
 @Service
 public class JobService {
     private final JobRepository jobRepository;
-    private final TranscationService transcationService;
+    private final TransactionService transcationService;
 
-    public JobService(JobRepository jobRepository, TranscationService transcationService) {
+    public JobService(JobRepository jobRepository, TransactionService transcationService) {
         this.jobRepository = jobRepository;
         this.transcationService = transcationService;
     }
@@ -120,6 +120,34 @@ public class JobService {
 
         Job saved = jobRepository.save(job);
         transcationService.releaseMoney(saved, saved.getTakenBy());
+
+        return new JobResponse(
+                saved.getId(),
+                saved.getTitle(),
+                saved.getDescription(),
+                saved.getPrice(),
+                saved.getStatus().name(),
+                saved.getTakenBy() != null ? saved.getTakenBy().getId() : null
+        );
+    }
+
+    public JobResponse cancelJob(Long jobId, User currentUser) {
+
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Zlecenie nie istnieje"));
+
+        if (!job.getCreatedBy().getId().equals(currentUser.getId())) {
+            throw new RuntimeException("Tylko autor może anulować zlecenie");
+        }
+
+        if (job.getStatus() == JobStatus.DONE) {
+            throw new RuntimeException("Nie można anulować zakończonego zlecenia");
+        }
+
+        job.setStatus(JobStatus.CANCELLED);
+        Job saved = jobRepository.save(job);
+
+        transcationService.refundMoney(saved);
 
         return new JobResponse(
                 saved.getId(),

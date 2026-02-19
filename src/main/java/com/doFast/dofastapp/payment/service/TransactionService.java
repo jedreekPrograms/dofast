@@ -9,12 +9,12 @@ import com.doFast.dofastapp.wallet.service.WalletService;
 import org.springframework.stereotype.Service;
 
 @Service
-public class TranscationService {
+public class TransactionService {
 
     private final TranscationRepository transcationRepository;
     private final WalletService walletService;
 
-    public TranscationService(TranscationRepository transcationRepository, WalletService walletService) {
+    public TransactionService(TranscationRepository transcationRepository, WalletService walletService) {
         this.transcationRepository = transcationRepository;
         this.walletService = walletService;
     }
@@ -48,6 +48,21 @@ public class TranscationService {
         tx.setPayee(payee);
         tx.setStatus(TransactionStatus.RELEASED);
 
+        transcationRepository.save(tx);
+    }
+
+    public void refundMoney(Job job) {
+
+        Transaction tx = transcationRepository.findByJob(job)
+                .orElseThrow(() -> new RuntimeException("Brak transakcji"));
+
+        if (tx.getStatus() != TransactionStatus.HELD) {
+            throw new RuntimeException("Nie można wykonać refundu");
+        }
+
+        walletService.addMoney(tx.getPayer(), tx.getAmount());
+
+        tx.setStatus(TransactionStatus.REFUNDED);
         transcationRepository.save(tx);
     }
 }
