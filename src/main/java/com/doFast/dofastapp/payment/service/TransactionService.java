@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.payment.service;
 
 import com.doFast.dofastapp.common.enums.TransactionStatus;
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.payment.entity.Transaction;
 import com.doFast.dofastapp.payment.repository.TranscationRepository;
@@ -24,7 +25,7 @@ public class TransactionService {
         User payer = job.getCreatedBy();
 
         if (!walletService.hasEnoughMoney(payer, job.getPrice())) {
-            throw new RuntimeException("Brak środków na koncie");
+            throw new BusinessException("Brak środków na koncie");
         }
 
         walletService.subtractMoney(payer, job.getPrice());
@@ -41,7 +42,7 @@ public class TransactionService {
     public void releaseMoney(Job job, User payee) {
 
         Transaction tx = transcationRepository.findByJob(job)
-                .orElseThrow(() -> new RuntimeException("Brak transakcji"));
+                .orElseThrow(() -> new BusinessException("Brak transakcji"));
 
         walletService.addMoney(payee, tx.getAmount());
 
@@ -54,10 +55,10 @@ public class TransactionService {
     public void refundMoney(Job job) {
 
         Transaction tx = transcationRepository.findByJob(job)
-                .orElseThrow(() -> new RuntimeException("Brak transakcji"));
+                .orElseThrow(() -> new BusinessException("Brak transakcji"));
 
         if (tx.getStatus() != TransactionStatus.HELD) {
-            throw new RuntimeException("Nie można wykonać refundu");
+            throw new BusinessException("Nie można wykonać refundu");
         }
 
         walletService.addMoney(tx.getPayer(), tx.getAmount());

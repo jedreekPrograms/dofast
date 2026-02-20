@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
@@ -63,14 +64,14 @@ public class JobService {
     public JobResponse takeJob(Long jobId, User currentUser) {
 
         Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new RuntimeException("Zlecenie nie istnieje"));
+                .orElseThrow(() -> new BusinessException("Zlecenie nie istnieje"));
 
         if (job.getStatus() != JobStatus.OPEN) {
-            throw new RuntimeException("Zlecenie nie jest dostępne");
+            throw new BusinessException("Zlecenie nie jest dostępne");
         }
 
         if (job.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Nie możesz wziąć własnego zlecenia");
+            throw new BusinessException("Nie możesz wziąć własnego zlecenia");
         }
 
         job.setStatus(JobStatus.IN_PROGRESS);
@@ -106,14 +107,14 @@ public class JobService {
     public JobResponse markAsDone(Long jobId, User currentUser) {
 
         Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new RuntimeException("Zlecenie nie istnieje"));
+                .orElseThrow(() -> new BusinessException("Zlecenie nie istnieje"));
 
         if (job.getStatus() != JobStatus.IN_PROGRESS) {
-            throw new RuntimeException("Zlecenie nie jest w trakcie");
+            throw new BusinessException("Zlecenie nie jest w trakcie");
         }
 
         if (!job.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Tylko autor może oznaczyć zlecenie jako wykonane");
+            throw new BusinessException("Tylko autor może oznaczyć zlecenie jako wykonane");
         }
 
         job.setStatus(JobStatus.DONE);
@@ -134,14 +135,14 @@ public class JobService {
     public JobResponse cancelJob(Long jobId, User currentUser) {
 
         Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new RuntimeException("Zlecenie nie istnieje"));
+                .orElseThrow(() -> new BusinessException("Zlecenie nie istnieje"));
 
         if (!job.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Tylko autor może anulować zlecenie");
+            throw new BusinessException("Tylko autor może anulować zlecenie");
         }
 
         if (job.getStatus() == JobStatus.DONE) {
-            throw new RuntimeException("Nie można anulować zakończonego zlecenia");
+            throw new BusinessException("Nie można anulować zakończonego zlecenia");
         }
 
         job.setStatus(JobStatus.CANCELLED);

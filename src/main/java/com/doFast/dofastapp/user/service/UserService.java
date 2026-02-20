@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.service;
 
 
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.dto.LoginRequest;
 import com.doFast.dofastapp.user.dto.UserRequest;
@@ -32,7 +33,7 @@ public class UserService {
     public UserResponse createUser(UserRequest request) {
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email już istnieje");
+            throw new BusinessException("Email już istnieje");
         }
 
         User user = new User();
@@ -66,10 +67,10 @@ public class UserService {
     public String login(LoginRequest request) {
 
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("Nie znaleziono użytkownika"));
+                .orElseThrow(() -> new BusinessException("Nie znaleziono użytkownika"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Niepoprawne hasło");
+            throw new BusinessException("Niepoprawne hasło");
         }
 
         return jwtUtil.generateToken(user.getEmail());

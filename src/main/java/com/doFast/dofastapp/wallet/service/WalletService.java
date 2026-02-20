@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.wallet.service;
 
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.wallet.dto.WalletResponse;
 import com.doFast.dofastapp.wallet.entity.Wallet;
@@ -25,14 +26,14 @@ public class WalletService {
     public WalletResponse getMyWallet(User user) {
 
         Wallet wallet = walletRepository.findByUser(user)
-                .orElseThrow(() -> new RuntimeException("Wallet nie istnieje"));
+                .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
 
         return new WalletResponse(wallet.getBalance());
     }
 
     public void addMoney(User user, BigDecimal amount) {
         Wallet wallet = walletRepository.findByUser(user)
-                .orElseThrow(() -> new RuntimeException("Wallet nie istnieje"));
+                .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
 
         wallet.setBalance(wallet.getBalance().add(amount));
         walletRepository.save(wallet);
@@ -41,7 +42,7 @@ public class WalletService {
 
     public void subtractMoney(User user, BigDecimal amount){
         Wallet wallet = walletRepository.findByUser(user)
-                .orElseThrow(() -> new RuntimeException("Wallet nie istnieje"));
+                .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
 
         wallet.setBalance(wallet.getBalance().subtract(amount));
         walletRepository.save(wallet);
@@ -50,7 +51,7 @@ public class WalletService {
     public boolean hasEnoughMoney(User user, BigDecimal amount) {
 
         Wallet wallet = walletRepository.findByUser(user)
-                .orElseThrow(() -> new RuntimeException("Wallet nie istnieje"));
+                .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
 
         return wallet.getBalance().compareTo(amount) >= 0;
     }
