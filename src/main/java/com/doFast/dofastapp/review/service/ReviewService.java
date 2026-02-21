@@ -9,8 +9,9 @@ import com.doFast.dofastapp.review.dto.ReviewResponse;
 import com.doFast.dofastapp.review.entity.Review;
 import com.doFast.dofastapp.review.repository.ReviewRepository;
 import com.doFast.dofastapp.user.entity.User;
+import org.springframework.stereotype.Service;
 
-
+@Service
 public class ReviewService {
 
     private final ReviewRepository reviewRepository;

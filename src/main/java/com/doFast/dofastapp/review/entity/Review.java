@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 @Entity
 public class Review {
 
-    @NotBlank
+    @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
