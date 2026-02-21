@@ -6,7 +6,6 @@ import com.doFast.dofastapp.chat.repository.ChatMessageRepository;
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
-import com.doFast.dofastapp.user.dto.UserResponse;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import org.springframework.stereotype.Service;

@@ -3,11 +3,8 @@ package com.doFast.dofastapp.chat.controller;
 import com.doFast.dofastapp.chat.dto.ChatMessageRequest;
 import com.doFast.dofastapp.chat.dto.ChatMessageResponse;
 import com.doFast.dofastapp.chat.service.ChatService;
-import com.doFast.dofastapp.user.entity.User;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 
 @Controller
