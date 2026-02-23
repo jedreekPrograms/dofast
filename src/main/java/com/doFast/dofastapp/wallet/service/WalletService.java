@@ -2,28 +2,40 @@ package com.doFast.dofastapp.wallet.service;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.wallet.dto.WalletResponse;
 import com.doFast.dofastapp.wallet.entity.Wallet;
 import com.doFast.dofastapp.wallet.repository.WalletRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 
 @Service
+@Transactional
 public class WalletService {
 
     private final WalletRepository walletRepository;
+    private final UserRepository userRepository;
 
-    public WalletService(WalletRepository walletRepository) {
+    public WalletService(WalletRepository walletRepository, UserRepository userRepository) {
         this.walletRepository = walletRepository;
+        this.userRepository = userRepository;
     }
 
-    public Wallet createWalletForUser(User user) {
+    public void createWalletForUser(Long userId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
+
         Wallet wallet = new Wallet(user);
-        return walletRepository.save(wallet);
+        walletRepository.save(wallet);
     }
 
-    public WalletResponse getMyWallet(User user) {
+    public WalletResponse getMyWallet(Long userId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
 
         Wallet wallet = walletRepository.findByUser(user)
                 .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
@@ -31,7 +43,11 @@ public class WalletService {
         return new WalletResponse(wallet.getBalance());
     }
 
-    public void addMoney(User user, BigDecimal amount) {
+    public void addMoney(Long userId, BigDecimal amount) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
+
         Wallet wallet = walletRepository.findByUser(user)
                 .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
 
@@ -40,7 +56,11 @@ public class WalletService {
 
     }
 
-    public void subtractMoney(User user, BigDecimal amount){
+    public void subtractMoney(Long userId, BigDecimal amount){
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
+
         Wallet wallet = walletRepository.findByUser(user)
                 .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
 
@@ -48,7 +68,10 @@ public class WalletService {
         walletRepository.save(wallet);
     }
 
-    public boolean hasEnoughMoney(User user, BigDecimal amount) {
+    public boolean hasEnoughMoney(Long userId, BigDecimal amount) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
 
         Wallet wallet = walletRepository.findByUser(user)
                 .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));

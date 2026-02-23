@@ -27,6 +27,6 @@ public class WalletController {
 
         User user = (User) authentication.getPrincipal();
 
-        return walletService.getMyWallet(user);
+        return walletService.getMyWallet(user.getId());
     }
 }

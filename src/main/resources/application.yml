@@ -8,3 +8,8 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+stripe:
+  secret:
+    key: sk_test_51T3LRaAwDsGJVG1IyNGcpeWzdXQrucDMIi8vYAomHUtsKaIWX4UvLufifQD8SvfBIE3vmr4ZRGLIw8cTamZazzyP00JVsLEKEt
+  webhook:
+    secret: whsec_2683c4c54fe9311a553a134e7cb2d3c07a0b2feda3b82b72e7b7e93f8959b1e2

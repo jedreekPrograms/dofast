@@ -44,7 +44,7 @@ public class UserService {
         user.setPassword(hashedPassword);
 
         User saved = userRepository.save(user);
-        walletService.createWalletForUser(user);
+        walletService.createWalletForUser(user.getId());
 
         return new UserResponse(
                 saved.getId(),

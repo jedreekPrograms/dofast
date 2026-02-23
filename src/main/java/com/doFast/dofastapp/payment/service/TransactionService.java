@@ -24,11 +24,11 @@ public class TransactionService {
 
         User payer = job.getCreatedBy();
 
-        if (!walletService.hasEnoughMoney(payer, job.getPrice())) {
+        if (!walletService.hasEnoughMoney(payer.getId(), job.getPrice())) {
             throw new BusinessException("Brak środków na koncie");
         }
 
-        walletService.subtractMoney(payer, job.getPrice());
+        walletService.subtractMoney(payer.getId(), job.getPrice());
 
         Transaction tx = new Transaction();
         tx.setJob(job);
@@ -44,7 +44,7 @@ public class TransactionService {
         Transaction tx = transcationRepository.findByJob(job)
                 .orElseThrow(() -> new BusinessException("Brak transakcji"));
 
-        walletService.addMoney(payee, tx.getAmount());
+        walletService.addMoney(payee.getId(), tx.getAmount());
 
         tx.setPayee(payee);
         tx.setStatus(TransactionStatus.RELEASED);
@@ -61,7 +61,7 @@ public class TransactionService {
             throw new BusinessException("Nie można wykonać refundu");
         }
 
-        walletService.addMoney(tx.getPayer(), tx.getAmount());
+        walletService.addMoney(tx.getPayer().getId(), tx.getAmount());
 
         tx.setStatus(TransactionStatus.REFUNDED);
         transcationRepository.save(tx);
