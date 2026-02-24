@@ -1,4 +1,15 @@
-# Default ignored files
-/shelf/
-/workspace.xml
+# ===== ENV (SECRETS) =====
 .env
+
+# ===== MAVEN / JAVA =====
+target/
+*.class
+
+# ===== INTELLIJ IDEA =====
+.idea/
+*.iml
+/out/
+
+# ===== OS FILES =====
+.DS_Store
+Thumbs.db
