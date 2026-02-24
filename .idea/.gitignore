@@ -1,15 +1,15 @@
-# ===== ENV (SECRETS) =====
-.env.text
+# ===== ENV =====
+.env
+.env.txt
 
-# ===== MAVEN / JAVA =====
+# ===== MAVEN =====
 target/
-*.class
 
-# ===== INTELLIJ IDEA =====
+# ===== INTELLIJ =====
 .idea/
+src/.idea/
 *.iml
-/out/
 
-# ===== OS FILES =====
+# ===== OS =====
 .DS_Store
 Thumbs.db
