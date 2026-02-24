@@ -1,5 +1,5 @@
 # ===== ENV (SECRETS) =====
-.env
+.env.text
 
 # ===== MAVEN / JAVA =====
 target/
