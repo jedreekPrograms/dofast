@@ -3,6 +3,7 @@ package com.doFast.dofastapp.payment.webhook;
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.payment.entity.PaymentTransaction;
 import com.doFast.dofastapp.payment.repository.PaymentTransactionRepository;
+import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,6 +54,8 @@ public class StripeWebhookController {
                 }
 
                 String paymentIntentId = intentNode.path("id").asText(null);
+
+
                 String userIdStr = intentNode
                         .path("metadata")
                         .path("userId")
@@ -80,7 +83,7 @@ public class StripeWebhookController {
                 System.out.println("➡ userId = " + userId);
                 System.out.println("➡ amount = " + amount);
 
-                walletService.addMoney(userId, amount);
+                walletService.addMoney(userId, amount, WalletTransactionType.TOP_UP, null);
 
                 paymentTransactionRepository.save(
                         new PaymentTransaction(paymentIntentId, userId, amount)
