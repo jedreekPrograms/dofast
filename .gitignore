@@ -1,0 +1,16 @@
+# ===== Java / Maven =====
+**/target/
+*.class
+*.log
+
+# ===== Node =====
+node_modules/
+dist/
+
+# ===== IntelliJ =====
+.idea/
+*.iml
+
+# ===== Env / secrets =====
+.env
+*.env
