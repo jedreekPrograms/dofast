@@ -172,6 +172,32 @@
   -webkit-box-orient: vertical;
 }
 
+.job-card__route {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: #555b67;
+}
+
+.job-card__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.job-card__actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.job-card__error {
+  color: #9b2c2c;
+  font-size: 0.85rem;
+}
+
 .job-card__footer {
   display: flex;
   align-items: center;

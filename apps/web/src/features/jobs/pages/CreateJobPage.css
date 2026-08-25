@@ -1,7 +1,7 @@
 .create-job-page {
   display: grid;
   gap: 24px;
-  max-width: 900px;
+  max-width: 1080px;
 }
 
 .create-job-form {
@@ -14,11 +14,35 @@
   grid-column: 1 / -1;
 }
 
+.route-summary {
+  display: grid;
+  gap: 4px;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 1px solid var(--border, #d9dde5);
+  border-radius: 14px;
+}
+
+.route-summary strong {
+  font-size: 1.05rem;
+}
+
+.route-summary small,
+.create-job-form__privacy {
+  opacity: 0.7;
+}
+
 .create-job-form__actions {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 18px;
   padding-top: 6px;
+}
+
+.create-job-form__privacy {
+  max-width: 620px;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 680px) {
@@ -31,6 +55,7 @@
   }
 
   .create-job-form__actions {
+    align-items: stretch;
     flex-direction: column;
   }
 }

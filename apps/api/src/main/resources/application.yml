@@ -65,3 +65,12 @@ dofast:
       email: ${ADMIN_BOOTSTRAP_EMAIL:}
       password: ${ADMIN_BOOTSTRAP_PASSWORD:}
       nickname: ${ADMIN_BOOTSTRAP_NICKNAME:doFast Admin}
+  routing:
+    provider: ${ROUTING_PROVIDER:deterministic}
+    quote-ttl-minutes: ${ROUTING_QUOTE_TTL_MINUTES:15}
+    google:
+      api-key: ${GOOGLE_MAPS_ROUTES_API_KEY:}
+  tracking:
+    eta-refresh-seconds: ${TRACKING_ETA_REFRESH_SECONDS:30}
+    eta-refresh-movement-meters: ${TRACKING_ETA_REFRESH_MOVEMENT_METERS:150}
+    stale-after-seconds: ${TRACKING_STALE_AFTER_SECONDS:20}

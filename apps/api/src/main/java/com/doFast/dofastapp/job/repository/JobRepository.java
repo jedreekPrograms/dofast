@@ -18,9 +18,7 @@ import java.util.Optional;
 public interface JobRepository extends JpaRepository<Job, Long> {
 
     List<Job> findByCreatedByOrTakenByOrderByCreatedAtDesc(User createdBy, User takenBy);
-
     long countByStatusAndCreatedBy(JobStatus status, User createdBy);
-
     long countByStatusAndTakenBy(JobStatus status, User takenBy);
 
     @Query("""
@@ -32,6 +30,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                     or lower(j.title) like lower(concat('%', :query, '%'))
                     or lower(j.description) like lower(concat('%', :query, '%'))
                     or lower(j.locationLabel) like lower(concat('%', :query, '%'))
+                    or lower(j.destinationLabel) like lower(concat('%', :query, '%'))
               )
               and (:minPrice is null or j.price >= :minPrice)
               and (:maxPrice is null or j.price <= :maxPrice)
@@ -59,6 +58,9 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                 j.price AS "price",
                 j.status AS "status",
                 j.location_label AS "locationLabel",
+                j.destination_label AS "destinationLabel",
+                j.route_distance_meters AS "routeDistanceMeters",
+                j.route_duration_seconds AS "routeDurationSeconds",
                 ST_Distance(j.location, origin.point) AS "distanceMeters",
                 j.created_at AS "createdAt"
             FROM jobs j

@@ -1,63 +1,133 @@
-# Location and nearby matching
+# Location, routing and live courier tracking
 
 ## Purpose
 
-doFast matches local tasks with nearby workers. Exact coordinates are therefore useful for routing and task execution, but they are also sensitive data. The location model intentionally separates public discovery data from private execution data.
+doFast treats location as execution data, not as a public user attribute. A delivery-style task has an origin **A**, a destination **B**, a server-computed route snapshot and, after a worker accepts it, an optional live courier position. Public discovery intentionally receives much less information than the two participants of an active job.
 
-## Data model
+## A → B route model
 
-Each newly created job contains:
+New jobs are created from a short-lived server route quote instead of trusting distance or ETA values sent by the browser.
 
-- `location` — exact WGS84 coordinates stored as PostgreSQL/PostGIS `GEOGRAPHY(POINT,4326)`;
-- `location_label` — a deliberately public area label, for example `Wrocław, Plac Grunwaldzki`;
-- `location_private_label` — optional private address or access instruction, for example a street address or apartment note.
+The browser selects:
 
-Existing jobs created before the PostGIS migration may have no location. They remain readable through the normal job API but are excluded from nearby matching until location data exists.
+- origin A;
+- destination B;
+- exact labels/place IDs for execution;
+- coarse public labels for discovery.
 
-## Privacy invariants
+`POST /routing/quotes` stores both points and obtains a route estimate. A route quote belongs to one user, expires after the configured TTL and can be consumed only once by `POST /jobs`.
 
-The following rules are part of the API contract and must not be weakened accidentally:
+The existing `jobs.location` column remains the physical PostGIS origin column to preserve migration safety and nearby-search indexes. V11 adds the destination and route snapshot fields.
 
-1. Public job responses never expose latitude or longitude.
-2. Public job responses expose only `location_label`.
-3. `location_private_label` never appears in public list, job, or nearby-search DTOs.
-4. `GET /jobs/{id}/location` requires authentication.
-5. The requester can read the exact location of their own job.
-6. The assigned worker can read the exact location only while the job is `IN_PROGRESS` or `COMPLETION_REQUESTED`.
-7. Unrelated authenticated users cannot read exact job coordinates.
-8. A worker loses exact-location access after job completion.
+Public job DTOs expose only:
 
-The frontend should clearly label `publicLabel` as public when the user creates a task. Precise addresses or entry instructions belong in `privateLabel`.
+- public origin label;
+- public destination label;
+- route distance;
+- route duration.
 
-## Nearby search
+They never expose exact coordinates, private labels or route execution details.
 
-`GET /jobs/nearby` accepts:
+## Routing providers
 
-- `latitude` in `[-90, 90]`;
-- `longitude` in `[-180, 180]`;
-- `radiusMeters` from `100` to `50000`;
-- `limit` from `1` to `100`.
+Local development and CI use `DETERMINISTIC_DEV`, which makes no external calls and is visibly labelled as a development estimate.
 
-Matching happens inside PostgreSQL with PostGIS:
+Production should use:
 
-- `ST_DWithin` applies the search radius;
-- `ST_Distance` returns distance in meters for geography values;
-- the GiST index on `jobs.location` supports spatial filtering and nearest-neighbour ordering;
-- only jobs in `OPEN` state with non-null location participate.
+```text
+ROUTING_PROVIDER=google
+GOOGLE_MAPS_ROUTES_API_KEY=<server restricted key>
+```
 
-Application code does not load all jobs and calculate distances in Java.
+The Google adapter uses the Routes API for driving estimates and requests the minimum response fields needed by doFast. The server key must never be embedded in browser JavaScript.
 
-## Database migration
+The web map uses a separate browser key:
 
-Flyway migration `V3__job_location_postgis.sql`:
+```text
+VITE_GOOGLE_MAPS_BROWSER_KEY=<HTTP referrer restricted key>
+VITE_GOOGLE_MAPS_MAP_ID=<map id>
+```
 
-- enables the `postgis` extension;
-- adds the geography point and public/private labels;
-- adds the GiST spatial index;
-- adds an index supporting open-job discovery.
+The browser key is intentionally public and must be restricted by allowed HTTP referrers and API scope. Enable only the APIs required by the map flow (Maps JavaScript API, Places API (New), Geocoding API). Docker supplies these Vite variables as build arguments, because Vite browser variables are compiled at build time.
 
-Production database provisioning must allow the migration role to enable PostGIS, or PostGIS must be enabled by infrastructure before Flyway runs.
+For local `npm run dev`, provide the same Vite variables in the frontend process environment or `apps/web/.env.local`; the repository root `.env` is primarily the Docker Compose environment.
+
+## Exact route access
+
+`GET /jobs/{id}/route` is authenticated.
+
+- the requester can inspect the exact route for their own job;
+- the assigned worker receives exact A/B while the job is active (including dispute evidence rules already used by the job lifecycle);
+- unrelated users cannot access it;
+- public lists never contain exact A/B.
+
+Nearby matching remains based on origin A and is executed in PostgreSQL/PostGIS with `ST_DWithin`, `ST_Distance` and the GiST index.
+
+## Live courier tracking
+
+Flyway V12 adds a single `job_live_tracking` row per accepted job. doFast intentionally stores the **current state only**, not a GPS trail.
+
+The row can contain:
+
+- current WGS84 position;
+- GPS accuracy, heading and speed;
+- device capture time and server receive time;
+- current phase (`TO_ORIGIN` or `TO_DESTINATION`);
+- current remaining distance and ETA;
+- the current remaining polyline/provider/computation time.
+
+Tracking lifecycle:
+
+1. worker accepts the job → tracking row starts in `TO_ORIGIN`;
+2. worker device sends current GPS while the route page is active;
+3. requester receives the current state through `/topic/tracking/{jobId}`;
+4. worker confirms pickup at A → phase becomes `TO_DESTINATION`;
+5. subsequent GPS updates calculate remaining distance/ETA to B;
+6. dispute, completion or cancellation clears precise live location.
+
+The worker is the only user allowed to write GPS updates. The requester and assigned worker may read/subscribe while the job is in an active tracking state. An unrelated user is rejected both by the REST access service and by the STOMP subscription interceptor.
+
+## ETA refresh strategy
+
+GPS and paid road ETA do not have the same cadence.
+
+The web client throttles GPS uploads to roughly five seconds. The backend refreshes the route-provider ETA only when one of these is true:
+
+- there is no current ETA;
+- `TRACKING_ETA_REFRESH_SECONDS` elapsed (default 30 s);
+- the worker moved by at least `TRACKING_ETA_REFRESH_MOVEMENT_METERS` (default 150 m).
+
+The provider call happens outside the transaction that stores GPS. Its result is written in a second short transaction only if the captured GPS timestamp and route phase are still current. A slow provider therefore cannot overwrite a newer position, and provider failure does not discard the accepted GPS update.
+
+A position older than `TRACKING_STALE_AFTER_SECONDS` (default 20 s) is labelled stale in the UI.
+
+## Privacy and retention invariants
+
+1. No public endpoint exposes current courier coordinates.
+2. Only the assigned worker may publish location.
+3. Only active job participants may read live location or subscribe to its topic.
+4. The system does not retain a sequence of historical GPS points.
+5. A PostgreSQL trigger clears precise tracking fields whenever a job enters `DISPUTED`, `DONE` or `CANCELLED`, even if application code forgets a cleanup call.
+6. Resuming a disputed job never resurrects the old coordinate; a new worker GPS update is required.
+7. Out-of-order device updates are rejected so an old coordinate cannot move the courier backwards in time.
+
+## Browser and native-app limitation
+
+The current web implementation uses `navigator.geolocation.watchPosition`. It works while the browser page is active, but mobile operating systems may throttle or suspend browser location when the page is backgrounded or the screen is locked.
+
+A true Uber/Bolt-style production mobile experience therefore requires the future native/mobile client to use the operating system's background-location APIs, explicit user permission flow, foreground/background service rules and platform privacy disclosures. The backend protocol created here is already suitable for that client; the transport does not need to be redesigned.
 
 ## Verification
 
-CI verifies the real stack with Docker and PostGIS. The runtime smoke test creates a located job, confirms escrow behaviour, performs a nearby query, checks the returned distance, verifies that public responses contain neither coordinates nor the private label, and confirms that the authenticated exact-location endpoint returns the private data.
+The Docker runtime smoke covers the real PostgreSQL/PostGIS stack and verifies:
+
+- A/B route quote ownership and single use;
+- no exact-coordinate leakage in public discovery;
+- worker exact-route access only after accepting;
+- live tracking starts in `TO_ORIGIN`;
+- outsider reads and requester GPS writes are forbidden;
+- worker GPS produces remaining distance/ETA;
+- pickup changes the target to B;
+- a second GPS remains in `TO_DESTINATION`;
+- opening a dispute clears exact live GPS in PostgreSQL;
+- escrow/chat/dispute/refund behaviour still works on the same routed job.

@@ -17,6 +17,11 @@ dofast:
     jwt:
       secret: ${JWT_SECRET}
       expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+  routing:
+    provider: ${ROUTING_PROVIDER:google}
+    quote-ttl-minutes: ${ROUTING_QUOTE_TTL_MINUTES:15}
+    google:
+      api-key: ${GOOGLE_MAPS_ROUTES_API_KEY}
 
 logging:
   level:

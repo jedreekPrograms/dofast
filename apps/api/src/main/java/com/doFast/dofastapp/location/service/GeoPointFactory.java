@@ -6,6 +6,8 @@ import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.PrecisionModel;
 
+import java.math.BigDecimal;
+
 public final class GeoPointFactory {
 
     public static final int WGS84_SRID = 4326;
@@ -16,11 +18,12 @@ public final class GeoPointFactory {
     private GeoPointFactory() {}
 
     public static Point from(LocationRequest location) {
+        return from(location.getLatitude(), location.getLongitude());
+    }
+
+    public static Point from(BigDecimal latitude, BigDecimal longitude) {
         Point point = GEOMETRY_FACTORY.createPoint(
-                new Coordinate(
-                        location.getLongitude().doubleValue(),
-                        location.getLatitude().doubleValue()
-                )
+                new Coordinate(longitude.doubleValue(), latitude.doubleValue())
         );
         point.setSRID(WGS84_SRID);
         return point;
