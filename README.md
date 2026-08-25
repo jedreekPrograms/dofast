@@ -71,4 +71,4 @@ The core doFast workflow is transactional and money-sensitive, so the primary da
 
 ## Project status
 
-The repository is being rebuilt as the commercial foundation for doFast. Core marketplace concepts already exist, but the product is still under active development and should not yet be treated as production-ready for real customer funds.
+The repository is being developed on the **Carlisle** technical baseline. Core marketplace concepts already exist, but the product is still under active development and should not yet be treated as production-ready for real customer funds.
