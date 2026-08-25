@@ -42,7 +42,7 @@ Services:
 - Web: `http://localhost:5173`
 - API: `http://localhost:8080`
 - API health: `http://localhost:8080/actuator/health`
-- PostgreSQL: `localhost:5434`
+- PostgreSQL/PostGIS: `localhost:5434`
 
 For IDE-based backend development you can start only the database with `docker compose up -d db` and run the API from `apps/api`.
 
@@ -51,19 +51,21 @@ For IDE-based backend development you can start only the database with `docker c
 - Java 21 LTS
 - Spring Boot 4.1.x
 - React 19 + Vite
-- PostgreSQL 18.6
+- PostgreSQL 18.6 + PostGIS
 - Flyway database migrations
 - Docker / Docker Compose
 - Nginx
 - GitHub Actions
 
-## Why PostgreSQL
+## Why PostgreSQL + PostGIS
 
-The core doFast workflow is transactional and money-sensitive, so the primary datastore is PostgreSQL rather than a document database. PostgreSQL gives us strong transaction semantics, mature locking/concurrency tools, rich indexing and a clean path to PostGIS for location-aware marketplace queries later.
+The core doFast workflow is transactional and money-sensitive, so the primary datastore is PostgreSQL rather than a document database. PostgreSQL gives us strong transaction semantics, mature locking/concurrency tools and rich indexing, while PostGIS provides indexed geographic matching for nearby tasks without moving distance calculations into application memory.
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Job lifecycle](docs/JOB_LIFECYCLE.md)
+- [Location and nearby matching](docs/LOCATION_AND_MATCHING.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Security baseline](docs/SECURITY.md)
 

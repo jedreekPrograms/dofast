@@ -75,10 +75,15 @@ jobs:
           docker compose ps
           docker compose logs db api
           exit 1
-      - name: Verify PostgreSQL-backed authentication flow
+      - name: Verify PostgreSQL, PostGIS, auth, escrow and nearby matching
         shell: bash
         run: |
           set -euo pipefail
+
+          POSTGIS_VERSION=$(docker compose exec -T db \
+            psql -U dofast -d dofast -tAc \
+            "SELECT extversion FROM pg_extension WHERE extname = 'postgis';")
+          test -n "${POSTGIS_VERSION//[[:space:]]/}"
 
           REGISTER_RESPONSE=$(curl --fail --silent \
             -H 'Content-Type: application/json' \
@@ -97,12 +102,56 @@ jobs:
             http://localhost:8080/users/me)
           echo "$ME_RESPONSE" | grep -q '"email":"smoke@example.com"'
 
-          curl --fail --silent http://localhost:8080/jobs | grep -q '^\['
-
           WALLET_COUNT=$(docker compose exec -T db \
             psql -U dofast -d dofast -tAc \
             "SELECT COUNT(*) FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.email = 'smoke@example.com';")
           test "${WALLET_COUNT//[[:space:]]/}" = "1"
+
+          docker compose exec -T db \
+            psql -U dofast -d dofast -c \
+            "UPDATE wallets SET balance = 100.00 WHERE user_id = (SELECT id FROM users WHERE email = 'smoke@example.com');"
+
+          PRIVATE_LABEL='ul. Grunwaldzka 10, mieszkanie 5'
+          JOB_RESPONSE=$(curl --fail --silent \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"title":"Smoke delivery","description":"Deliver a small package near Plac Grunwaldzki.","price":25.00,"location":{"latitude":51.1128,"longitude":17.0601,"publicLabel":"Wrocław, Plac Grunwaldzki","privateLabel":"ul. Grunwaldzka 10, mieszkanie 5"}}' \
+            http://localhost:8080/jobs)
+          echo "$JOB_RESPONSE" | grep -q '"status":"OPEN"'
+          echo "$JOB_RESPONSE" | grep -q '"locationLabel":"Wrocław, Plac Grunwaldzki"'
+          if echo "$JOB_RESPONSE" | grep -Fq "$PRIVATE_LABEL"; then
+            echo "Create-job response leaked private location label"
+            exit 1
+          fi
+          JOB_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$JOB_RESPONSE")
+          test -n "$JOB_ID"
+
+          WALLET_BALANCE=$(docker compose exec -T db \
+            psql -U dofast -d dofast -tAc \
+            "SELECT balance FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.email = 'smoke@example.com';")
+          test "${WALLET_BALANCE//[[:space:]]/}" = "75.00"
+
+          NEARBY_RESPONSE=$(curl --fail --silent \
+            'http://localhost:8080/jobs/nearby?latitude=51.1120&longitude=17.0610&radiusMeters=2000&limit=10')
+          echo "$NEARBY_RESPONSE" | grep -q '"title":"Smoke delivery"'
+          echo "$NEARBY_RESPONSE" | grep -q '"distanceMeters":'
+          if echo "$NEARBY_RESPONSE" | grep -q '"latitude"\|"longitude"'; then
+            echo "Nearby response leaked exact coordinates"
+            exit 1
+          fi
+          if echo "$NEARBY_RESPONSE" | grep -Fq "$PRIVATE_LABEL"; then
+            echo "Nearby response leaked private location label"
+            exit 1
+          fi
+          DISTANCE_METERS=$(python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["distanceMeters"])' <<< "$NEARBY_RESPONSE")
+          test "$DISTANCE_METERS" -lt 500
+
+          EXACT_LOCATION=$(curl --fail --silent \
+            -H "Authorization: Bearer $TOKEN" \
+            "http://localhost:8080/jobs/$JOB_ID/location")
+          echo "$EXACT_LOCATION" | grep -q '"latitude":51.1128'
+          echo "$EXACT_LOCATION" | grep -q '"longitude":17.0601'
+          echo "$EXACT_LOCATION" | grep -Fq "$PRIVATE_LABEL"
       - name: Start web gateway
         run: docker compose up -d --no-build web
       - name: Verify web and API gateway
@@ -124,6 +173,9 @@ jobs:
 
           curl --fail --silent http://localhost:5173/ | grep -q 'doFast'
           curl --fail --silent http://localhost:5173/api/jobs | grep -q '^\['
+          curl --fail --silent \
+            'http://localhost:5173/api/jobs/nearby?latitude=51.1120&longitude=17.0610&radiusMeters=2000&limit=10' \
+            | grep -q '"title":"Smoke delivery"'
       - name: Print service diagnostics on failure
         if: failure()
         run: |

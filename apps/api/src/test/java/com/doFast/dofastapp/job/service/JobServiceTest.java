@@ -7,6 +7,9 @@ import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.location.dto.LocationRequest;
+import com.doFast.dofastapp.location.dto.LocationResponse;
+import com.doFast.dofastapp.location.service.GeoPointFactory;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,18 +49,25 @@ class JobServiceTest {
     }
 
     @Test
-    void createJobStartsOpenAndLocksFunds() {
+    void createJobStartsOpenStoresOnlyPublicLabelInPublicResponseAndLocksFunds() {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         JobRequest request = new JobRequest();
         request.setTitle("Zakupy z Biedronki");
         request.setDescription("Kup podstawowe zakupy i dostarcz pod wskazany adres.");
         request.setPrice(new BigDecimal("25.00"));
+        request.setLocation(location(
+                "51.1128",
+                "17.0601",
+                "Wrocław, Plac Grunwaldzki",
+                "ul. Grunwaldzka 10, mieszkanie 5"
+        ));
 
         JobResponse response = jobService.createJob(request, owner);
 
         assertEquals(JobStatus.OPEN, response.status());
         assertEquals(owner.getId(), response.createdById());
+        assertEquals("Wrocław, Plac Grunwaldzki", response.locationLabel());
         verify(transactionService).holdMoney(any(Job.class));
     }
 
@@ -108,6 +118,36 @@ class JobServiceTest {
         assertThrows(ConflictException.class, () -> jobService.cancelJob(10L, owner));
     }
 
+    @Test
+    void assignedWorkerCanReadExactLocationAndPrivateLabelWhileJobIsActive() {
+        Job job = job(JobStatus.IN_PROGRESS, owner, worker);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+
+        LocationResponse response = jobService.getExactLocation(10L, worker);
+
+        assertEquals(51.1128, response.latitude(), 0.000001);
+        assertEquals(17.0601, response.longitude(), 0.000001);
+        assertEquals("ul. Grunwaldzka 10, mieszkanie 5", response.label());
+    }
+
+    @Test
+    void unrelatedUserCannotReadExactLocation() {
+        Job job = job(JobStatus.IN_PROGRESS, owner, worker);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+
+        User stranger = user(3L, "stranger@example.com");
+
+        assertThrows(ForbiddenOperationException.class, () -> jobService.getExactLocation(10L, stranger));
+    }
+
+    @Test
+    void workerCannotReadExactLocationAfterCompletion() {
+        Job job = job(JobStatus.DONE, owner, worker);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+
+        assertThrows(ForbiddenOperationException.class, () -> jobService.getExactLocation(10L, worker));
+    }
+
     private Job job(JobStatus status, User createdBy, User takenBy) {
         Job job = new Job();
         ReflectionTestUtils.setField(job, "id", 10L);
@@ -115,9 +155,26 @@ class JobServiceTest {
         job.setDescription("Test job description");
         job.setPrice(new BigDecimal("20.00"));
         job.setStatus(status);
+        job.setLocation(GeoPointFactory.from(location(
+                "51.1128",
+                "17.0601",
+                "Wrocław, Plac Grunwaldzki",
+                "ul. Grunwaldzka 10, mieszkanie 5"
+        )));
+        job.setLocationLabel("Wrocław, Plac Grunwaldzki");
+        job.setLocationPrivateLabel("ul. Grunwaldzka 10, mieszkanie 5");
         job.setCreatedBy(createdBy);
         job.setTakenBy(takenBy);
         return job;
+    }
+
+    private LocationRequest location(String latitude, String longitude, String publicLabel, String privateLabel) {
+        LocationRequest request = new LocationRequest();
+        request.setLatitude(new BigDecimal(latitude));
+        request.setLongitude(new BigDecimal(longitude));
+        request.setPublicLabel(publicLabel);
+        request.setPrivateLabel(privateLabel);
+        return request;
     }
 
     private User user(Long id, String email) {

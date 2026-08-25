@@ -16,6 +16,9 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import org.locationtech.jts.geom.Point;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -52,6 +55,16 @@ public class Job {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private JobStatus status;
+
+    @JdbcTypeCode(SqlTypes.GEOGRAPHY)
+    @Column(name = "location", columnDefinition = "geography(Point,4326)")
+    private Point location;
+
+    @Column(name = "location_label", length = 120)
+    private String locationLabel;
+
+    @Column(name = "location_private_label", length = 200)
+    private String locationPrivateLabel;
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "created_by_id", nullable = false)
@@ -121,6 +134,9 @@ public class Job {
     public String getDescription() { return description; }
     public BigDecimal getPrice() { return price; }
     public JobStatus getStatus() { return status; }
+    public Point getLocation() { return location; }
+    public String getLocationLabel() { return locationLabel; }
+    public String getLocationPrivateLabel() { return locationPrivateLabel; }
     public User getCreatedBy() { return createdBy; }
     public User getTakenBy() { return takenBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
@@ -134,6 +150,9 @@ public class Job {
     public void setDescription(String description) { this.description = description; }
     public void setPrice(BigDecimal price) { this.price = price; }
     public void setStatus(JobStatus status) { this.status = status; }
+    public void setLocation(Point location) { this.location = location; }
+    public void setLocationLabel(String locationLabel) { this.locationLabel = locationLabel; }
+    public void setLocationPrivateLabel(String locationPrivateLabel) { this.locationPrivateLabel = locationPrivateLabel; }
     public void setCreatedBy(User createdBy) { this.createdBy = createdBy; }
     public void setTakenBy(User takenBy) { this.takenBy = takenBy; }
 }

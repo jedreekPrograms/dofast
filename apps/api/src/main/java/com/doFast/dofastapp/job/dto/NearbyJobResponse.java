@@ -5,19 +5,13 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-public record JobResponse(
+public record NearbyJobResponse(
         Long id,
         String title,
         String description,
         BigDecimal price,
         JobStatus status,
         String locationLabel,
-        Long createdById,
-        Long takenById,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt,
-        LocalDateTime takenAt,
-        LocalDateTime completionRequestedAt,
-        LocalDateTime completedAt,
-        LocalDateTime cancelledAt
+        long distanceMeters,
+        LocalDateTime createdAt
 ) {}

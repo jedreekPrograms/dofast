@@ -6,10 +6,14 @@ import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
+import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.location.dto.LocationResponse;
+import com.doFast.dofastapp.location.service.GeoPointFactory;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
+import org.locationtech.jts.geom.Point;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +39,9 @@ public class JobService {
         job.setDescription(request.getDescription().trim());
         job.setPrice(request.getPrice());
         job.setStatus(JobStatus.OPEN);
+        job.setLocation(GeoPointFactory.from(request.getLocation()));
+        job.setLocationLabel(request.getLocation().getPublicLabel().trim());
+        job.setLocationPrivateLabel(normalizeOptionalLabel(request.getLocation().getPrivateLabel()));
         job.setCreatedBy(user);
 
         Job saved = jobRepository.save(job);
@@ -50,8 +57,52 @@ public class JobService {
                 .toList();
     }
 
+    public List<NearbyJobResponse> getNearbyJobs(
+            double latitude,
+            double longitude,
+            int radiusMeters,
+            int limit
+    ) {
+        return jobRepository.findNearbyOpenJobs(latitude, longitude, radiusMeters, limit)
+                .stream()
+                .map(match -> new NearbyJobResponse(
+                        match.getId(),
+                        match.getTitle(),
+                        match.getDescription(),
+                        match.getPrice(),
+                        JobStatus.valueOf(match.getStatus()),
+                        match.getLocationLabel(),
+                        Math.round(match.getDistanceMeters()),
+                        match.getCreatedAt()
+                ))
+                .toList();
+    }
+
     public JobResponse getJob(Long jobId) {
         return toResponse(getJobForRead(jobId));
+    }
+
+    public LocationResponse getExactLocation(Long jobId, User currentUser) {
+        Job job = getJobForRead(jobId);
+
+        if (!canAccessExactLocation(job, currentUser)) {
+            throw new ForbiddenOperationException("Dokładna lokalizacja jest dostępna tylko dla stron aktywnego zlecenia");
+        }
+
+        Point point = job.getLocation();
+        if (point == null) {
+            throw new ResourceNotFoundException("Dokładna lokalizacja zlecenia nie jest dostępna");
+        }
+
+        String exactLabel = job.getLocationPrivateLabel() != null
+                ? job.getLocationPrivateLabel()
+                : job.getLocationLabel();
+
+        return new LocationResponse(
+                point.getY(),
+                point.getX(),
+                exactLabel
+        );
     }
 
     @Transactional
@@ -145,11 +196,31 @@ public class JobService {
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
+    private boolean canAccessExactLocation(Job job, User currentUser) {
+        if (sameUser(job.getCreatedBy(), currentUser)) {
+            return true;
+        }
+
+        boolean assignedWorker = sameUser(job.getTakenBy(), currentUser);
+        boolean activeJob = job.getStatus() == JobStatus.IN_PROGRESS
+                || job.getStatus() == JobStatus.COMPLETION_REQUESTED;
+
+        return assignedWorker && activeJob;
+    }
+
     private boolean sameUser(User first, User second) {
         return first != null
                 && second != null
                 && first.getId() != null
                 && first.getId().equals(second.getId());
+    }
+
+    private String normalizeOptionalLabel(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private JobResponse toResponse(Job job) {
@@ -159,6 +230,7 @@ public class JobService {
                 job.getDescription(),
                 job.getPrice(),
                 job.getStatus(),
+                job.getLocationLabel(),
                 job.getCreatedBy().getId(),
                 job.getTakenBy() != null ? job.getTakenBy().getId() : null,
                 job.getCreatedAt(),

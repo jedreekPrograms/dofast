@@ -1,5 +1,7 @@
 package com.doFast.dofastapp.job.dto;
 
+import com.doFast.dofastapp.location.dto.LocationRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -23,6 +25,10 @@ public class JobRequest {
     @Digits(integer = 17, fraction = 2)
     private BigDecimal price;
 
+    @NotNull
+    @Valid
+    private LocationRequest location;
+
     public String getTitle() {
         return title;
     }
@@ -35,6 +41,10 @@ public class JobRequest {
         return price;
     }
 
+    public LocationRequest getLocation() {
+        return location;
+    }
+
     public void setTitle(String title) {
         this.title = title;
     }
@@ -45,5 +55,9 @@ public class JobRequest {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public void setLocation(LocationRequest location) {
+        this.location = location;
     }
 }
