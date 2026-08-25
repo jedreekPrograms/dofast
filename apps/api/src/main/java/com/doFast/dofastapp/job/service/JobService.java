@@ -236,7 +236,8 @@ public class JobService {
 
         boolean assignedWorker = sameUser(job.getTakenBy(), currentUser);
         boolean activeJob = job.getStatus() == JobStatus.IN_PROGRESS
-                || job.getStatus() == JobStatus.COMPLETION_REQUESTED;
+                || job.getStatus() == JobStatus.COMPLETION_REQUESTED
+                || job.getStatus() == JobStatus.DISPUTED;
 
         return assignedWorker && activeJob;
     }
