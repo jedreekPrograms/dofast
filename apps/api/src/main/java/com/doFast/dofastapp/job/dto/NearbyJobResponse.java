@@ -12,6 +12,9 @@ public record NearbyJobResponse(
         BigDecimal price,
         JobStatus status,
         String locationLabel,
+        String destinationLabel,
+        Integer routeDistanceMeters,
+        Integer routeDurationSeconds,
         long distanceMeters,
         LocalDateTime createdAt
 ) {}

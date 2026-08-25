@@ -1,11 +1,13 @@
 package com.doFast.dofastapp.job.entity;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -56,6 +58,7 @@ public class Job {
     @Column(nullable = false, length = 32)
     private JobStatus status;
 
+    // Legacy column name retained deliberately: this is the origin/pickup point A.
     @JdbcTypeCode(SqlTypes.GEOGRAPHY)
     @Column(name = "location", columnDefinition = "geography(Point,4326)")
     private Point location;
@@ -65,6 +68,35 @@ public class Job {
 
     @Column(name = "location_private_label", length = 200)
     private String locationPrivateLabel;
+
+    @JdbcTypeCode(SqlTypes.GEOGRAPHY)
+    @Column(name = "destination_location", columnDefinition = "geography(Point,4326)")
+    private Point destinationLocation;
+
+    @Column(name = "destination_label", length = 120)
+    private String destinationLabel;
+
+    @Column(name = "destination_private_label", length = 200)
+    private String destinationPrivateLabel;
+
+    @Column(name = "route_distance_meters")
+    private Integer routeDistanceMeters;
+
+    @Column(name = "route_duration_seconds")
+    private Integer routeDurationSeconds;
+
+    @Column(name = "route_encoded_polyline")
+    private String routeEncodedPolyline;
+
+    @Column(name = "route_provider", length = 32)
+    private String routeProvider;
+
+    @Column(name = "route_computed_at")
+    private LocalDateTime routeComputedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "route_quote_id")
+    private RouteQuote routeQuote;
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "created_by_id", nullable = false)
@@ -119,9 +151,7 @@ public class Job {
         this.status = JobStatus.COMPLETION_REQUESTED;
     }
 
-    public void markDisputed() {
-        this.status = JobStatus.DISPUTED;
-    }
+    public void markDisputed() { this.status = JobStatus.DISPUTED; }
 
     public void restoreAfterDispute(JobStatus previousStatus) {
         if (previousStatus != JobStatus.IN_PROGRESS && previousStatus != JobStatus.COMPLETION_REQUESTED) {
@@ -148,6 +178,15 @@ public class Job {
     public Point getLocation() { return location; }
     public String getLocationLabel() { return locationLabel; }
     public String getLocationPrivateLabel() { return locationPrivateLabel; }
+    public Point getDestinationLocation() { return destinationLocation; }
+    public String getDestinationLabel() { return destinationLabel; }
+    public String getDestinationPrivateLabel() { return destinationPrivateLabel; }
+    public Integer getRouteDistanceMeters() { return routeDistanceMeters; }
+    public Integer getRouteDurationSeconds() { return routeDurationSeconds; }
+    public String getRouteEncodedPolyline() { return routeEncodedPolyline; }
+    public String getRouteProvider() { return routeProvider; }
+    public LocalDateTime getRouteComputedAt() { return routeComputedAt; }
+    public RouteQuote getRouteQuote() { return routeQuote; }
     public User getCreatedBy() { return createdBy; }
     public User getTakenBy() { return takenBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
@@ -164,6 +203,15 @@ public class Job {
     public void setLocation(Point location) { this.location = location; }
     public void setLocationLabel(String locationLabel) { this.locationLabel = locationLabel; }
     public void setLocationPrivateLabel(String locationPrivateLabel) { this.locationPrivateLabel = locationPrivateLabel; }
+    public void setDestinationLocation(Point destinationLocation) { this.destinationLocation = destinationLocation; }
+    public void setDestinationLabel(String destinationLabel) { this.destinationLabel = destinationLabel; }
+    public void setDestinationPrivateLabel(String destinationPrivateLabel) { this.destinationPrivateLabel = destinationPrivateLabel; }
+    public void setRouteDistanceMeters(Integer routeDistanceMeters) { this.routeDistanceMeters = routeDistanceMeters; }
+    public void setRouteDurationSeconds(Integer routeDurationSeconds) { this.routeDurationSeconds = routeDurationSeconds; }
+    public void setRouteEncodedPolyline(String routeEncodedPolyline) { this.routeEncodedPolyline = routeEncodedPolyline; }
+    public void setRouteProvider(String routeProvider) { this.routeProvider = routeProvider; }
+    public void setRouteComputedAt(LocalDateTime routeComputedAt) { this.routeComputedAt = routeComputedAt; }
+    public void setRouteQuote(RouteQuote routeQuote) { this.routeQuote = routeQuote; }
     public void setCreatedBy(User createdBy) { this.createdBy = createdBy; }
     public void setTakenBy(User takenBy) { this.takenBy = takenBy; }
 }

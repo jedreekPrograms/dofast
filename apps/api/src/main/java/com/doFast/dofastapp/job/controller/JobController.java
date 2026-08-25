@@ -3,6 +3,7 @@ package com.doFast.dofastapp.job.controller;
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
+import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.service.JobService;
 import com.doFast.dofastapp.location.dto.LocationResponse;
@@ -35,16 +36,11 @@ public class JobController {
 
     private final JobService jobService;
 
-    public JobController(JobService jobService) {
-        this.jobService = jobService;
-    }
+    public JobController(JobService jobService) { this.jobService = jobService; }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public JobResponse createJob(
-            @RequestBody @Valid JobRequest request,
-            @AuthenticationPrincipal User user
-    ) {
+    public JobResponse createJob(@RequestBody @Valid JobRequest request, @AuthenticationPrincipal User user) {
         return jobService.createJob(request, user);
     }
 
@@ -55,9 +51,7 @@ public class JobController {
             @RequestParam(required = false) @DecimalMin("0.00") BigDecimal maxPrice,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
-    ) {
-        return jobService.getOpenJobs(query, minPrice, maxPrice, page, size);
-    }
+    ) { return jobService.getOpenJobs(query, minPrice, maxPrice, page, size); }
 
     @GetMapping("/nearby")
     public List<NearbyJobResponse> getNearbyJobs(
@@ -65,42 +59,33 @@ public class JobController {
             @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double longitude,
             @RequestParam(defaultValue = "5000") @Min(100) @Max(50000) int radiusMeters,
             @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit
-    ) {
-        return jobService.getNearbyJobs(latitude, longitude, radiusMeters, limit);
-    }
+    ) { return jobService.getNearbyJobs(latitude, longitude, radiusMeters, limit); }
 
     @GetMapping("/{id}")
-    public JobResponse getJob(@PathVariable Long id) {
-        return jobService.getJob(id);
-    }
+    public JobResponse getJob(@PathVariable Long id) { return jobService.getJob(id); }
 
     @GetMapping("/{id}/location")
     public LocationResponse getExactLocation(@PathVariable Long id, @AuthenticationPrincipal User user) {
         return jobService.getExactLocation(id, user);
     }
 
-    @PostMapping({"/{id}/accept", "/{id}/take"})
-    public JobResponse acceptJob(@PathVariable Long id, @AuthenticationPrincipal User user) {
-        return jobService.acceptJob(id, user);
+    @GetMapping("/{id}/route")
+    public JobRouteResponse getExactRoute(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return jobService.getExactRoute(id, user);
     }
+
+    @PostMapping({"/{id}/accept", "/{id}/take"})
+    public JobResponse acceptJob(@PathVariable Long id, @AuthenticationPrincipal User user) { return jobService.acceptJob(id, user); }
 
     @GetMapping("/my")
-    public List<JobResponse> getMyJobs(@AuthenticationPrincipal User user) {
-        return jobService.getMyJobs(user);
-    }
+    public List<JobResponse> getMyJobs(@AuthenticationPrincipal User user) { return jobService.getMyJobs(user); }
 
     @PostMapping("/{id}/completion")
-    public JobResponse requestCompletion(@PathVariable Long id, @AuthenticationPrincipal User user) {
-        return jobService.requestCompletion(id, user);
-    }
+    public JobResponse requestCompletion(@PathVariable Long id, @AuthenticationPrincipal User user) { return jobService.requestCompletion(id, user); }
 
     @PostMapping({"/{id}/confirm", "/{id}/done"})
-    public JobResponse confirmCompletion(@PathVariable Long id, @AuthenticationPrincipal User user) {
-        return jobService.confirmCompletion(id, user);
-    }
+    public JobResponse confirmCompletion(@PathVariable Long id, @AuthenticationPrincipal User user) { return jobService.confirmCompletion(id, user); }
 
     @PostMapping("/{id}/cancel")
-    public JobResponse cancelJob(@PathVariable Long id, @AuthenticationPrincipal User user) {
-        return jobService.cancelJob(id, user);
-    }
+    public JobResponse cancelJob(@PathVariable Long id, @AuthenticationPrincipal User user) { return jobService.cancelJob(id, user); }
 }
