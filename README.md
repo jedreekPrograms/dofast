@@ -42,7 +42,7 @@ Services:
 - Web: `http://localhost:5173`
 - API: `http://localhost:8080`
 - API health: `http://localhost:8080/actuator/health`
-- MariaDB: `localhost:3307`
+- PostgreSQL: `localhost:5434`
 
 For IDE-based backend development you can start only the database with `docker compose up -d db` and run the API from `apps/api`.
 
@@ -51,10 +51,15 @@ For IDE-based backend development you can start only the database with `docker c
 - Java 21 LTS
 - Spring Boot 4.1.x
 - React 19 + Vite
-- MariaDB 11.4 LTS
+- PostgreSQL 18.6
+- Flyway database migrations
 - Docker / Docker Compose
 - Nginx
 - GitHub Actions
+
+## Why PostgreSQL
+
+The core doFast workflow is transactional and money-sensitive, so the primary datastore is PostgreSQL rather than a document database. PostgreSQL gives us strong transaction semantics, mature locking/concurrency tools, rich indexing and a clean path to PostGIS for location-aware marketplace queries later.
 
 ## Documentation
 

@@ -2,17 +2,16 @@ name: dofast-prod
 
 services:
   db:
-    image: mariadb:11.4.13
+    image: postgres:18.6
     restart: always
     environment:
-      MARIADB_DATABASE: ${DB_NAME:?DB_NAME is required}
-      MARIADB_USER: ${DB_USER:?DB_USER is required}
-      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -29,7 +28,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      SPRING_DATASOURCE_URL: jdbc:mariadb://db:3306/${DB_NAME:?DB_NAME is required}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:?DB_NAME is required}
       SPRING_DATASOURCE_USERNAME: ${DB_USER:?DB_USER is required}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
@@ -54,7 +53,7 @@ services:
       - backend
 
 volumes:
-  mariadb_data:
+  postgres_data:
 
 networks:
   backend:

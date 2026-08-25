@@ -4,7 +4,7 @@ spring:
   profiles:
     default: local
   datasource:
-    driver-class-name: org.mariadb.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
     hikari:
       initialization-fail-timeout: 60000
       connection-timeout: 30000
@@ -16,6 +16,7 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         jdbc:
           time_zone: UTC
   flyway:

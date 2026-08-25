@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mariadb://localhost:3307/dofast}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/dofast}
     username: ${SPRING_DATASOURCE_USERNAME:dofast}
     password: ${SPRING_DATASOURCE_PASSWORD:dofast-local-password}
   jpa:

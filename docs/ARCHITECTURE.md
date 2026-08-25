@@ -38,10 +38,16 @@ Nginx / Web container
    |  \
    |   \-- static React SPA
    |
-   +---- /api, /ws ----> Spring Boot API ----> MariaDB
+   +---- /api, /ws ----> Spring Boot API ----> PostgreSQL
                               |
                               +---------------> Stripe
 ```
+
+## Data platform
+
+PostgreSQL is the system-of-record database for transactional product data. Flyway owns schema evolution and Hibernate validates mappings at application startup.
+
+PostGIS is intentionally not enabled before location features exist. When proximity search/matching is introduced, geospatial columns and indexes should be added through a dedicated Flyway migration and the deployment image can be switched to a compatible PostGIS distribution without changing domain boundaries.
 
 ## Architectural rules
 
@@ -54,6 +60,7 @@ Nginx / Web container
 7. Secrets are supplied through the environment/secret manager and are never committed.
 8. New infrastructure must expose health signals and have deterministic configuration.
 9. Start as a modular monolith. Split into services only for a measured operational reason.
+10. PostgreSQL is the authoritative transactional datastore; caches/search indexes may be introduced later but must not silently become the source of truth for money or job state.
 
 ## Future scale path
 
