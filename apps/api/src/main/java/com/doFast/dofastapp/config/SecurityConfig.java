@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.config;
 
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -26,9 +27,15 @@ public class SecurityConfig {
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .formLogin(formLogin -> formLogin.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, exception) ->
+                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED))
+                        .accessDeniedHandler((request, response, exception) ->
+                                response.sendError(HttpServletResponse.SC_FORBIDDEN))
+                )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/users", "/users/login").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby", "/jobs/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/*/profile").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/webhooks/stripe").permitAll()

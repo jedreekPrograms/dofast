@@ -1,0 +1,40 @@
+.account-page {
+  display: grid;
+  gap: 24px;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.account-summary {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 24px;
+}
+
+.account-summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.account-summary dt {
+  color: #777e89;
+}
+
+.account-summary dd {
+  margin: 0;
+  font-weight: 750;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .account-grid {
+    grid-template-columns: 1fr;
+  }
+}

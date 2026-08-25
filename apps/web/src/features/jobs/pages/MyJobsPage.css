@@ -1,0 +1,110 @@
+.my-jobs-page {
+  display: grid;
+  gap: 22px;
+}
+
+.segmented-control {
+  display: inline-flex;
+  width: fit-content;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #e0e3e8;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.segmented-control button {
+  padding: 9px 13px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #626975;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.segmented-control button.is-active {
+  background: #17191f;
+  color: #fff;
+}
+
+.my-jobs-list {
+  display: grid;
+  gap: 14px;
+}
+
+.my-job {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 20px;
+  border: 1px solid #e3e5e9;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.my-job__body {
+  min-width: 0;
+}
+
+.my-job h2 {
+  margin: 10px 0 7px;
+  font-size: 1.12rem;
+}
+
+.my-job p {
+  margin: 0;
+  color: #626975;
+  line-height: 1.5;
+}
+
+.my-job__meta,
+.my-job__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #7b818c;
+  font-size: 0.82rem;
+}
+
+.my-job__footer {
+  margin-top: 16px;
+}
+
+.my-job__footer strong {
+  color: #20232a;
+  font-size: 1rem;
+}
+
+.my-job__actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.status-pill {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f0f2f5;
+  color: #353944;
+  font-weight: 800;
+}
+
+.status-pill--done { background: #eaf8ef; color: #25663c; }
+.status-pill--cancelled { background: #f8ecec; color: #8a3434; }
+.status-pill--completion_requested { background: #fff5db; color: #805d08; }
+.status-pill--in_progress { background: #eaf1ff; color: #345f9d; }
+
+@media (max-width: 680px) {
+  .segmented-control {
+    width: 100%;
+  }
+
+  .segmented-control button {
+    flex: 1;
+  }
+
+  .my-job {
+    flex-direction: column;
+  }
+}

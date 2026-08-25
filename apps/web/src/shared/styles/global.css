@@ -2,31 +2,114 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  color: #17191f;
+  background: #f7f8fa;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-html {
-  min-width: 320px;
-}
-
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
+* { box-sizing: border-box; }
+html { min-width: 320px; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: #f7f8fa; }
+button, input, textarea, select { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
 
 main {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 32px 0;
+  padding: 32px 0 56px;
+}
+
+.eyebrow {
+  color: #777e89;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.page-heading h1 {
+  margin: 7px 0 8px;
+  font-size: clamp(2rem, 5vw, 3rem);
+  letter-spacing: -0.045em;
+}
+
+.page-heading p {
+  max-width: 760px;
+  margin: 0;
+  color: #656c78;
+  line-height: 1.6;
+}
+
+.panel {
+  padding: 22px;
+  border: 1px solid #e3e5e9;
+  border-radius: 17px;
+  background: #fff;
+}
+
+.panel h2 {
+  margin: 0 0 18px;
+  font-size: 1.18rem;
+}
+
+.form-stack {
+  display: grid;
+  gap: 15px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  color: #3a3e47;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d8dce2;
+  border-radius: 10px;
+  background: #fff;
+  color: #17191f;
+  outline: none;
+}
+
+.field textarea { resize: vertical; }
+.field input:focus, .field textarea:focus, .field select:focus {
+  border-color: #7f8798;
+  box-shadow: 0 0 0 3px rgba(127, 135, 152, 0.14);
+}
+.field small { color: #818792; font-weight: 500; }
+
+.button {
+  min-height: 44px;
+  padding: 0 15px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 800;
+}
+.button:disabled { cursor: not-allowed; opacity: 0.45; }
+.button--primary { background: #17191f; color: #fff; }
+.button--secondary { border-color: #d8dce2; background: #fff; color: #252830; }
+.button--danger { border-color: #ebcaca; background: #fff7f7; color: #9a3737; }
+
+.form-message {
+  padding: 11px 13px;
+  border-radius: 9px;
+  background: #f1f6f2;
+  color: #356348;
+  font-size: 0.88rem;
+}
+.form-message--error { background: #fff0f0; color: #933838; }
+
+.page-state {
+  padding: 32px 20px;
+  border: 1px dashed #d5d9df;
+  border-radius: 14px;
+  color: #6f7682;
+  text-align: center;
 }

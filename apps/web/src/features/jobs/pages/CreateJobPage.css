@@ -1,0 +1,36 @@
+.create-job-page {
+  display: grid;
+  gap: 24px;
+  max-width: 900px;
+}
+
+.create-job-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.create-job-form__wide {
+  grid-column: 1 / -1;
+}
+
+.create-job-form__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+@media (max-width: 680px) {
+  .create-job-form {
+    grid-template-columns: 1fr;
+  }
+
+  .create-job-form__wide {
+    grid-column: auto;
+  }
+
+  .create-job-form__actions {
+    flex-direction: column;
+  }
+}

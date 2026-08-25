@@ -5,8 +5,7 @@ import com.doFast.dofastapp.wallet.dto.WalletResponse;
 import com.doFast.dofastapp.wallet.dto.WalletTransactionResponse;
 import com.doFast.dofastapp.wallet.service.WalletHistoryService;
 import com.doFast.dofastapp.wallet.service.WalletService;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,24 +25,12 @@ public class WalletController {
     }
 
     @GetMapping
-    public WalletResponse getMyWallet() {
-
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
-
-        User user = (User) authentication.getPrincipal();
-
+    public WalletResponse getMyWallet(@AuthenticationPrincipal User user) {
         return walletService.getMyWallet(user.getId());
     }
 
     @GetMapping("/transactions")
-    public List<WalletTransactionResponse> history() {
-
-        User user = (User) SecurityContextHolder
-                .getContext()
-                .getAuthentication()
-                .getPrincipal();
-
+    public List<WalletTransactionResponse> history(@AuthenticationPrincipal User user) {
         return walletHistoryService.getHistory(user);
     }
 }

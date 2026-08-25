@@ -1,0 +1,52 @@
+.wallet-page {
+  display: grid;
+  gap: 22px;
+  max-width: 900px;
+}
+
+.wallet-balance {
+  display: grid;
+  gap: 8px;
+}
+
+.wallet-balance > span {
+  color: #707783;
+  font-weight: 700;
+}
+
+.wallet-balance strong {
+  font-size: clamp(2rem, 6vw, 3.4rem);
+  letter-spacing: -0.04em;
+}
+
+.wallet-balance small {
+  max-width: 620px;
+  color: #777e89;
+  line-height: 1.5;
+}
+
+.wallet-history {
+  display: grid;
+}
+
+.wallet-transaction {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid #eceef1;
+}
+
+.wallet-transaction > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.wallet-transaction span {
+  color: #858b95;
+  font-size: 0.84rem;
+}
+
+.wallet-transaction__amount {
+  font-weight: 850;
+}

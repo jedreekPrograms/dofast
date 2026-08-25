@@ -1,11 +1,38 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import AdminPage from '../features/admin/pages/AdminPage.jsx'
+import LoginPage from '../features/auth/pages/LoginPage.jsx'
+import RegisterPage from '../features/auth/pages/RegisterPage.jsx'
+import RequireAdmin from '../features/auth/components/RequireAdmin.jsx'
+import RequireAuth from '../features/auth/components/RequireAuth.jsx'
+import CreateJobPage from '../features/jobs/pages/CreateJobPage.jsx'
 import JobsPage from '../features/jobs/pages/JobsPage.jsx'
+import MyJobsPage from '../features/jobs/pages/MyJobsPage.jsx'
+import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
+import WalletPage from '../features/wallet/pages/WalletPage.jsx'
+import AppShell from '../shared/components/AppShell.jsx'
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<JobsPage />} />
+        <Route element={<AppShell />}>
+          <Route path="/" element={<JobsPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+
+          <Route element={<RequireAuth />}>
+            <Route path="/my-jobs" element={<MyJobsPage />} />
+            <Route path="/jobs/new" element={<CreateJobPage />} />
+            <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+
+            <Route element={<RequireAdmin />}>
+              <Route path="/admin" element={<AdminPage />} />
+            </Route>
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   )

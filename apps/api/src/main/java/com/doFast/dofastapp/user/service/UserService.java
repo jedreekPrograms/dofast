@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.user.service;
 
+import com.doFast.dofastapp.common.exception.AuthenticationFailedException;
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.util.JwtUtil;
@@ -62,10 +63,10 @@ public class UserService {
 
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmailIgnoreCase(normalizeEmail(request.getEmail()))
-                .orElseThrow(() -> new BusinessException("Nieprawidłowy email lub hasło"));
+                .orElseThrow(() -> new AuthenticationFailedException("Nieprawidłowy email lub hasło"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException("Nieprawidłowy email lub hasło");
+            throw new AuthenticationFailedException("Nieprawidłowy email lub hasło");
         }
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new ForbiddenOperationException("Konto jest obecnie zawieszone");

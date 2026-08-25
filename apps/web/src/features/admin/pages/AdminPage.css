@@ -1,0 +1,72 @@
+.admin-page {
+  display: grid;
+  gap: 22px;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-stats .panel {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-stats span {
+  color: #747b86;
+  font-weight: 700;
+}
+
+.admin-stats strong {
+  font-size: 2rem;
+}
+
+.admin-users__heading h2 {
+  margin: 0;
+}
+
+.admin-users__heading p {
+  margin: 6px 0 18px;
+  color: #747b86;
+}
+
+.admin-users__list {
+  display: grid;
+}
+
+.admin-user {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 13px 0;
+  border-top: 1px solid #eceef1;
+}
+
+.admin-user > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-user > div span {
+  color: #7b818d;
+  font-size: 0.83rem;
+}
+
+.admin-user__role {
+  color: #676e79;
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+@media (max-width: 720px) {
+  .admin-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-user {
+    grid-template-columns: 1fr auto;
+  }
+}
