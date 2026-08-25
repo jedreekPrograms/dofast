@@ -32,8 +32,17 @@ jobs:
         run: cp .env.example .env
       - name: Build web image
         run: docker compose build web
-      - name: Start web container without dependencies
-        run: docker compose up -d --no-deps --no-build web
+      - name: Create compose network and web container
+        run: docker compose create web
+      - name: Provide API DNS alias for nginx startup
+        shell: bash
+        run: |
+          docker run -d --name dofast-health-api-dns \
+            --network dofast_dofast \
+            --network-alias api \
+            alpine:3.22 sleep 300
+      - name: Start web container
+        run: docker compose start web
       - name: Wait for Docker health status
         shell: bash
         run: |
@@ -41,6 +50,7 @@ jobs:
             status=$(docker inspect --format='{{.State.Health.Status}}' dofast-web-1)
             if test "$status" = "healthy"; then
               curl --fail --silent http://localhost:5173/health | grep -qx 'ok'
+              docker exec dofast-web-1 wget --quiet --tries=1 --spider http://127.0.0.1/health
               exit 0
             fi
             if test "$status" = "unhealthy"; then
@@ -56,6 +66,10 @@ jobs:
         run: |
           docker compose ps || true
           docker compose logs web || true
+          docker inspect dofast-web-1 --format '{{json .State.Health}}' || true
       - name: Cleanup
         if: always()
-        run: docker compose down --remove-orphans
+        shell: bash
+        run: |
+          docker rm -f dofast-health-api-dns 2>/dev/null || true
+          docker compose down --remove-orphans
