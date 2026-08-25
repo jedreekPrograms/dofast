@@ -5,10 +5,22 @@
 .job-route-summary strong { overflow-wrap: anywhere; }
 .job-route-summary__badge { display: inline-grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-weight: 800; }
 .job-route-summary__metrics { display: grid; gap: 3px; text-align: right; white-space: nowrap; }
+.live-tracking-card { display: grid; gap: 18px; }
+.live-tracking-card__heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.live-tracking-card__heading h2 { margin: 4px 0 0; font-size: 1.25rem; }
+.live-tracking-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.live-tracking-metrics > div { display: grid; gap: 4px; padding: 14px; border: 1px solid #e6e7eb; border-radius: 14px; }
+.live-tracking-metrics small { color: #737986; }
+.live-tracking-metrics strong { font-size: 1.15rem; }
+.live-tracking-note { margin: 0; color: #656b77; }
+.live-tracking-worker-status { display: grid; gap: 5px; padding: 14px; border-radius: 14px; background: rgba(127, 127, 127, 0.08); }
+.live-tracking-worker-status span { color: #656b77; font-size: 0.9rem; line-height: 1.5; }
 .job-route-map { width: 100%; min-height: 540px; border-radius: 20px; overflow: hidden; background: rgba(127, 127, 127, 0.08); }
 .job-route-map-fallback { line-height: 1.6; }
 @media (max-width: 760px) {
   .job-route-summary { grid-template-columns: 1fr; }
   .job-route-summary__metrics { text-align: left; }
+  .live-tracking-card__heading { align-items: flex-start; flex-direction: column; }
+  .live-tracking-metrics { grid-template-columns: 1fr; }
   .job-route-map { min-height: 390px; }
 }

@@ -9,7 +9,11 @@ export function getJobs(filters, options = {}) {
   params.set('page', String(filters.page ?? 0))
   params.set('size', String(filters.size ?? 12))
 
-  return apiRequest(`/jobs?${params.toString()}`, options)
+  return apiRequest(`/jobs?${params.toString()}`, { ...options, auth: false })
+}
+
+export function getJob(id, options = {}) {
+  return apiRequest(`/jobs/${id}`, { ...options, auth: false })
 }
 
 export function getMyJobs(options = {}) {
@@ -22,6 +26,21 @@ export function createRouteQuote(payload) {
 
 export function getJobRoute(id, options = {}) {
   return apiRequest(`/jobs/${id}/route`, options)
+}
+
+export function getLiveTracking(id, options = {}) {
+  return apiRequest(`/jobs/${id}/tracking`, options)
+}
+
+export function updateLiveTracking(id, payload) {
+  return apiRequest(`/jobs/${id}/tracking/location`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function confirmJobPickup(id) {
+  return apiRequest(`/jobs/${id}/tracking/pickup`, { method: 'POST' })
 }
 
 export function createJob(payload) {
