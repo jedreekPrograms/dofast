@@ -1,16 +1,37 @@
-# ===== Java / Maven =====
+# Java / Maven
 **/target/
 *.class
 *.log
 
-# ===== Node =====
-node_modules/
-dist/
+# Node / Vite
+**/node_modules/
+**/dist/
+**/.vite/
 
-# ===== IntelliJ =====
+# IDEs / editors
 .idea/
+.vscode/
 *.iml
+*.ipr
+*.iws
 
-# ===== Env / secrets =====
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment and secrets
 .env
-*.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Test / coverage output
+**/coverage/
+**/test-results/
+**/surefire-reports/
+
+# Local runtime data
+.data/
+logs/
