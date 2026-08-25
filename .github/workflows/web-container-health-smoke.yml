@@ -1,0 +1,61 @@
+name: Web container health smoke
+
+on:
+  push:
+    branches: [master, "fix/**"]
+    paths:
+      - "compose.yaml"
+      - "apps/web/Dockerfile"
+      - "infra/nginx/default.conf"
+      - ".github/workflows/web-container-health-smoke.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "compose.yaml"
+      - "apps/web/Dockerfile"
+      - "infra/nginx/default.conf"
+      - ".github/workflows/web-container-health-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-container-health-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare local configuration
+        run: cp .env.example .env
+      - name: Build web image
+        run: docker compose build web
+      - name: Start web container without dependencies
+        run: docker compose up -d --no-deps --no-build web
+      - name: Wait for Docker health status
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            status=$(docker inspect --format='{{.State.Health.Status}}' dofast-web-1)
+            if test "$status" = "healthy"; then
+              curl --fail --silent http://localhost:5173/health | grep -qx 'ok'
+              exit 0
+            fi
+            if test "$status" = "unhealthy"; then
+              docker inspect dofast-web-1 --format '{{range .State.Health.Log}}{{println .Output}}{{end}}'
+              exit 1
+            fi
+            sleep 2
+          done
+          docker inspect dofast-web-1 --format '{{json .State.Health}}'
+          exit 1
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs web || true
+      - name: Cleanup
+        if: always()
+        run: docker compose down --remove-orphans
