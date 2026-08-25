@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import { cancelJob, confirmJobCompletion, getMyJobs, requestJobCompletion } from '../api/jobsApi.js'
 import './MyJobsPage.css'
@@ -7,6 +8,7 @@ const STATUS_LABELS = {
   OPEN: 'Otwarte',
   IN_PROGRESS: 'W realizacji',
   COMPLETION_REQUESTED: 'Do potwierdzenia',
+  DISPUTED: 'W sporze',
   DONE: 'Zakończone',
   CANCELLED: 'Anulowane',
 }
@@ -96,6 +98,12 @@ function MyJobsPage() {
                 )}
                 {tab === 'taken' && job.status === 'IN_PROGRESS' && (
                   <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, requestJobCompletion)}>Zgłoś wykonanie</button>
+                )}
+                {['IN_PROGRESS', 'COMPLETION_REQUESTED'].includes(job.status) && (
+                  <Link className="button button--secondary" to={`/disputes?jobId=${job.id}`}>Otwórz spór</Link>
+                )}
+                {job.status === 'DISPUTED' && (
+                  <Link className="button button--secondary" to="/disputes">Zobacz spór</Link>
                 )}
               </div>
             </article>
