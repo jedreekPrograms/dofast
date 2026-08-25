@@ -61,7 +61,7 @@ jobs:
         run: cp .env.example .env
       - name: Build containers
         run: docker compose build api web
-      - name: Start database and API
+      - name: Start PostgreSQL and API
         run: docker compose up -d --no-build db api
       - name: Verify API health
         shell: bash
@@ -75,20 +75,60 @@ jobs:
           docker compose ps
           docker compose logs db api
           exit 1
-      - name: Validate web container starts
-        run: docker compose up -d --no-build web
-      - name: Verify web health
+      - name: Verify PostgreSQL-backed authentication flow
         shell: bash
         run: |
+          set -euo pipefail
+
+          REGISTER_RESPONSE=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke@example.com","nickname":"smokeuser","password":"SmokePass123!"}' \
+            http://localhost:8080/users)
+          echo "$REGISTER_RESPONSE" | grep -q '"email":"smoke@example.com"'
+
+          TOKEN=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke@example.com","password":"SmokePass123!"}' \
+            http://localhost:8080/users/login)
+          test -n "$TOKEN"
+
+          ME_RESPONSE=$(curl --fail --silent \
+            -H "Authorization: Bearer $TOKEN" \
+            http://localhost:8080/users/me)
+          echo "$ME_RESPONSE" | grep -q '"email":"smoke@example.com"'
+
+          curl --fail --silent http://localhost:8080/jobs | grep -q '^\['
+
+          WALLET_COUNT=$(docker compose exec -T db \
+            psql -U dofast -d dofast -tAc \
+            "SELECT COUNT(*) FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.email = 'smoke@example.com';")
+          test "${WALLET_COUNT//[[:space:]]/}" = "1"
+      - name: Start web gateway
+        run: docker compose up -d --no-build web
+      - name: Verify web and API gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+
           for attempt in {1..20}; do
             if curl --fail --silent http://localhost:5173/health | grep -q 'ok'; then
-              exit 0
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              docker compose ps
+              docker compose logs web
+              exit 1
             fi
             sleep 1
           done
+
+          curl --fail --silent http://localhost:5173/ | grep -q 'doFast'
+          curl --fail --silent http://localhost:5173/api/jobs | grep -q '^\['
+      - name: Print service diagnostics on failure
+        if: failure()
+        run: |
           docker compose ps
-          docker compose logs web
-          exit 1
+          docker compose logs --tail=200 db api web
       - name: Cleanup
         if: always()
         run: docker compose down -v --remove-orphans
