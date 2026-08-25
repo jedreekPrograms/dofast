@@ -1,6 +1,8 @@
 package com.doFast.dofastapp.job.service;
 
+import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
@@ -14,9 +16,13 @@ import com.doFast.dofastapp.location.service.GeoPointFactory;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import org.locationtech.jts.geom.Point;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -50,11 +56,38 @@ public class JobService {
         return toResponse(saved);
     }
 
-    public List<JobResponse> getOpenJobs() {
-        return jobRepository.findByStatusOrderByCreatedAtDesc(JobStatus.OPEN)
+    public PageResponse<JobResponse> getOpenJobs(
+            String query,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            int page,
+            int size
+    ) {
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new BusinessException("Minimalna cena nie może być większa od maksymalnej");
+        }
+
+        String normalizedQuery = normalizeOptionalLabel(query);
+        PageRequest pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))
+        );
+
+        Page<Job> result = jobRepository.findOpenJobs(
+                JobStatus.OPEN,
+                normalizedQuery,
+                minPrice,
+                maxPrice,
+                pageable
+        );
+
+        List<JobResponse> content = result.getContent()
                 .stream()
                 .map(this::toResponse)
                 .toList();
+
+        return PageResponse.from(result, content);
     }
 
     public List<NearbyJobResponse> getNearbyJobs(

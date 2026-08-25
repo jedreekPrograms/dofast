@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, "chore/**", "feature/**", "fix/**"]
+    branches: [master, "chore/**", "feature/**", "fix/**", "feat/**"]
   pull_request:
     branches: [master]
 
@@ -75,7 +75,7 @@ jobs:
           docker compose ps
           docker compose logs db api
           exit 1
-      - name: Verify PostgreSQL, PostGIS, auth, escrow and nearby matching
+      - name: Verify PostgreSQL, PostGIS, discovery, auth and escrow
         shell: bash
         run: |
           set -euo pipefail
@@ -84,6 +84,11 @@ jobs:
             psql -U dofast -d dofast -tAc \
             "SELECT extversion FROM pg_extension WHERE extname = 'postgis';")
           test -n "${POSTGIS_VERSION//[[:space:]]/}"
+
+          PG_TRGM_VERSION=$(docker compose exec -T db \
+            psql -U dofast -d dofast -tAc \
+            "SELECT extversion FROM pg_extension WHERE extname = 'pg_trgm';")
+          test -n "${PG_TRGM_VERSION//[[:space:]]/}"
 
           REGISTER_RESPONSE=$(curl --fail --silent \
             -H 'Content-Type: application/json' \
@@ -131,6 +136,18 @@ jobs:
             "SELECT balance FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.email = 'smoke@example.com';")
           test "${WALLET_BALANCE//[[:space:]]/}" = "75.00"
 
+          DISCOVERY_RESPONSE=$(curl --fail --silent \
+            'http://localhost:8080/jobs?query=delivery&minPrice=20&maxPrice=30&page=0&size=10')
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d["content"]) == 1; assert d["content"][0]["title"] == "Smoke delivery"; assert d["page"] == 0; assert d["size"] == 10; assert d["totalElements"] == 1; assert d["first"] is True; assert d["last"] is True' <<< "$DISCOVERY_RESPONSE"
+          if echo "$DISCOVERY_RESPONSE" | grep -Fq "$PRIVATE_LABEL"; then
+            echo "Discovery response leaked private location label"
+            exit 1
+          fi
+
+          PRICE_STATUS=$(curl --silent --output /tmp/invalid-price.json --write-out '%{http_code}' \
+            'http://localhost:8080/jobs?minPrice=50&maxPrice=10')
+          test "$PRICE_STATUS" = "400"
+
           NEARBY_RESPONSE=$(curl --fail --silent \
             'http://localhost:8080/jobs/nearby?latitude=51.1120&longitude=17.0610&radiusMeters=2000&limit=10')
           echo "$NEARBY_RESPONSE" | grep -q '"title":"Smoke delivery"'
@@ -172,7 +189,7 @@ jobs:
           done
 
           curl --fail --silent http://localhost:5173/ | grep -q 'doFast'
-          curl --fail --silent http://localhost:5173/api/jobs | grep -q '^\['
+          curl --fail --silent 'http://localhost:5173/api/jobs?page=0&size=10' | grep -q '"content"'
           curl --fail --silent \
             'http://localhost:5173/api/jobs/nearby?latitude=51.1120&longitude=17.0610&radiusMeters=2000&limit=10' \
             | grep -q '"title":"Smoke delivery"'

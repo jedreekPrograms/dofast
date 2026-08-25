@@ -1,9 +1,166 @@
+import { useEffect, useState } from 'react'
+import JobCard from '../components/JobCard.jsx'
+import { getJobs } from '../api/jobsApi.js'
+import './JobsPage.css'
+
+const DEFAULT_FILTERS = {
+  query: '',
+  minPrice: '',
+  maxPrice: '',
+  page: 0,
+  size: 12,
+}
+
 function JobsPage() {
+  const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS)
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadJobs() {
+      setLoading(true)
+      setError('')
+
+      try {
+        const data = await getJobs(filters, { signal: controller.signal })
+        setResult(data)
+      } catch (requestError) {
+        if (requestError.name !== 'AbortError') {
+          setError('Nie udało się pobrać zleceń. Spróbuj ponownie.')
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadJobs()
+    return () => controller.abort()
+  }, [filters])
+
+  function updateDraft(event) {
+    const { name, value } = event.target
+    setDraftFilters((current) => ({ ...current, [name]: value }))
+  }
+
+  function applyFilters(event) {
+    event.preventDefault()
+    setFilters({ ...draftFilters, page: 0 })
+  }
+
+  function clearFilters() {
+    setDraftFilters(DEFAULT_FILTERS)
+    setFilters(DEFAULT_FILTERS)
+  }
+
+  function changePage(nextPage) {
+    setFilters((current) => ({ ...current, page: nextPage }))
+  }
+
+  const jobs = result?.content ?? []
+
   return (
-    <main>
-      <h1>doFast</h1>
-      <h2>Zlecenia w pobliżu</h2>
-      <p>Lista zleceń będzie rozwijana w kolejnym etapie.</p>
+    <main className="jobs-page">
+      <header className="jobs-hero">
+        <span className="jobs-hero__badge">Zlecenia lokalne</span>
+        <h1>Znajdź zlecenie blisko siebie</h1>
+        <p>
+          Przeglądaj aktualne zadania, filtruj po cenie i szukaj po nazwie, opisie lub obszarze.
+        </p>
+      </header>
+
+      <form className="jobs-filters" onSubmit={applyFilters}>
+        <label className="jobs-filters__search">
+          <span>Szukaj</span>
+          <input
+            type="search"
+            name="query"
+            value={draftFilters.query}
+            onChange={updateDraft}
+            placeholder="np. zakupy, paczka, Plac Grunwaldzki"
+            maxLength={100}
+          />
+        </label>
+
+        <label>
+          <span>Od</span>
+          <input
+            type="number"
+            name="minPrice"
+            value={draftFilters.minPrice}
+            onChange={updateDraft}
+            min="0"
+            step="0.01"
+            placeholder="0 zł"
+          />
+        </label>
+
+        <label>
+          <span>Do</span>
+          <input
+            type="number"
+            name="maxPrice"
+            value={draftFilters.maxPrice}
+            onChange={updateDraft}
+            min="0"
+            step="0.01"
+            placeholder="bez limitu"
+          />
+        </label>
+
+        <div className="jobs-filters__actions">
+          <button type="submit" className="button button--primary">Filtruj</button>
+          <button type="button" className="button button--secondary" onClick={clearFilters}>Wyczyść</button>
+        </div>
+      </form>
+
+      <section className="jobs-results" aria-live="polite">
+        <div className="jobs-results__heading">
+          <div>
+            <h2>Otwarte zlecenia</h2>
+            {result && <p>{result.totalElements} dostępnych zleceń</p>}
+          </div>
+        </div>
+
+        {loading && <div className="jobs-state">Pobieranie zleceń…</div>}
+        {!loading && error && <div className="jobs-state jobs-state--error">{error}</div>}
+        {!loading && !error && jobs.length === 0 && (
+          <div className="jobs-state">Brak zleceń pasujących do tych filtrów.</div>
+        )}
+
+        {!loading && !error && jobs.length > 0 && (
+          <div className="jobs-grid">
+            {jobs.map((job) => <JobCard key={job.id} job={job} />)}
+          </div>
+        )}
+
+        {!loading && !error && result && result.totalPages > 1 && (
+          <nav className="jobs-pagination" aria-label="Paginacja zleceń">
+            <button
+              type="button"
+              className="button button--secondary"
+              disabled={result.first}
+              onClick={() => changePage(result.page - 1)}
+            >
+              Poprzednia
+            </button>
+            <span>Strona {result.page + 1} z {result.totalPages}</span>
+            <button
+              type="button"
+              className="button button--secondary"
+              disabled={result.last}
+              onClick={() => changePage(result.page + 1)}
+            >
+              Następna
+            </button>
+          </nav>
+        )}
+      </section>
     </main>
   )
 }

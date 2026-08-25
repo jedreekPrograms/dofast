@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.job.controller;
 
+import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
@@ -11,6 +12,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -46,8 +49,14 @@ public class JobController {
     }
 
     @GetMapping
-    public List<JobResponse> getJobs() {
-        return jobService.getOpenJobs();
+    public PageResponse<JobResponse> getJobs(
+            @RequestParam(required = false) @Size(max = 100) String query,
+            @RequestParam(required = false) @DecimalMin("0.00") BigDecimal minPrice,
+            @RequestParam(required = false) @DecimalMin("0.00") BigDecimal maxPrice,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
+    ) {
+        return jobService.getOpenJobs(query, minPrice, maxPrice, page, size);
     }
 
     @GetMapping("/nearby")

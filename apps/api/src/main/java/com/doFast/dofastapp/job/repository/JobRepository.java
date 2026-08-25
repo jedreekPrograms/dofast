@@ -4,19 +4,41 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
 public interface JobRepository extends JpaRepository<Job, Long> {
 
-    List<Job> findByStatusOrderByCreatedAtDesc(JobStatus status);
-
     List<Job> findByCreatedByOrTakenByOrderByCreatedAtDesc(User createdBy, User takenBy);
+
+    @Query("""
+            select j
+            from Job j
+            where j.status = :status
+              and (
+                    :query is null
+                    or lower(j.title) like lower(concat('%', :query, '%'))
+                    or lower(j.description) like lower(concat('%', :query, '%'))
+                    or lower(j.locationLabel) like lower(concat('%', :query, '%'))
+              )
+              and (:minPrice is null or j.price >= :minPrice)
+              and (:maxPrice is null or j.price <= :maxPrice)
+            """)
+    Page<Job> findOpenJobs(
+            @Param("status") JobStatus status,
+            @Param("query") String query,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            Pageable pageable
+    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select j from Job j where j.id = :id")

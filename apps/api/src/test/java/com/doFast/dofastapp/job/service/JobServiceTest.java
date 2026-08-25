@@ -1,6 +1,8 @@
 package com.doFast.dofastapp.job.service;
 
+import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.dto.JobRequest;
@@ -17,14 +19,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +76,49 @@ class JobServiceTest {
         assertEquals(owner.getId(), response.createdById());
         assertEquals("Wrocław, Plac Grunwaldzki", response.locationLabel());
         verify(transactionService).holdMoney(any(Job.class));
+    }
+
+    @Test
+    void discoveryReturnsStablePaginationMetadata() {
+        Job job = job(JobStatus.OPEN, owner, null);
+        when(jobRepository.findOpenJobs(
+                eq(JobStatus.OPEN),
+                eq("zakupy"),
+                eq(new BigDecimal("10.00")),
+                eq(new BigDecimal("50.00")),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(job), PageRequest.of(0, 20), 1));
+
+        PageResponse<JobResponse> response = jobService.getOpenJobs(
+                "  zakupy  ",
+                new BigDecimal("10.00"),
+                new BigDecimal("50.00"),
+                0,
+                20
+        );
+
+        assertEquals(1, response.content().size());
+        assertEquals(0, response.page());
+        assertEquals(20, response.size());
+        assertEquals(1, response.totalElements());
+        assertEquals(1, response.totalPages());
+        assertEquals(true, response.first());
+        assertEquals(true, response.last());
+        assertEquals("Wrocław, Plac Grunwaldzki", response.content().getFirst().locationLabel());
+    }
+
+    @Test
+    void discoveryRejectsInvertedPriceRange() {
+        assertThrows(
+                BusinessException.class,
+                () -> jobService.getOpenJobs(
+                        null,
+                        new BigDecimal("50.00"),
+                        new BigDecimal("10.00"),
+                        0,
+                        20
+                )
+        );
     }
 
     @Test
