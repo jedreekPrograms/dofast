@@ -32,6 +32,13 @@ print(value)
 PY
 }
 
+utc_now() {
+  python3 - <<'PY'
+from datetime import datetime, timezone
+print(datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'))
+PY
+}
+
 POSTGIS_VERSION=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT extversion FROM pg_extension WHERE extname = 'postgis';")
 test -n "${POSTGIS_VERSION//[[:space:]]/}"
 PG_TRGM_VERSION=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_trgm';")
@@ -143,6 +150,44 @@ python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["origin"]["label"]
 
 echo "Job route privacy/lifecycle: OK"
 
+INITIAL_TRACKING=$(curl --fail --silent -H "Authorization: Bearer $OWNER_TOKEN" "$api/jobs/$JOB_ID/tracking")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["phase"]=="TO_ORIGIN"; assert d["workerId"]==int(sys.argv[1]); assert d["sharingActive"] is False; assert d["location"] is None' "$WORKER_ID" <<< "$INITIAL_TRACKING"
+
+OUTSIDER_TRACKING_STATUS=$(curl --silent --output /tmp/outsider-tracking.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $OUTSIDER_TOKEN" "$api/jobs/$JOB_ID/tracking")
+test "$OUTSIDER_TRACKING_STATUS" = "403"
+
+GPS_AT=$(utc_now)
+OWNER_GPS_STATUS=$(curl --silent --output /tmp/owner-gps.json --write-out '%{http_code}' \
+  -X PUT -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"latitude\":51.1200,\"longitude\":17.0700,\"accuracyMeters\":7.5,\"headingDegrees\":180.0,\"speedMetersPerSecond\":6.0,\"capturedAt\":\"$GPS_AT\"}" \
+  "$api/jobs/$JOB_ID/tracking/location")
+test "$OWNER_GPS_STATUS" = "403"
+
+WORKER_GPS=$(curl --fail --silent -X PUT -H "Authorization: Bearer $WORKER_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"latitude\":51.1200,\"longitude\":17.0700,\"accuracyMeters\":7.5,\"headingDegrees\":180.0,\"speedMetersPerSecond\":6.0,\"capturedAt\":\"$GPS_AT\"}" \
+  "$api/jobs/$JOB_ID/tracking/location")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["phase"]=="TO_ORIGIN"; assert d["sharingActive"] is True; assert abs(d["location"]["latitude"]-51.12)<1e-6; assert d["remainingDistanceMeters"]>0; assert d["remainingDurationSeconds"]>0' <<< "$WORKER_GPS"
+
+DB_TRACKING_PRESENT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT current_location IS NOT NULL AND remaining_distance_meters IS NOT NULL FROM job_live_tracking WHERE job_id=$JOB_ID;")
+test "${DB_TRACKING_PRESENT//[[:space:]]/}" = "t"
+
+OWNER_TRACKING=$(curl --fail --silent -H "Authorization: Bearer $OWNER_TOKEN" "$api/jobs/$JOB_ID/tracking")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["sharingActive"] is True; assert abs(d["location"]["longitude"]-17.07)<1e-6; assert d["remainingDistanceMeters"]>0' <<< "$OWNER_TRACKING"
+
+PICKUP=$(curl --fail --silent -X POST -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/tracking/pickup")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["phase"]=="TO_DESTINATION"; assert d["sharingActive"] is True; assert d["remainingDistanceMeters"]>0; assert d["remainingDurationSeconds"]>0' <<< "$PICKUP"
+
+sleep 0.1
+GPS_AT_2=$(utc_now)
+WORKER_GPS_2=$(curl --fail --silent -X PUT -H "Authorization: Bearer $WORKER_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"latitude\":51.1150,\"longitude\":17.0500,\"accuracyMeters\":6.0,\"headingDegrees\":240.0,\"speedMetersPerSecond\":7.0,\"capturedAt\":\"$GPS_AT_2\"}" \
+  "$api/jobs/$JOB_ID/tracking/location")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["phase"]=="TO_DESTINATION"; assert d["sharingActive"] is True; assert abs(d["location"]["latitude"]-51.115)<1e-6; assert d["remainingDistanceMeters"]>0; assert d["remainingDurationSeconds"]>0' <<< "$WORKER_GPS_2"
+
+echo "Live courier tracking A-to-B/privacy/ETA: OK"
+
 CHAT_CLIENT_ID='11111111-2222-4333-8444-555555555555'
 CHAT=$(curl --fail --silent -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
   -d "{\"content\":\"Smoke route chat evidence\",\"clientMessageId\":\"$CHAT_CLIENT_ID\"}" \
@@ -169,6 +214,14 @@ echo "$DISPUTE" > /tmp/dispute.json
 DISPUTE_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["dispute"]["id"])' <<< "$DISPUTE")
 echo "$DISPUTE" | grep -q '"status":"OPEN"'
 
+TRACKING_CLEARED=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT current_location IS NULL AND remaining_distance_meters IS NULL AND remaining_duration_seconds IS NULL AND sharing_stopped_at IS NOT NULL FROM job_live_tracking WHERE job_id=$JOB_ID;")
+test "${TRACKING_CLEARED//[[:space:]]/}" = "t"
+
+DISPUTED_TRACKING_STATUS=$(curl --silent --output /tmp/disputed-tracking.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $OWNER_TOKEN" "$api/jobs/$JOB_ID/tracking")
+test "$DISPUTED_TRACKING_STATUS" = "409"
+
 ESCROW_HELD=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT status FROM escrow_transactions WHERE job_id=$JOB_ID;")
 test "${ESCROW_HELD//[[:space:]]/}" = "HELD"
@@ -181,7 +234,7 @@ curl --fail --silent --output /tmp/claimed.json -X POST -H "Authorization: Beare
   "$api/admin/disputes/$DISPUTE_ID/claim"
 
 EVIDENCE=$(curl --fail --silent -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "$api/admin/disputes/$DISPUTE_ID/chat/messages?limit=20")
+  "$api/admin/disputes/$DISPUTE_ID/messages?limit=20")
 echo "$EVIDENCE" | grep -q 'Smoke route chat evidence'
 
 RESOLVED=$(curl --fail --silent -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
@@ -189,7 +242,7 @@ RESOLVED=$(curl --fail --silent -X POST -H "Authorization: Bearer $ADMIN_TOKEN" 
   "$api/admin/disputes/$DISPUTE_ID/resolve")
 echo "$RESOLVED" | grep -q '"status":"RESOLVED"'
 
-FINAL_JOB=$(curl --fail --silent "$api/jobs/$JOB_ID")
+FINAL_JOB=$(curl --fail --silent -H "Authorization: Bearer $OWNER_TOKEN" "$api/jobs/$JOB_ID")
 echo "$FINAL_JOB" | grep -q '"status":"CANCELLED"'
 
 FINAL_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
