@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import './ProfilePage.css'
 
@@ -42,10 +43,13 @@ function ProfilePage() {
 
   return (
     <main className="account-page">
-      <header className="page-heading">
-        <span className="eyebrow">Konto</span>
-        <h1>Profil i ustawienia</h1>
-        <p>Zarządzaj podstawowymi danymi konta i bezpieczeństwem logowania.</p>
+      <header className="page-heading page-heading--row">
+        <div>
+          <span className="eyebrow">Konto</span>
+          <h1>Profil i ustawienia</h1>
+          <p>Zarządzaj podstawowymi danymi konta i bezpieczeństwem logowania.</p>
+        </div>
+        <Link className="button button--secondary" to={`/users/${user.id}`}>Zobacz publiczny profil</Link>
       </header>
 
       <div className="account-grid">

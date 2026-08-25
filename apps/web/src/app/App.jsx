@@ -12,6 +12,7 @@ import JobsPage from '../features/jobs/pages/JobsPage.jsx'
 import MyJobsPage from '../features/jobs/pages/MyJobsPage.jsx'
 import NotificationsPage from '../features/notifications/pages/NotificationsPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
+import PublicProfilePage from '../features/reviews/pages/PublicProfilePage.jsx'
 import WalletPage from '../features/wallet/pages/WalletPage.jsx'
 import AppShell from '../shared/components/AppShell.jsx'
 
@@ -23,6 +24,7 @@ function App() {
           <Route path="/" element={<JobsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/users/:userId" element={<PublicProfilePage />} />
 
           <Route element={<RequireAuth />}>
             <Route path="/my-jobs" element={<MyJobsPage />} />

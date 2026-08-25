@@ -39,7 +39,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/users", "/users/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/users/*/profile").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/users/*/profile", "/reviews/users/*").permitAll()
                         .requestMatchers("/ws", "/ws/**", "/ws-sockjs/**").permitAll()
                         .requestMatchers("/webhooks/stripe").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()

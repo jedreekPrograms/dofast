@@ -8,5 +8,6 @@ public enum NotificationType {
     DISPUTE_OPENED,
     DISPUTE_CLAIMED,
     DISPUTE_RESOLVED,
-    CHAT_MESSAGE
+    CHAT_MESSAGE,
+    REVIEW_RECEIVED
 }

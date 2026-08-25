@@ -1,0 +1,187 @@
+name: Reviews trust smoke
+
+on:
+  push:
+    branches: [master, "feature/carlisle-reviews-trust"]
+    paths:
+      - ".github/workflows/reviews-trust-smoke.yml"
+      - "apps/api/src/main/java/com/doFast/dofastapp/review/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/dto/UserProfileResponse.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/service/UserProfileService.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/job/repository/JobRepository.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/notification/enums/NotificationType.java"
+      - "apps/api/src/main/resources/db/migration/V8__reviews_and_trust.sql"
+      - "apps/web/src/features/reviews/**"
+      - "apps/web/src/features/jobs/**"
+      - "apps/web/src/app/App.jsx"
+  pull_request:
+    branches: [master]
+    paths:
+      - "apps/api/src/main/java/com/doFast/dofastapp/review/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/dto/UserProfileResponse.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/service/UserProfileService.java"
+      - "apps/api/src/main/resources/db/migration/V8__reviews_and_trust.sql"
+      - "apps/web/src/features/reviews/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reviews-trust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trust-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare local configuration
+        run: cp .env.example .env
+
+      - name: Build API
+        run: docker compose build api
+
+      - name: Start PostgreSQL and API
+        run: docker compose up -d --no-build db api
+
+      - name: Wait for API
+        shell: bash
+        run: |
+          for attempt in {1..45}; do
+            if curl --fail --silent http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs db api
+          exit 1
+
+      - name: Verify bilateral reviews and public trust
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'echo "Trust smoke failed at line $LINENO"' ERR
+
+          REQUESTER_REGISTER=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"trust-requester@example.com","nickname":"trustRequester","password":"TrustPass123!"}' \
+            http://localhost:8080/users)
+          REQUESTER_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REQUESTER_REGISTER")
+          REQUESTER_LOGIN=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"trust-requester@example.com","password":"TrustPass123!"}' \
+            http://localhost:8080/users/login)
+          REQUESTER_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])' <<< "$REQUESTER_LOGIN")
+
+          WORKER_REGISTER=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"trust-worker@example.com","nickname":"trustWorker","password":"TrustPass123!"}' \
+            http://localhost:8080/users)
+          WORKER_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$WORKER_REGISTER")
+          WORKER_LOGIN=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"trust-worker@example.com","password":"TrustPass123!"}' \
+            http://localhost:8080/users/login)
+          WORKER_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])' <<< "$WORKER_LOGIN")
+
+          OUTSIDER_LOGIN=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"trust-outsider@example.com","nickname":"trustOutsider","password":"TrustPass123!"}' \
+            http://localhost:8080/users >/tmp/trust-outsider-register.json && \
+            curl --fail --silent -H 'Content-Type: application/json' \
+            -d '{"email":"trust-outsider@example.com","password":"TrustPass123!"}' \
+            http://localhost:8080/users/login)
+          OUTSIDER_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])' <<< "$OUTSIDER_LOGIN")
+
+          docker compose exec -T db psql -U dofast -d dofast -c \
+            "UPDATE wallets SET balance = 100.00 WHERE user_id = $REQUESTER_ID;"
+
+          JOB=$(curl --fail --silent \
+            -H "Authorization: Bearer $REQUESTER_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"title":"Trust smoke job","description":"A completed job used to verify bilateral reputation.","price":20.00,"location":{"latitude":51.1128,"longitude":17.0601,"publicLabel":"Wrocław","privateLabel":"Test address"}}' \
+            http://localhost:8080/jobs)
+          JOB_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$JOB")
+
+          curl --fail --silent --output /dev/null -X POST \
+            -H "Authorization: Bearer $WORKER_TOKEN" \
+            "http://localhost:8080/jobs/$JOB_ID/accept"
+          curl --fail --silent --output /dev/null -X POST \
+            -H "Authorization: Bearer $WORKER_TOKEN" \
+            "http://localhost:8080/jobs/$JOB_ID/completion"
+          DONE=$(curl --fail --silent -X POST \
+            -H "Authorization: Bearer $REQUESTER_TOKEN" \
+            "http://localhost:8080/jobs/$JOB_ID/confirm")
+          echo "$DONE" | grep -q '"status":"DONE"'
+
+          REQUESTER_ELIGIBILITY=$(curl --fail --silent \
+            -H "Authorization: Bearer $REQUESTER_TOKEN" \
+            "http://localhost:8080/reviews/jobs/$JOB_ID/eligibility")
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["eligible"] is True; assert d["counterpartId"] == int(sys.argv[1])' "$WORKER_ID" <<< "$REQUESTER_ELIGIBILITY"
+
+          OUTSIDER_STATUS=$(curl --silent --output /tmp/trust-outsider-review.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer $OUTSIDER_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{\"jobId\":$JOB_ID,\"rating\":5,\"comment\":\"Must be forbidden\"}" \
+            http://localhost:8080/reviews)
+          test "$OUTSIDER_STATUS" = "403"
+
+          REQUESTER_REVIEW=$(curl --fail --silent \
+            -H "Authorization: Bearer $REQUESTER_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{\"jobId\":$JOB_ID,\"rating\":5,\"comment\":\"Great worker\"}" \
+            http://localhost:8080/reviews)
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["reviewerId"] == int(sys.argv[1]); assert d["reviewedId"] == int(sys.argv[2]); assert d["rating"] == 5' "$REQUESTER_ID" "$WORKER_ID" <<< "$REQUESTER_REVIEW"
+
+          DUPLICATE_STATUS=$(curl --silent --output /tmp/trust-duplicate.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer $REQUESTER_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{\"jobId\":$JOB_ID,\"rating\":4,\"comment\":\"Duplicate\"}" \
+            http://localhost:8080/reviews)
+          test "$DUPLICATE_STATUS" = "409"
+
+          WORKER_REVIEW=$(curl --fail --silent \
+            -H "Authorization: Bearer $WORKER_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{\"jobId\":$JOB_ID,\"rating\":4,\"comment\":\"Good requester\"}" \
+            http://localhost:8080/reviews)
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["reviewerId"] == int(sys.argv[1]); assert d["reviewedId"] == int(sys.argv[2]); assert d["rating"] == 4' "$WORKER_ID" "$REQUESTER_ID" <<< "$WORKER_REVIEW"
+
+          AFTER_REVIEW=$(curl --fail --silent \
+            -H "Authorization: Bearer $REQUESTER_TOKEN" \
+            "http://localhost:8080/reviews/jobs/$JOB_ID/eligibility")
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["eligible"] is False; assert d["alreadyReviewed"] is True' <<< "$AFTER_REVIEW"
+
+          WORKER_PROFILE=$(curl --fail --silent "http://localhost:8080/users/$WORKER_ID/profile")
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["averageRating"] == 5.0; assert d["reviewsCount"] == 1; assert d["completedJobsAsWorker"] == 1; assert d["completedJobsTotal"] == 1' <<< "$WORKER_PROFILE"
+
+          REQUESTER_PROFILE=$(curl --fail --silent "http://localhost:8080/users/$REQUESTER_ID/profile")
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["averageRating"] == 4.0; assert d["reviewsCount"] == 1; assert d["completedJobsAsRequester"] == 1; assert d["completedJobsTotal"] == 1' <<< "$REQUESTER_PROFILE"
+
+          PUBLIC_REVIEWS=$(curl --fail --silent "http://localhost:8080/reviews/users/$WORKER_ID?page=0&size=10")
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["totalElements"] == 1; assert d["content"][0]["comment"] == "Great worker"' <<< "$PUBLIC_REVIEWS"
+
+          WORKER_NOTIFICATIONS=$(curl --fail --silent \
+            -H "Authorization: Bearer $WORKER_TOKEN" \
+            'http://localhost:8080/notifications?page=0&size=20')
+          echo "$WORKER_NOTIFICATIONS" | grep -q '"type":"REVIEW_RECEIVED"'
+
+          REVIEW_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+            "SELECT COUNT(*) FROM reviews WHERE job_id = $JOB_ID;")
+          test "${REVIEW_COUNT//[[:space:]]/}" = "2"
+
+          UNIQUE_CONSTRAINT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+            "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'uk_reviews_job_reviewer';")
+          test "${UNIQUE_CONSTRAINT//[[:space:]]/}" = "1"
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail=200 db api
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans

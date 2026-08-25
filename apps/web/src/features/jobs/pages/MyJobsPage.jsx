@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
+import ReviewDialog from '../../reviews/components/ReviewDialog.jsx'
 import { cancelJob, confirmJobCompletion, getMyJobs, requestJobCompletion } from '../api/jobsApi.js'
 import './MyJobsPage.css'
 
@@ -19,7 +20,10 @@ function MyJobsPage() {
   const [tab, setTab] = useState('created')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [actionId, setActionId] = useState(null)
+  const [reviewJob, setReviewJob] = useState(null)
+  const [reviewedJobIds, setReviewedJobIds] = useState(() => new Set())
 
   const loadJobs = useCallback(async () => {
     setLoading(true)
@@ -44,6 +48,7 @@ function MyJobsPage() {
   async function runAction(jobId, action) {
     setActionId(jobId)
     setError('')
+    setSuccess('')
     try {
       const updated = await action(jobId)
       setJobs((current) => current.map((job) => job.id === updated.id ? updated : job))
@@ -52,6 +57,12 @@ function MyJobsPage() {
     } finally {
       setActionId(null)
     }
+  }
+
+  function handleReviewSubmitted(review) {
+    setReviewedJobIds((current) => new Set(current).add(review.jobId))
+    setReviewJob(null)
+    setSuccess('Opinia została zapisana i jest już widoczna na profilu użytkownika.')
   }
 
   return (
@@ -70,48 +81,71 @@ function MyJobsPage() {
       </div>
 
       {error && <div className="form-message form-message--error">{error}</div>}
+      {success && <div className="form-message form-message--success">{success}</div>}
       {loading && <div className="page-state">Pobieranie zleceń…</div>}
       {!loading && visibleJobs.length === 0 && <div className="page-state">W tej sekcji nie ma jeszcze żadnych zleceń.</div>}
 
       {!loading && visibleJobs.length > 0 && (
         <div className="my-jobs-list">
-          {visibleJobs.map((job) => (
-            <article className="my-job" key={job.id}>
-              <div className="my-job__body">
-                <div className="my-job__meta">
-                  <span className={`status-pill status-pill--${job.status.toLowerCase()}`}>{STATUS_LABELS[job.status] || job.status}</span>
-                  <span>{job.locationLabel}</span>
+          {visibleJobs.map((job) => {
+            const counterpartId = tab === 'created' ? job.takenById : job.createdById
+            return (
+              <article className="my-job" key={job.id}>
+                <div className="my-job__body">
+                  <div className="my-job__meta">
+                    <span className={`status-pill status-pill--${job.status.toLowerCase()}`}>{STATUS_LABELS[job.status] || job.status}</span>
+                    <span>{job.locationLabel}</span>
+                  </div>
+                  <h2>{job.title}</h2>
+                  <p>{job.description}</p>
+                  <div className="my-job__footer">
+                    <strong>{Number(job.price).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}</strong>
+                    <span>#{job.id}</span>
+                    {counterpartId && <Link to={`/users/${counterpartId}`}>Profil drugiej strony</Link>}
+                  </div>
                 </div>
-                <h2>{job.title}</h2>
-                <p>{job.description}</p>
-                <div className="my-job__footer">
-                  <strong>{Number(job.price).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}</strong>
-                  <span>#{job.id}</span>
+                <div className="my-job__actions">
+                  {job.takenById && (
+                    <Link className="button button--secondary" to={`/chat?jobId=${job.id}`}>Czat</Link>
+                  )}
+                  {job.status === 'DONE' && (
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      disabled={reviewedJobIds.has(job.id)}
+                      onClick={() => setReviewJob(job)}
+                    >
+                      {reviewedJobIds.has(job.id) ? 'Oceniono' : 'Oceń współpracę'}
+                    </button>
+                  )}
+                  {tab === 'created' && job.status === 'OPEN' && (
+                    <button className="button button--danger" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, cancelJob)}>Anuluj</button>
+                  )}
+                  {tab === 'created' && job.status === 'COMPLETION_REQUESTED' && (
+                    <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, confirmJobCompletion)}>Potwierdź wykonanie</button>
+                  )}
+                  {tab === 'taken' && job.status === 'IN_PROGRESS' && (
+                    <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, requestJobCompletion)}>Zgłoś wykonanie</button>
+                  )}
+                  {['IN_PROGRESS', 'COMPLETION_REQUESTED'].includes(job.status) && (
+                    <Link className="button button--secondary" to={`/disputes?jobId=${job.id}`}>Otwórz spór</Link>
+                  )}
+                  {job.status === 'DISPUTED' && (
+                    <Link className="button button--secondary" to="/disputes">Zobacz spór</Link>
+                  )}
                 </div>
-              </div>
-              <div className="my-job__actions">
-                {job.takenById && (
-                  <Link className="button button--secondary" to={`/chat?jobId=${job.id}`}>Czat</Link>
-                )}
-                {tab === 'created' && job.status === 'OPEN' && (
-                  <button className="button button--danger" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, cancelJob)}>Anuluj</button>
-                )}
-                {tab === 'created' && job.status === 'COMPLETION_REQUESTED' && (
-                  <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, confirmJobCompletion)}>Potwierdź wykonanie</button>
-                )}
-                {tab === 'taken' && job.status === 'IN_PROGRESS' && (
-                  <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, requestJobCompletion)}>Zgłoś wykonanie</button>
-                )}
-                {['IN_PROGRESS', 'COMPLETION_REQUESTED'].includes(job.status) && (
-                  <Link className="button button--secondary" to={`/disputes?jobId=${job.id}`}>Otwórz spór</Link>
-                )}
-                {job.status === 'DISPUTED' && (
-                  <Link className="button button--secondary" to="/disputes">Zobacz spór</Link>
-                )}
-              </div>
-            </article>
-          ))}
+              </article>
+            )
+          })}
         </div>
+      )}
+
+      {reviewJob && (
+        <ReviewDialog
+          job={reviewJob}
+          onClose={() => setReviewJob(null)}
+          onSubmitted={handleReviewSubmitted}
+        />
       )}
     </main>
   )

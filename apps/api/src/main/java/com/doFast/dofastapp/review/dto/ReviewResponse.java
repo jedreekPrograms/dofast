@@ -1,15 +1,15 @@
 package com.doFast.dofastapp.review.dto;
 
-public class ReviewResponse {
+import java.time.LocalDateTime;
 
-    private int rating;
-    private String comment;
-
-    public ReviewResponse(int rating, String comment) {
-        this.rating = rating;
-        this.comment = comment;
-    }
-
-    public int getRating() { return rating; }
-    public String getComment() { return comment; }
-}
+public record ReviewResponse(
+        Long id,
+        Long jobId,
+        String jobTitle,
+        Long reviewerId,
+        String reviewerNickname,
+        Long reviewedId,
+        int rating,
+        String comment,
+        LocalDateTime createdAt
+) {}

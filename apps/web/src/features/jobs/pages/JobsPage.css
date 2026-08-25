@@ -176,10 +176,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: auto;
   color: #7a808c;
   font-size: 0.8rem;
+}
+
+.job-card__footer a {
+  color: #4d5563;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.job-card__footer a:hover {
+  color: #17191f;
+  text-decoration: underline;
 }
 
 .job-card__status {

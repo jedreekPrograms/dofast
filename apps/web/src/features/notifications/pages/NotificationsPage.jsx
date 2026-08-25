@@ -17,6 +17,7 @@ const TYPE_LABELS = {
   DISPUTE_CLAIMED: 'Spór',
   DISPUTE_RESOLVED: 'Spór',
   CHAT_MESSAGE: 'Czat',
+  REVIEW_RECEIVED: 'Opinia',
 }
 
 function notificationTarget(notification) {
@@ -108,7 +109,7 @@ function NotificationsPage() {
         <div>
           <span className="eyebrow">Centrum aktywności</span>
           <h1>Powiadomienia</h1>
-          <p>Wiadomości o zleceniach, czatach, rozliczeniach i sporach w jednym miejscu.</p>
+          <p>Wiadomości o zleceniach, czatach, opiniach, rozliczeniach i sporach w jednym miejscu.</p>
         </div>
         <button className="button button--secondary" type="button" disabled={busy || unreadVisible === 0} onClick={markAllRead}>
           Oznacz wszystkie jako przeczytane

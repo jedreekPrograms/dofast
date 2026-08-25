@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const priceFormatter = new Intl.NumberFormat('pl-PL', {
   style: 'currency',
   currency: 'PLN',
@@ -23,6 +25,7 @@ function JobCard({ job }) {
 
       <footer className="job-card__footer">
         <span>{job.createdAt ? dateFormatter.format(new Date(job.createdAt)) : 'Nowe zlecenie'}</span>
+        <Link to={`/users/${job.createdById}`}>Profil zlecającego</Link>
         <span className="job-card__status">Otwarte</span>
       </footer>
     </article>

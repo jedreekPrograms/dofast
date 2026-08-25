@@ -1,0 +1,166 @@
+.public-profile-page {
+  width: min(1040px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 56px 0 80px;
+  display: grid;
+  gap: 30px;
+}
+
+.trust-profile {
+  padding: 28px;
+  display: grid;
+  gap: 28px;
+}
+
+.trust-profile__identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.trust-profile__identity h1 {
+  margin: 4px 0 4px;
+}
+
+.trust-profile__identity p {
+  margin: 0;
+  color: var(--text-muted, #6f7682);
+}
+
+.trust-profile__avatar {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background: #17191f;
+  color: #fff;
+  font-size: 1.8rem;
+  font-weight: 850;
+}
+
+.trust-profile__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.trust-profile__stats > div {
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+  border-radius: 13px;
+  background: var(--surface-subtle, #f5f6f8);
+}
+
+.trust-profile__stats span,
+.trust-profile__stats small {
+  color: var(--text-muted, #6f7682);
+}
+
+.trust-profile__stats span {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.trust-profile__stats strong {
+  font-size: 1.25rem;
+}
+
+.trust-profile__stats small {
+  font-size: 0.76rem;
+}
+
+.trust-reviews {
+  display: grid;
+  gap: 18px;
+}
+
+.trust-reviews .page-heading {
+  margin: 0;
+}
+
+.trust-reviews .page-heading h2 {
+  margin-bottom: 0;
+}
+
+.trust-review-list {
+  display: grid;
+  gap: 12px;
+}
+
+.trust-review {
+  padding: 20px;
+}
+
+.trust-review__heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.trust-review__heading > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.trust-review__heading time,
+.trust-review footer {
+  color: var(--text-muted, #6f7682);
+  font-size: 0.82rem;
+}
+
+.trust-review__stars {
+  color: #d99a18;
+  letter-spacing: 1px;
+}
+
+.trust-review__stars span {
+  color: #d5d8de;
+}
+
+.trust-review p {
+  margin: 16px 0;
+  line-height: 1.65;
+}
+
+.trust-review footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #e2e5e9);
+}
+
+.trust-review footer a {
+  color: inherit;
+  font-weight: 750;
+}
+
+@media (max-width: 760px) {
+  .trust-profile__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 500px) {
+  .trust-profile,
+  .trust-review {
+    padding: 18px;
+  }
+
+  .trust-profile__identity {
+    align-items: flex-start;
+  }
+
+  .trust-profile__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .trust-review__heading,
+  .trust-review footer {
+    flex-direction: column;
+  }
+}
