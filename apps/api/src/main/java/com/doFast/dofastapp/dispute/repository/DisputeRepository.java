@@ -12,12 +12,16 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface DisputeRepository extends JpaRepository<Dispute, Long> {
 
-    Optional<Dispute> findByJob(Job job);
+    Optional<Dispute> findFirstByJobAndStatusInOrderByOpenedAtDesc(
+            Job job,
+            Collection<DisputeStatus> statuses
+    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select d from Dispute d where d.id = :id")
