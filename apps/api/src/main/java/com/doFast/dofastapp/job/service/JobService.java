@@ -16,6 +16,7 @@ import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
+import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
@@ -39,17 +40,20 @@ public class JobService {
     private final TransactionService transactionService;
     private final NotificationService notificationService;
     private final RouteQuoteService routeQuoteService;
+    private final LiveTrackingService liveTrackingService;
 
     public JobService(
             JobRepository jobRepository,
             TransactionService transactionService,
             NotificationService notificationService,
-            RouteQuoteService routeQuoteService
+            RouteQuoteService routeQuoteService,
+            LiveTrackingService liveTrackingService
     ) {
         this.jobRepository = jobRepository;
         this.transactionService = transactionService;
         this.notificationService = notificationService;
         this.routeQuoteService = routeQuoteService;
+        this.liveTrackingService = liveTrackingService;
     }
 
     @Transactional
@@ -140,6 +144,7 @@ public class JobService {
         if (sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Nie możesz przyjąć własnego zlecenia");
         job.assignTo(currentUser, LocalDateTime.now());
         Job saved = jobRepository.save(job);
+        liveTrackingService.initializeForAcceptedJob(saved);
         notificationService.notify(saved.getCreatedBy(), NotificationType.JOB_ACCEPTED, "Zlecenie zostało przyjęte",
                 currentUser.getNickname() + " przyjął zlecenie „" + saved.getTitle() + "”", saved, null);
         return toResponse(saved);
@@ -172,6 +177,7 @@ public class JobService {
         if (job.getTakenBy() == null) throw new ConflictException("Zlecenie nie ma przypisanego wykonawcy");
         job.complete(LocalDateTime.now());
         Job saved = jobRepository.save(job);
+        liveTrackingService.stopAndClear(saved.getId());
         transactionService.releaseMoney(saved, saved.getTakenBy());
         notificationService.notify(saved.getTakenBy(), NotificationType.JOB_COMPLETED, "Zlecenie potwierdzone",
                 "Zlecenie „" + saved.getTitle() + "” zostało zakończone, a środki zwolnione.", saved, null);

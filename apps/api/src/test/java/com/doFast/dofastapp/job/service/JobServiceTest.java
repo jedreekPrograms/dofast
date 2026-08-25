@@ -15,6 +15,7 @@ import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.provider.RouteProviderResult;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
 import com.doFast.dofastapp.location.service.GeoPointFactory;
+import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
@@ -48,6 +49,7 @@ class JobServiceTest {
     @Mock private TransactionService transactionService;
     @Mock private NotificationService notificationService;
     @Mock private RouteQuoteService routeQuoteService;
+    @Mock private LiveTrackingService liveTrackingService;
 
     private JobService jobService;
     private User owner;
@@ -55,7 +57,7 @@ class JobServiceTest {
 
     @BeforeEach
     void setUp() {
-        jobService = new JobService(jobRepository, transactionService, notificationService, routeQuoteService);
+        jobService = new JobService(jobRepository, transactionService, notificationService, routeQuoteService, liveTrackingService);
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
     }
@@ -124,12 +126,13 @@ class JobServiceTest {
     }
 
     @Test
-    void ownerConfirmingCompletionReleasesEscrowToWorker() {
+    void ownerConfirmingCompletionReleasesEscrowAndStopsTracking() {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Job job = job(JobStatus.COMPLETION_REQUESTED, owner, worker);
         when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
         assertEquals(JobStatus.DONE, jobService.confirmCompletion(10L, owner).status());
         verify(transactionService).releaseMoney(job, worker);
+        verify(liveTrackingService).stopAndClear(10L);
     }
 
     @Test
