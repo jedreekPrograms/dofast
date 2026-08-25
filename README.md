@@ -16,7 +16,7 @@ The repository is organized as a production-oriented monorepo so the API, web cl
 │   └── nginx/               # web gateway configuration
 ├── docs/                    # architecture, development and security docs
 ├── scripts/                 # developer convenience scripts
-├── .github/                 # CI and dependency automation
+├── .github/                 # CI configuration
 ├── compose.yaml             # local full-stack environment
 └── .env.example             # documented local configuration contract
 ```
@@ -64,6 +64,7 @@ The core doFast workflow is transactional and money-sensitive, so the primary da
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Accounts and access](docs/ACCOUNTS_AND_ACCESS.md)
 - [Job lifecycle](docs/JOB_LIFECYCLE.md)
 - [Job discovery](docs/JOB_DISCOVERY.md)
 - [Location and nearby matching](docs/LOCATION_AND_MATCHING.md)
