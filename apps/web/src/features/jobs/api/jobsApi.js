@@ -13,7 +13,7 @@ export function getJobs(filters, options = {}) {
 }
 
 export function getJob(id, options = {}) {
-  return apiRequest(`/jobs/${id}`, { ...options, auth: false })
+  return apiRequest(`/jobs/${id}`, options)
 }
 
 export function getMyJobs(options = {}) {
