@@ -119,6 +119,17 @@ public class Job {
         this.status = JobStatus.COMPLETION_REQUESTED;
     }
 
+    public void markDisputed() {
+        this.status = JobStatus.DISPUTED;
+    }
+
+    public void restoreAfterDispute(JobStatus previousStatus) {
+        if (previousStatus != JobStatus.IN_PROGRESS && previousStatus != JobStatus.COMPLETION_REQUESTED) {
+            throw new IllegalArgumentException("Nieprawidłowy status do wznowienia zlecenia po sporze");
+        }
+        this.status = previousStatus;
+    }
+
     public void complete(LocalDateTime at) {
         this.completedAt = at;
         this.status = JobStatus.DONE;
