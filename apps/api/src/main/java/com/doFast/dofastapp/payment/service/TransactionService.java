@@ -4,7 +4,7 @@ import com.doFast.dofastapp.common.enums.TransactionStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.payment.entity.Transaction;
-import com.doFast.dofastapp.payment.repository.TranscationRepository;
+import com.doFast.dofastapp.payment.repository.TransactionRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.service.WalletService;
@@ -15,16 +15,15 @@ import org.springframework.stereotype.Service;
 @Transactional
 public class TransactionService {
 
-    private final TranscationRepository transcationRepository;
+    private final TransactionRepository transactionRepository;
     private final WalletService walletService;
 
-    public TransactionService(TranscationRepository transcationRepository, WalletService walletService) {
-        this.transcationRepository = transcationRepository;
+    public TransactionService(TransactionRepository transactionRepository, WalletService walletService) {
+        this.transactionRepository = transactionRepository;
         this.walletService = walletService;
     }
 
     public void holdMoney(Job job) {
-
         User payer = job.getCreatedBy();
 
         if (!walletService.hasEnoughMoney(payer.getId(), job.getPrice())) {
@@ -38,59 +37,52 @@ public class TransactionService {
                 job.getId()
         );
 
-        Transaction tx = new Transaction();
-        tx.setJob(job);
-        tx.setPayer(payer);
-        tx.setAmount(job.getPrice());
-        tx.setStatus(TransactionStatus.HELD);
+        Transaction transaction = new Transaction();
+        transaction.setJob(job);
+        transaction.setPayer(payer);
+        transaction.setAmount(job.getPrice());
+        transaction.setStatus(TransactionStatus.HELD);
 
-        transcationRepository.save(tx);
+        transactionRepository.save(transaction);
     }
 
     public void releaseMoney(Job job, User payee) {
-
-        Transaction tx = transcationRepository.findByJob(job)
-                .orElseThrow(() -> new BusinessException("Brak transakcji"));
+        Transaction transaction = getHeldTransaction(job);
 
         walletService.addMoney(
                 payee.getId(),
-                tx.getAmount(),
+                transaction.getAmount(),
                 WalletTransactionType.ESCROW_RELEASE,
-                job.getId());
+                job.getId()
+        );
 
-        tx.setPayee(payee);
-        tx.setStatus(TransactionStatus.RELEASED);
-
-        transcationRepository.save(tx);
+        transaction.setPayee(payee);
+        transaction.setStatus(TransactionStatus.RELEASED);
+        transactionRepository.save(transaction);
     }
 
     public void refundMoney(Job job) {
-
-        Transaction tx = transcationRepository.findByJob(job)
-                .orElseThrow(() -> new BusinessException("Brak transakcji"));
-
-        if (tx.getStatus() != TransactionStatus.HELD) {
-            throw new BusinessException("Nie można wykonać refundu");
-        }
+        Transaction transaction = getHeldTransaction(job);
 
         walletService.addMoney(
-                tx.getPayer().getId(),
-                tx.getAmount(),
+                transaction.getPayer().getId(),
+                transaction.getAmount(),
                 WalletTransactionType.REFUND,
                 job.getId()
         );
 
-        tx.setStatus(TransactionStatus.REFUNDED);
-        transcationRepository.save(tx);
+        transaction.setStatus(TransactionStatus.REFUNDED);
+        transactionRepository.save(transaction);
     }
 
     private Transaction getHeldTransaction(Job job) {
-        Transaction tx = transcationRepository.findByJob(job)
+        Transaction transaction = transactionRepository.findByJob(job)
                 .orElseThrow(() -> new BusinessException("Brak transakcji"));
 
-        if (tx.getStatus() != TransactionStatus.HELD) {
+        if (transaction.getStatus() != TransactionStatus.HELD) {
             throw new BusinessException("Nieprawidłowy status transakcji");
         }
-        return tx;
+
+        return transaction;
     }
 }

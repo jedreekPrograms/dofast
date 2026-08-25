@@ -8,25 +8,25 @@ import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
+@Transactional
 public class JobService {
-    private final JobRepository jobRepository;
-    private final TransactionService transcationService;
 
-    public JobService(JobRepository jobRepository, TransactionService transcationService) {
+    private final JobRepository jobRepository;
+    private final TransactionService transactionService;
+
+    public JobService(JobRepository jobRepository, TransactionService transactionService) {
         this.jobRepository = jobRepository;
-        this.transcationService = transcationService;
+        this.transactionService = transactionService;
     }
 
     public JobResponse createJob(JobRequest request, User user) {
-
         Job job = new Job();
-
         job.setTitle(request.getTitle());
         job.setDescription(request.getDescription());
         job.setPrice(request.getPrice());
@@ -34,37 +34,20 @@ public class JobService {
         job.setCreatedBy(user);
 
         Job saved = jobRepository.save(job);
-        transcationService.holdMoney(saved);
+        transactionService.holdMoney(saved);
 
-        return new JobResponse(
-                saved.getId(),
-                saved.getTitle(),
-                saved.getDescription(),
-                saved.getPrice(),
-                saved.getStatus().name(),
-                saved.getTakenBy() != null ? job.getTakenBy().getId() : null
-        );
-
+        return toResponse(saved);
     }
 
     public List<JobResponse> getOpenJobs() {
         return jobRepository.findByStatus(JobStatus.OPEN)
                 .stream()
-                .map(job -> new JobResponse(
-                        job.getId(),
-                        job.getTitle(),
-                        job.getDescription(),
-                        job.getPrice(),
-                        job.getStatus().name(),
-                        job.getTakenBy() != null ? job.getTakenBy().getId() : null
-                ))
-                .collect(Collectors.toList());
+                .map(this::toResponse)
+                .toList();
     }
 
     public JobResponse takeJob(Long jobId, User currentUser) {
-
-        Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new BusinessException("Zlecenie nie istnieje"));
+        Job job = getJob(jobId);
 
         if (job.getStatus() != JobStatus.OPEN) {
             throw new BusinessException("Zlecenie nie jest dostępne");
@@ -77,37 +60,18 @@ public class JobService {
         job.setStatus(JobStatus.IN_PROGRESS);
         job.setTakenBy(currentUser);
 
-        Job saved = jobRepository.save(job);
-
-        return new JobResponse(
-                saved.getId(),
-                saved.getTitle(),
-                saved.getDescription(),
-                saved.getPrice(),
-                saved.getStatus().name(),
-                saved.getTakenBy().getId()
-        );
+        return toResponse(jobRepository.save(job));
     }
 
     public List<JobResponse> getMyJobs(User user) {
-        return jobRepository
-                .findByCreatedByOrTakenBy(user, user)
+        return jobRepository.findByCreatedByOrTakenBy(user, user)
                 .stream()
-                .map(job -> new JobResponse(
-                        job.getId(),
-                        job.getTitle(),
-                        job.getDescription(),
-                        job.getPrice(),
-                        job.getStatus().name(),
-                        job.getTakenBy() != null ? job.getTakenBy().getId() : null
-                ))
-                .collect(Collectors.toList());
+                .map(this::toResponse)
+                .toList();
     }
 
     public JobResponse markAsDone(Long jobId, User currentUser) {
-
-        Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new BusinessException("Zlecenie nie istnieje"));
+        Job job = getJob(jobId);
 
         if (job.getStatus() != JobStatus.IN_PROGRESS) {
             throw new BusinessException("Zlecenie nie jest w trakcie");
@@ -118,24 +82,14 @@ public class JobService {
         }
 
         job.setStatus(JobStatus.DONE);
-
         Job saved = jobRepository.save(job);
-        transcationService.releaseMoney(saved, saved.getTakenBy());
+        transactionService.releaseMoney(saved, saved.getTakenBy());
 
-        return new JobResponse(
-                saved.getId(),
-                saved.getTitle(),
-                saved.getDescription(),
-                saved.getPrice(),
-                saved.getStatus().name(),
-                saved.getTakenBy() != null ? saved.getTakenBy().getId() : null
-        );
+        return toResponse(saved);
     }
 
     public JobResponse cancelJob(Long jobId, User currentUser) {
-
-        Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new BusinessException("Zlecenie nie istnieje"));
+        Job job = getJob(jobId);
 
         if (!job.getCreatedBy().getId().equals(currentUser.getId())) {
             throw new BusinessException("Tylko autor może anulować zlecenie");
@@ -147,16 +101,24 @@ public class JobService {
 
         job.setStatus(JobStatus.CANCELLED);
         Job saved = jobRepository.save(job);
+        transactionService.refundMoney(saved);
 
-        transcationService.refundMoney(saved);
+        return toResponse(saved);
+    }
 
+    private Job getJob(Long jobId) {
+        return jobRepository.findById(jobId)
+                .orElseThrow(() -> new BusinessException("Zlecenie nie istnieje"));
+    }
+
+    private JobResponse toResponse(Job job) {
         return new JobResponse(
-                saved.getId(),
-                saved.getTitle(),
-                saved.getDescription(),
-                saved.getPrice(),
-                saved.getStatus().name(),
-                saved.getTakenBy() != null ? saved.getTakenBy().getId() : null
+                job.getId(),
+                job.getTitle(),
+                job.getDescription(),
+                job.getPrice(),
+                job.getStatus().name(),
+                job.getTakenBy() != null ? job.getTakenBy().getId() : null
         );
     }
 }

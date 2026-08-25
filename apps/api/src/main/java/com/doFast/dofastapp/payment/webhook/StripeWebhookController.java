@@ -1,100 +1,69 @@
 package com.doFast.dofastapp.payment.webhook;
 
-import com.doFast.dofastapp.common.exception.BusinessException;
-import com.doFast.dofastapp.payment.entity.PaymentTransaction;
-import com.doFast.dofastapp.payment.repository.PaymentTransactionRepository;
-import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
-import com.doFast.dofastapp.wallet.service.WalletService;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.doFast.dofastapp.payment.service.StripePaymentService;
+import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.StripeObject;
 import com.stripe.net.Webhook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/webhooks/stripe")
 public class StripeWebhookController {
 
-    @Value("${stripe.webhook.secret}")
-    private String endpointSecret;
+    private static final Logger log = LoggerFactory.getLogger(StripeWebhookController.class);
 
-    private final WalletService walletService;
-    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final String endpointSecret;
+    private final StripePaymentService stripePaymentService;
 
-    public StripeWebhookController(WalletService walletService, PaymentTransactionRepository paymentTransactionRepository) {
-        this.walletService = walletService;
-        this.paymentTransactionRepository = paymentTransactionRepository;
+    public StripeWebhookController(
+            @Value("${stripe.webhook.secret}") String endpointSecret,
+            StripePaymentService stripePaymentService
+    ) {
+        this.endpointSecret = endpointSecret;
+        this.stripePaymentService = stripePaymentService;
     }
 
     @PostMapping
     public ResponseEntity<String> handle(
             @RequestBody String payload,
-            @RequestHeader("Stripe-Signature") String sigHeader) {
-
+            @RequestHeader("Stripe-Signature") String signatureHeader
+    ) {
+        final Event event;
         try {
-            Event event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
-
-            if ("payment_intent.succeeded".equals(event.getType())) {
-
-                ObjectMapper mapper = new ObjectMapper();
-
-                JsonNode root = mapper.readTree(payload);
-                JsonNode intentNode = root
-                        .path("data")
-                        .path("object");
-
-                if (intentNode.isMissingNode()) {
-                    System.out.println("❌ Brak data.object w webhooku");
-                    return ResponseEntity.ok("ignored");
-                }
-
-                String paymentIntentId = intentNode.path("id").asText(null);
-
-
-                String userIdStr = intentNode
-                        .path("metadata")
-                        .path("userId")
-                        .asText(null);
-
-                Long amountInCents = intentNode.path("amount").asLong();
-
-                if (paymentIntentId == null || userIdStr == null) {
-                    System.out.println("❌ Brak id lub userId");
-                    return ResponseEntity.ok("ignored");
-                }
-
-                if (paymentTransactionRepository
-                        .existsByStripePaymentIntentId(paymentIntentId)) {
-                    System.out.println("⚠️ Duplikat webhooka");
-                    return ResponseEntity.ok("already processed");
-                }
-
-                Long userId = Long.valueOf(userIdStr);
-                BigDecimal amount = BigDecimal
-                        .valueOf(amountInCents)
-                        .divide(BigDecimal.valueOf(100));
-
-                System.out.println("➡ PI = " + paymentIntentId);
-                System.out.println("➡ userId = " + userId);
-                System.out.println("➡ amount = " + amount);
-
-                walletService.addMoney(userId, amount, WalletTransactionType.TOP_UP, null);
-
-                paymentTransactionRepository.save(
-                        new PaymentTransaction(paymentIntentId, userId, amount)
-                );
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.ok("error logged");
+            event = Webhook.constructEvent(payload, signatureHeader, endpointSecret);
+        } catch (SignatureVerificationException ex) {
+            log.warn("Rejected Stripe webhook with invalid signature");
+            return ResponseEntity.badRequest().body("invalid signature");
         }
 
+        if (!"payment_intent.succeeded".equals(event.getType())) {
+            return ResponseEntity.ok("ignored");
+        }
+
+        StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
+        if (!(stripeObject instanceof PaymentIntent paymentIntent)) {
+            log.error("Unable to deserialize Stripe event {} of type {}", event.getId(), event.getType());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("unable to deserialize event");
+        }
+
+        boolean processed = stripePaymentService.processSuccessfulPayment(paymentIntent);
+        if (!processed) {
+            log.info("Stripe PaymentIntent {} was already processed", paymentIntent.getId());
+            return ResponseEntity.ok("already processed");
+        }
+
+        log.info("Processed successful Stripe PaymentIntent {}", paymentIntent.getId());
         return ResponseEntity.ok("ok");
     }
 }

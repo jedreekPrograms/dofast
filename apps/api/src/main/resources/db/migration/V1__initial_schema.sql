@@ -9,6 +9,7 @@ CREATE TABLE users (
 
 CREATE TABLE jobs (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    version BIGINT NOT NULL DEFAULT 0,
     title VARCHAR(160) NOT NULL,
     description VARCHAR(4000) NOT NULL,
     price DECIMAL(19,2) NOT NULL,
@@ -27,6 +28,7 @@ CREATE INDEX idx_jobs_taken_by ON jobs (taken_by_id);
 
 CREATE TABLE wallets (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    version BIGINT NOT NULL DEFAULT 0,
     user_id BIGINT NOT NULL,
     balance DECIMAL(19,2) NOT NULL DEFAULT 0.00,
     CONSTRAINT pk_wallets PRIMARY KEY (id),
