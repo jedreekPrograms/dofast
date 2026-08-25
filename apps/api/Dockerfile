@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B -q dependency:go-offline
 COPY apps/api/src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn -B clean package -DskipTests
 
-FROM eclipse-temurin:21-jre-jammy AS runtime
+FROM eclipse-temurin:25-jre-jammy AS runtime
 WORKDIR /app
 
 RUN apt-get update \
