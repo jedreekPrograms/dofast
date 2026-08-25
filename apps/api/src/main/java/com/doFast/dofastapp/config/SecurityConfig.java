@@ -27,12 +27,13 @@ public class SecurityConfig {
                 .formLogin(formLogin -> formLogin.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/users", "/users/login").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby").permitAll()
-                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/users", "/users/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby", "/jobs/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/*/profile").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/webhooks/stripe").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

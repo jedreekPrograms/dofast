@@ -5,7 +5,7 @@ import com.doFast.dofastapp.user.enums.UserStatus;
 
 import java.time.LocalDateTime;
 
-public record UserResponse(
+public record AdminUserResponse(
         Long id,
         String email,
         String nickname,
