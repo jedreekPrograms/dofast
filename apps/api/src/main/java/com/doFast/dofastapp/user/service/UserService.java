@@ -1,6 +1,5 @@
 package com.doFast.dofastapp.user.service;
 
-
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.dto.LoginRequest;
@@ -11,6 +10,7 @@ import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -30,8 +30,8 @@ public class UserService {
         this.walletService = walletService;
     }
 
+    @Transactional
     public UserResponse createUser(UserRequest request) {
-
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException("Email już istnieje");
         }
@@ -39,12 +39,10 @@ public class UserService {
         User user = new User();
         user.setEmail(request.getEmail());
         user.setNickname(request.getNickname());
-
-        String hashedPassword = passwordEncoder.encode(request.getPassword());
-        user.setPassword(hashedPassword);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
 
         User saved = userRepository.save(user);
-        walletService.createWalletForUser(user.getId());
+        walletService.createWalletForUser(saved.getId());
 
         return new UserResponse(
                 saved.getId(),
@@ -65,7 +63,6 @@ public class UserService {
     }
 
     public String login(LoginRequest request) {
-
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException("Nie znaleziono użytkownika"));
 
