@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [master, "chore/**", "feature/**", "fix/**"]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: apps/api/pom.xml
+      - name: Maven verify
+        run: mvn -B -f apps/api/pom.xml verify
+
+  web:
+    name: Web verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.19.0"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Audit production dependencies
+        working-directory: apps/web
+        run: npm audit --omit=dev --audit-level=high
+      - name: Lint
+        working-directory: apps/web
+        run: npm run lint
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
+
+  smoke:
+    name: Containers and runtime smoke test
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare local configuration
+        run: cp .env.example .env
+      - name: Build containers
+        run: docker compose build api web
+      - name: Start PostgreSQL and API
+        run: docker compose up -d --no-build db api
+      - name: Verify API health
+        shell: bash
+        run: |
+          for attempt in {1..45}; do
+            if curl --fail --silent http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs db api
+          exit 1
+      - name: Verify PostgreSQL-backed authentication flow
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REGISTER_RESPONSE=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke@example.com","nickname":"smokeuser","password":"SmokePass123!"}' \
+            http://localhost:8080/users)
+          echo "$REGISTER_RESPONSE" | grep -q '"email":"smoke@example.com"'
+
+          TOKEN=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke@example.com","password":"SmokePass123!"}' \
+            http://localhost:8080/users/login)
+          test -n "$TOKEN"
+
+          ME_RESPONSE=$(curl --fail --silent \
+            -H "Authorization: Bearer $TOKEN" \
+            http://localhost:8080/users/me)
+          echo "$ME_RESPONSE" | grep -q '"email":"smoke@example.com"'
+
+          curl --fail --silent http://localhost:8080/jobs | grep -q '^\['
+
+          WALLET_COUNT=$(docker compose exec -T db \
+            psql -U dofast -d dofast -tAc \
+            "SELECT COUNT(*) FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.email = 'smoke@example.com';")
+          test "${WALLET_COUNT//[[:space:]]/}" = "1"
+      - name: Start web gateway
+        run: docker compose up -d --no-build web
+      - name: Verify web and API gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in {1..20}; do
+            if curl --fail --silent http://localhost:5173/health | grep -q 'ok'; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              docker compose ps
+              docker compose logs web
+              exit 1
+            fi
+            sleep 1
+          done
+
+          curl --fail --silent http://localhost:5173/ | grep -q 'doFast'
+          curl --fail --silent http://localhost:5173/api/jobs | grep -q '^\['
+      - name: Print service diagnostics on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail=200 db api web
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
