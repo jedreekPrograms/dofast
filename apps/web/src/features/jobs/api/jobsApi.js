@@ -16,6 +16,14 @@ export function getMyJobs(options = {}) {
   return apiRequest('/jobs/my', options)
 }
 
+export function createRouteQuote(payload) {
+  return apiRequest('/routing/quotes', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function getJobRoute(id, options = {}) {
+  return apiRequest(`/jobs/${id}/route`, options)
+}
+
 export function createJob(payload) {
   return apiRequest('/jobs', { method: 'POST', body: JSON.stringify(payload) })
 }

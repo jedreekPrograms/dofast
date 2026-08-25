@@ -1,0 +1,102 @@
+.route-picker {
+  display: grid;
+  gap: 14px;
+}
+
+.route-picker__inputs {
+  display: grid;
+  gap: 10px;
+}
+
+.route-picker__point {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border, #d9dde5);
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.route-picker__point--active {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+.route-picker__point small {
+  grid-column: 2;
+  opacity: 0.7;
+}
+
+.route-picker__badge {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 800;
+  border: 1px solid currentColor;
+}
+
+.route-picker__autocomplete,
+.route-picker__autocomplete gmp-place-autocomplete {
+  width: 100%;
+}
+
+.route-picker__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.92rem;
+}
+
+.route-picker__map {
+  min-height: 440px;
+  width: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.route-picker__status,
+.route-picker__dev-note {
+  padding: 12px 14px;
+  border: 1px solid var(--border, #d9dde5);
+  border-radius: 12px;
+}
+
+.route-picker__dev-note {
+  display: grid;
+  gap: 4px;
+}
+
+.route-picker__manual-point {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border, #d9dde5);
+  border-radius: 14px;
+}
+
+.route-picker__manual-point legend {
+  padding: 0 8px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .route-picker__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .route-picker__map {
+    min-height: 360px;
+  }
+
+  .route-picker__manual-point {
+    grid-template-columns: 1fr;
+  }
+}
