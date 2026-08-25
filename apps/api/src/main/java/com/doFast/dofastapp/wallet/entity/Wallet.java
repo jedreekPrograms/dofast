@@ -27,7 +27,7 @@ public class Wallet {
 
     @Version
     @Column(nullable = false)
-    private long version;
+    private int version;
 
     @OneToOne(optional = false)
     @JoinColumn(name = "user_id", nullable = false)

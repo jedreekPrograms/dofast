@@ -34,7 +34,7 @@ public class Job {
 
     @Version
     @Column(nullable = false)
-    private long version;
+    private int version;
 
     @Column(nullable = false, length = 160)
     private String title;
