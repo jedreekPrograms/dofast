@@ -1,9 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import AdminDisputesPage from '../features/admin/pages/AdminDisputesPage.jsx'
 import AdminPage from '../features/admin/pages/AdminPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import RegisterPage from '../features/auth/pages/RegisterPage.jsx'
 import RequireAdmin from '../features/auth/components/RequireAdmin.jsx'
 import RequireAuth from '../features/auth/components/RequireAuth.jsx'
+import DisputesPage from '../features/disputes/pages/DisputesPage.jsx'
 import CreateJobPage from '../features/jobs/pages/CreateJobPage.jsx'
 import JobsPage from '../features/jobs/pages/JobsPage.jsx'
 import MyJobsPage from '../features/jobs/pages/MyJobsPage.jsx'
@@ -23,11 +25,13 @@ function App() {
           <Route element={<RequireAuth />}>
             <Route path="/my-jobs" element={<MyJobsPage />} />
             <Route path="/jobs/new" element={<CreateJobPage />} />
+            <Route path="/disputes" element={<DisputesPage />} />
             <Route path="/wallet" element={<WalletPage />} />
             <Route path="/profile" element={<ProfilePage />} />
 
             <Route element={<RequireAdmin />}>
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/disputes" element={<AdminDisputesPage />} />
             </Route>
           </Route>
 
