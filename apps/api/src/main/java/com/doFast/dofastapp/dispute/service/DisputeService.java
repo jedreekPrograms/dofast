@@ -19,6 +19,8 @@ import com.doFast.dofastapp.dispute.repository.DisputeEventRepository;
 import com.doFast.dofastapp.dispute.repository.DisputeRepository;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.notification.enums.NotificationType;
+import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserRole;
@@ -43,17 +45,20 @@ public class DisputeService {
     private final DisputeEventRepository eventRepository;
     private final JobRepository jobRepository;
     private final TransactionService transactionService;
+    private final NotificationService notificationService;
 
     public DisputeService(
             DisputeRepository disputeRepository,
             DisputeEventRepository eventRepository,
             JobRepository jobRepository,
-            TransactionService transactionService
+            TransactionService transactionService,
+            NotificationService notificationService
     ) {
         this.disputeRepository = disputeRepository;
         this.eventRepository = eventRepository;
         this.jobRepository = jobRepository;
         this.transactionService = transactionService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -91,6 +96,16 @@ public class DisputeService {
 
         Dispute saved = disputeRepository.save(dispute);
         recordEvent(saved, currentUser, DisputeEventType.OPENED, request.description().trim(), now);
+
+        User other = otherParticipant(job, currentUser);
+        notificationService.notify(
+                other,
+                NotificationType.DISPUTE_OPENED,
+                "Otwarto spór",
+                currentUser.getNickname() + " otworzył spór dotyczący zlecenia „" + job.getTitle() + "”",
+                job,
+                saved
+        );
 
         return toDetail(saved);
     }
@@ -130,6 +145,16 @@ public class DisputeService {
         dispute.cancel(now);
         Dispute saved = disputeRepository.save(dispute);
         recordEvent(saved, currentUser, DisputeEventType.CANCELLED, "Spór anulowany przez zgłaszającego", now);
+
+        User other = otherParticipant(job, currentUser);
+        notificationService.notify(
+                other,
+                NotificationType.DISPUTE_RESOLVED,
+                "Spór anulowany",
+                "Spór dotyczący zlecenia „" + job.getTitle() + "” został anulowany przez zgłaszającego.",
+                job,
+                saved
+        );
 
         return toDetail(saved);
     }
@@ -181,6 +206,12 @@ public class DisputeService {
         dispute.startReview(admin, now);
         Dispute saved = disputeRepository.save(dispute);
         recordEvent(saved, admin, DisputeEventType.CLAIMED, "Spór podjęty przez administratora", now);
+        notifyParticipants(
+                saved,
+                NotificationType.DISPUTE_CLAIMED,
+                "Spór jest analizowany",
+                "Administrator rozpoczął analizę sporu dotyczącego zlecenia „" + saved.getJob().getTitle() + "”."
+        );
         return toDetail(saved);
     }
 
@@ -231,6 +262,12 @@ public class DisputeService {
         dispute.resolve(admin, resolution, note, now);
         Dispute saved = disputeRepository.save(dispute);
         recordEvent(saved, admin, DisputeEventType.RESOLVED, resolution.name() + ": " + note, now);
+        notifyParticipants(
+                saved,
+                NotificationType.DISPUTE_RESOLVED,
+                "Spór rozstrzygnięty",
+                resolutionMessage(saved, resolution)
+        );
 
         return toDetail(saved);
     }
@@ -270,11 +307,46 @@ public class DisputeService {
         }
     }
 
+    private User otherParticipant(Job job, User currentUser) {
+        if (sameUser(job.getCreatedBy(), currentUser)) {
+            if (job.getTakenBy() == null) {
+                throw new ConflictException("Zlecenie nie ma wykonawcy");
+            }
+            return job.getTakenBy();
+        }
+        if (sameUser(job.getTakenBy(), currentUser)) {
+            return job.getCreatedBy();
+        }
+        throw new ForbiddenOperationException("Nie jesteś stroną tego zlecenia");
+    }
+
     private boolean sameUser(User first, User second) {
         return first != null
                 && second != null
                 && first.getId() != null
                 && first.getId().equals(second.getId());
+    }
+
+    private void notifyParticipants(
+            Dispute dispute,
+            NotificationType type,
+            String title,
+            String body
+    ) {
+        Job job = dispute.getJob();
+        notificationService.notify(job.getCreatedBy(), type, title, body, job, dispute);
+        if (job.getTakenBy() != null && !sameUser(job.getTakenBy(), job.getCreatedBy())) {
+            notificationService.notify(job.getTakenBy(), type, title, body, job, dispute);
+        }
+    }
+
+    private String resolutionMessage(Dispute dispute, DisputeResolution resolution) {
+        String action = switch (resolution) {
+            case RELEASE_TO_WORKER -> "środki zostały wypłacone wykonawcy";
+            case REFUND_TO_REQUESTER -> "środki zostały zwrócone zlecającemu";
+            case RESUME_JOB -> "zlecenie zostało wznowione";
+        };
+        return "Spór dotyczący zlecenia „" + dispute.getJob().getTitle() + "” został rozstrzygnięty: " + action + ".";
     }
 
     private void recordEvent(

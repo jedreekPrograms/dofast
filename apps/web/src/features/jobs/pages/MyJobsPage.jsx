@@ -90,6 +90,9 @@ function MyJobsPage() {
                 </div>
               </div>
               <div className="my-job__actions">
+                {job.takenById && (
+                  <Link className="button button--secondary" to={`/chat?jobId=${job.id}`}>Czat</Link>
+                )}
                 {tab === 'created' && job.status === 'OPEN' && (
                   <button className="button button--danger" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, cancelJob)}>Anuluj</button>
                 )}

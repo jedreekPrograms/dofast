@@ -13,6 +13,8 @@ import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.location.service.GeoPointFactory;
+import com.doFast.dofastapp.notification.enums.NotificationType;
+import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import org.locationtech.jts.geom.Point;
@@ -32,10 +34,16 @@ public class JobService {
 
     private final JobRepository jobRepository;
     private final TransactionService transactionService;
+    private final NotificationService notificationService;
 
-    public JobService(JobRepository jobRepository, TransactionService transactionService) {
+    public JobService(
+            JobRepository jobRepository,
+            TransactionService transactionService,
+            NotificationService notificationService
+    ) {
         this.jobRepository = jobRepository;
         this.transactionService = transactionService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -151,7 +159,16 @@ public class JobService {
         }
 
         job.assignTo(currentUser, LocalDateTime.now());
-        return toResponse(jobRepository.save(job));
+        Job saved = jobRepository.save(job);
+        notificationService.notify(
+                saved.getCreatedBy(),
+                NotificationType.JOB_ACCEPTED,
+                "Zlecenie zostało przyjęte",
+                currentUser.getNickname() + " przyjął zlecenie „" + saved.getTitle() + "”",
+                saved,
+                null
+        );
+        return toResponse(saved);
     }
 
     public List<JobResponse> getMyJobs(User user) {
@@ -174,7 +191,16 @@ public class JobService {
         }
 
         job.requestCompletion(LocalDateTime.now());
-        return toResponse(jobRepository.save(job));
+        Job saved = jobRepository.save(job);
+        notificationService.notify(
+                saved.getCreatedBy(),
+                NotificationType.COMPLETION_REQUESTED,
+                "Wykonawca zgłosił zakończenie",
+                "Potwierdź wykonanie zlecenia „" + saved.getTitle() + "” albo otwórz spór.",
+                saved,
+                null
+        );
+        return toResponse(saved);
     }
 
     @Transactional
@@ -196,6 +222,14 @@ public class JobService {
         job.complete(LocalDateTime.now());
         Job saved = jobRepository.save(job);
         transactionService.releaseMoney(saved, saved.getTakenBy());
+        notificationService.notify(
+                saved.getTakenBy(),
+                NotificationType.JOB_COMPLETED,
+                "Zlecenie potwierdzone",
+                "Zlecenie „" + saved.getTitle() + "” zostało zakończone, a środki zwolnione.",
+                saved,
+                null
+        );
 
         return toResponse(saved);
     }

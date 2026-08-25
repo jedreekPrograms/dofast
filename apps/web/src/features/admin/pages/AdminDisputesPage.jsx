@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../auth/AuthContext.js'
-import { claimAdminDispute, getAdminDispute, getAdminDisputes, resolveAdminDispute } from '../api/adminApi.js'
+import {
+  claimAdminDispute,
+  getAdminDispute,
+  getAdminDisputeMessages,
+  getAdminDisputes,
+  resolveAdminDispute,
+} from '../api/adminApi.js'
 import './AdminDisputesPage.css'
 
 const STATUS_LABELS = {
@@ -22,10 +28,12 @@ function AdminDisputesPage() {
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState(null)
+  const [evidence, setEvidence] = useState(null)
   const [resolution, setResolution] = useState('RESUME_JOB')
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [evidenceLoading, setEvidenceLoading] = useState(false)
   const [error, setError] = useState('')
 
   const loadQueue = useCallback(async () => {
@@ -48,13 +56,39 @@ function AdminDisputesPage() {
     setBusy(true)
     setError('')
     try {
-      setSelected(await getAdminDispute(disputeId))
+      const [detail, messages] = await Promise.all([
+        getAdminDispute(disputeId),
+        getAdminDisputeMessages(disputeId),
+      ])
+      setSelected(detail)
+      setEvidence(messages)
       setNote('')
       setResolution('RESUME_JOB')
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się pobrać sprawy.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function loadOlderEvidence() {
+    if (!selected || !evidence?.hasMore || !evidence.nextBeforeId) return
+    setEvidenceLoading(true)
+    setError('')
+    try {
+      const older = await getAdminDisputeMessages(selected.dispute.id, {
+        beforeId: evidence.nextBeforeId,
+        limit: 100,
+      })
+      setEvidence((current) => ({
+        messages: [...older.messages, ...(current?.messages ?? [])],
+        nextBeforeId: older.nextBeforeId,
+        hasMore: older.hasMore,
+      }))
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się pobrać starszych wiadomości.')
+    } finally {
+      setEvidenceLoading(false)
     }
   }
 
@@ -161,6 +195,27 @@ function AdminDisputesPage() {
               </div>
 
               <div className="admin-dispute-description"><strong>Opis zgłoszenia</strong><p>{selected.dispute.description}</p></div>
+
+              <section className="admin-evidence">
+                <div className="admin-evidence__heading">
+                  <div><h3>Dowody z czatu</h3><p>Tylko wiadomości z zlecenia powiązanego z tą sprawą.</p></div>
+                  {evidence?.hasMore && (
+                    <button className="button button--secondary" type="button" disabled={evidenceLoading} onClick={loadOlderEvidence}>
+                      {evidenceLoading ? 'Pobieranie…' : 'Starsze wiadomości'}
+                    </button>
+                  )}
+                </div>
+                {evidence?.messages.length === 0 && <div className="page-state">Brak wiadomości do analizy.</div>}
+                <div className="admin-evidence__messages">
+                  {evidence?.messages.map((message) => (
+                    <article className="admin-evidence-message" key={message.id}>
+                      <div><strong>{message.senderNickname}</strong><span>użytkownik #{message.senderId}</span></div>
+                      <p>{message.content}</p>
+                      <time>{new Date(message.createdAt).toLocaleString('pl-PL')}</time>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
               {selected.dispute.status === 'OPEN' && !selected.dispute.assignedAdminId && (
                 <button className="button button--secondary" type="button" disabled={busy} onClick={claim}>Przypisz sprawę do mnie</button>

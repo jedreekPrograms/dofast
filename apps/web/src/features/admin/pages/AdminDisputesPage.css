@@ -35,7 +35,8 @@
 }
 
 .admin-disputes-queue__heading,
-.admin-dispute-detail__heading {
+.admin-dispute-detail__heading,
+.admin-evidence__heading {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -43,8 +44,15 @@
 }
 
 .admin-disputes-queue__heading h2,
-.admin-dispute-detail__heading h2 {
+.admin-dispute-detail__heading h2,
+.admin-evidence__heading h3 {
   margin: 5px 0 0;
+}
+
+.admin-evidence__heading p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
 }
 
 .admin-disputes-queue__heading > strong {
@@ -112,7 +120,8 @@
 }
 
 .admin-dispute-description,
-.admin-resolution-result {
+.admin-resolution-result,
+.admin-evidence {
   margin: 18px 0;
   padding: 15px;
   border: 1px solid var(--border);
@@ -123,6 +132,41 @@
 .admin-resolution-result p {
   margin-bottom: 0;
   line-height: 1.65;
+}
+
+.admin-evidence__messages {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  margin-top: 14px;
+  overflow-y: auto;
+}
+
+.admin-evidence-message {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+
+.admin-evidence-message > div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.admin-evidence-message span,
+.admin-evidence-message time {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.admin-evidence-message p {
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .admin-resolution {
@@ -179,7 +223,8 @@
     grid-template-columns: 1fr;
   }
 
-  .admin-audit-event {
+  .admin-audit-event,
+  .admin-evidence-message {
     grid-template-columns: 1fr;
     gap: 5px;
   }

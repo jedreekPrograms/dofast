@@ -13,6 +13,7 @@ import com.doFast.dofastapp.dispute.repository.DisputeEventRepository;
 import com.doFast.dofastapp.dispute.repository.DisputeRepository;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserRole;
@@ -43,6 +44,7 @@ class DisputeServiceTest {
     @Mock private DisputeEventRepository eventRepository;
     @Mock private JobRepository jobRepository;
     @Mock private TransactionService transactionService;
+    @Mock private NotificationService notificationService;
 
     private DisputeService disputeService;
     private User requester;
@@ -55,7 +57,8 @@ class DisputeServiceTest {
                 disputeRepository,
                 eventRepository,
                 jobRepository,
-                transactionService
+                transactionService,
+                notificationService
         );
         requester = user(1L, UserRole.USER, "requester");
         worker = user(2L, UserRole.USER, "worker");

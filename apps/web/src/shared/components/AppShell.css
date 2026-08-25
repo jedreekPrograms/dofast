@@ -42,14 +42,29 @@
 }
 
 .app-nav__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 9px 10px;
   border-radius: 9px;
+  white-space: nowrap;
 }
 
 .app-nav__link:hover,
 .app-nav__link--active {
   background: #f1f3f6;
   color: #17191f;
+}
+
+.app-nav__badge {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #20232a;
+  color: #fff;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .app-account {

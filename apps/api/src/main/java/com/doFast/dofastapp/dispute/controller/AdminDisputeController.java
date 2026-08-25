@@ -1,10 +1,12 @@
 package com.doFast.dofastapp.dispute.controller;
 
+import com.doFast.dofastapp.chat.dto.ChatHistoryResponse;
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.dispute.dto.DisputeDetailResponse;
 import com.doFast.dofastapp.dispute.dto.DisputeResponse;
 import com.doFast.dofastapp.dispute.dto.ResolveDisputeRequest;
 import com.doFast.dofastapp.dispute.enums.DisputeStatus;
+import com.doFast.dofastapp.dispute.service.AdminDisputeEvidenceService;
 import com.doFast.dofastapp.dispute.service.DisputeService;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
@@ -26,9 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminDisputeController {
 
     private final DisputeService disputeService;
+    private final AdminDisputeEvidenceService evidenceService;
 
-    public AdminDisputeController(DisputeService disputeService) {
+    public AdminDisputeController(
+            DisputeService disputeService,
+            AdminDisputeEvidenceService evidenceService
+    ) {
         this.disputeService = disputeService;
+        this.evidenceService = evidenceService;
     }
 
     @GetMapping
@@ -46,6 +53,16 @@ public class AdminDisputeController {
             @AuthenticationPrincipal User admin
     ) {
         return disputeService.getAdminDispute(id, admin);
+    }
+
+    @GetMapping("/{id}/messages")
+    public ChatHistoryResponse getChatEvidence(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long beforeId,
+            @RequestParam(defaultValue = "100") @Min(1) @Max(100) int limit,
+            @AuthenticationPrincipal User admin
+    ) {
+        return evidenceService.getChatEvidence(id, beforeId, limit, admin);
     }
 
     @PostMapping("/{id}/claim")

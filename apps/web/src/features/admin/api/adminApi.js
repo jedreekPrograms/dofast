@@ -25,6 +25,12 @@ export function getAdminDispute(disputeId) {
   return apiRequest(`/admin/disputes/${disputeId}`)
 }
 
+export function getAdminDisputeMessages(disputeId, { beforeId = null, limit = 100 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (beforeId) params.set('beforeId', String(beforeId))
+  return apiRequest(`/admin/disputes/${disputeId}/messages?${params.toString()}`)
+}
+
 export function claimAdminDispute(disputeId) {
   return apiRequest(`/admin/disputes/${disputeId}/claim`, {
     method: 'POST',

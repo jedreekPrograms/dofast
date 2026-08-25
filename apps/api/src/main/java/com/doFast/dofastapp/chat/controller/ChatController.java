@@ -1,37 +1,34 @@
 package com.doFast.dofastapp.chat.controller;
 
 import com.doFast.dofastapp.chat.dto.ChatMessageRequest;
-import com.doFast.dofastapp.chat.dto.ChatMessageResponse;
 import com.doFast.dofastapp.chat.service.ChatService;
+import jakarta.validation.Valid;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
+
+import java.security.Principal;
 
 @Controller
 public class ChatController {
 
     private final ChatService chatService;
-    private final SimpMessagingTemplate messagingTemplate;
 
-    public ChatController(ChatService chatService, SimpMessagingTemplate messagingTemplate) {
+    public ChatController(ChatService chatService) {
         this.chatService = chatService;
-        this.messagingTemplate = messagingTemplate;
     }
 
     @MessageMapping("/chat/send")
-    public void send(ChatMessageRequest request) {
+    public void send(@Valid @Payload ChatMessageRequest request, Principal principal) {
+        if (principal == null) {
+            throw new IllegalStateException("WebSocket session is not authenticated");
+        }
 
-        ChatMessageResponse response =
-                chatService.sendMessage(
-                        request.getJobId(),
-                        request.getSenderId(),
-                        request.getContent()
-
-                );
-
-        messagingTemplate.convertAndSend(
-                "/topic/chat/" + request.getJobId(),
-                response
+        chatService.sendMessageByEmail(
+                request.getJobId(),
+                principal.getName(),
+                request.getContent(),
+                request.getClientMessageId()
         );
     }
 }

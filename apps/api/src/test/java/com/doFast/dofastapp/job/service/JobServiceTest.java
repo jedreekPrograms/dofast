@@ -12,6 +12,7 @@ import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.dto.LocationRequest;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.location.service.GeoPointFactory;
+import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,11 +39,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class JobServiceTest {
 
-    @Mock
-    private JobRepository jobRepository;
-
-    @Mock
-    private TransactionService transactionService;
+    @Mock private JobRepository jobRepository;
+    @Mock private TransactionService transactionService;
+    @Mock private NotificationService notificationService;
 
     private JobService jobService;
     private User owner;
@@ -50,7 +49,7 @@ class JobServiceTest {
 
     @BeforeEach
     void setUp() {
-        jobService = new JobService(jobRepository, transactionService);
+        jobService = new JobService(jobRepository, transactionService, notificationService);
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
     }
