@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.common.exception;
 
+import com.doFast.dofastapp.location.routing.exception.RoutingProviderException;
 import com.doFast.dofastapp.payment.exception.PaymentProviderException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -49,6 +50,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handlePaymentProviderFailure(PaymentProviderException ex) {
         log.error("Payment provider operation failed", ex);
         return response(HttpStatus.BAD_GATEWAY, "Operator płatności jest chwilowo niedostępny");
+    }
+
+    @ExceptionHandler(RoutingProviderException.class)
+    public ResponseEntity<ErrorResponse> handleRoutingProviderFailure(RoutingProviderException ex) {
+        log.error("Routing provider operation failed", ex);
+        return response(HttpStatus.BAD_GATEWAY, "Nie udało się teraz wyznaczyć trasy. Spróbuj ponownie za chwilę.");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

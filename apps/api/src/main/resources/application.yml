@@ -65,3 +65,8 @@ dofast:
       email: ${ADMIN_BOOTSTRAP_EMAIL:}
       password: ${ADMIN_BOOTSTRAP_PASSWORD:}
       nickname: ${ADMIN_BOOTSTRAP_NICKNAME:doFast Admin}
+  routing:
+    provider: ${ROUTING_PROVIDER:deterministic}
+    quote-ttl-minutes: ${ROUTING_QUOTE_TTL_MINUTES:15}
+    google:
+      api-key: ${GOOGLE_MAPS_ROUTES_API_KEY:}

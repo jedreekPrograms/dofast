@@ -41,6 +41,9 @@ services:
       ADMIN_BOOTSTRAP_NICKNAME: ${ADMIN_BOOTSTRAP_NICKNAME:-doFast Admin}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_replace_me}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_replace_me}
+      ROUTING_PROVIDER: ${ROUTING_PROVIDER:-deterministic}
+      ROUTING_QUOTE_TTL_MINUTES: ${ROUTING_QUOTE_TTL_MINUTES:-15}
+      GOOGLE_MAPS_ROUTES_API_KEY: ${GOOGLE_MAPS_ROUTES_API_KEY:-}
     ports:
       - "${API_PORT:-8080}:8080"
     healthcheck:
@@ -56,6 +59,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        VITE_GOOGLE_MAPS_BROWSER_KEY: ${VITE_GOOGLE_MAPS_BROWSER_KEY:-}
     restart: unless-stopped
     depends_on:
       api:
