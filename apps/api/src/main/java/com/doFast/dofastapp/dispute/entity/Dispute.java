@@ -16,9 +16,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 
 import java.time.LocalDateTime;
@@ -26,8 +24,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "disputes",
-        uniqueConstraints = @UniqueConstraint(name = "uk_disputes_job", columnNames = "job_id"),
         indexes = {
+                @Index(name = "idx_disputes_job_opened", columnList = "job_id,opened_at"),
                 @Index(name = "idx_disputes_status_opened", columnList = "status,opened_at"),
                 @Index(name = "idx_disputes_opened_by", columnList = "opened_by_id"),
                 @Index(name = "idx_disputes_assigned_admin", columnList = "assigned_admin_id")
@@ -43,7 +41,7 @@ public class Dispute {
     @Column(nullable = false)
     private int version;
 
-    @OneToOne(optional = false)
+    @ManyToOne(optional = false)
     @JoinColumn(name = "job_id", nullable = false)
     private Job job;
 
