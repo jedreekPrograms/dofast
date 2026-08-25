@@ -28,18 +28,12 @@ function MyJobsPage() {
   const loadJobs = useCallback(async () => {
     setLoading(true)
     setError('')
-    try {
-      setJobs(await getMyJobs())
-    } catch (requestError) {
-      setError(requestError.message || 'Nie udało się pobrać Twoich zleceń.')
-    } finally {
-      setLoading(false)
-    }
+    try { setJobs(await getMyJobs()) }
+    catch (requestError) { setError(requestError.message || 'Nie udało się pobrać Twoich zleceń.') }
+    finally { setLoading(false) }
   }, [])
 
-  useEffect(() => {
-    loadJobs()
-  }, [loadJobs])
+  useEffect(() => { loadJobs() }, [loadJobs])
 
   const visibleJobs = useMemo(() => jobs.filter((job) => (
     tab === 'created' ? job.createdById === user.id : job.takenById === user.id
@@ -54,9 +48,7 @@ function MyJobsPage() {
       setJobs((current) => current.map((job) => job.id === updated.id ? updated : job))
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się wykonać operacji.')
-    } finally {
-      setActionId(null)
-    }
+    } finally { setActionId(null) }
   }
 
   function handleReviewSubmitted(review) {
@@ -68,11 +60,7 @@ function MyJobsPage() {
   return (
     <main className="my-jobs-page">
       <header className="page-heading page-heading--row">
-        <div>
-          <span className="eyebrow">Panel zleceń</span>
-          <h1>Moje zlecenia</h1>
-          <p>Kontroluj zadania, które wystawiłeś, oraz te, których wykonanie przyjąłeś.</p>
-        </div>
+        <div><span className="eyebrow">Panel zleceń</span><h1>Moje zlecenia</h1><p>Kontroluj zadania, które wystawiłeś, oraz te, których wykonanie przyjąłeś.</p></div>
       </header>
 
       <div className="segmented-control" role="tablist" aria-label="Typ zleceń">
@@ -94,7 +82,9 @@ function MyJobsPage() {
                 <div className="my-job__body">
                   <div className="my-job__meta">
                     <span className={`status-pill status-pill--${job.status.toLowerCase()}`}>{STATUS_LABELS[job.status] || job.status}</span>
-                    <span>{job.locationLabel}</span>
+                    <span>{routeLabel(job)}</span>
+                    {job.routeDistanceMeters && <span>{formatDistance(job.routeDistanceMeters)}</span>}
+                    {job.routeDurationSeconds && <span>~ {formatDuration(job.routeDurationSeconds)}</span>}
                   </div>
                   <h2>{job.title}</h2>
                   <p>{job.description}</p>
@@ -105,34 +95,17 @@ function MyJobsPage() {
                   </div>
                 </div>
                 <div className="my-job__actions">
-                  {job.takenById && (
-                    <Link className="button button--secondary" to={`/chat?jobId=${job.id}`}>Czat</Link>
-                  )}
+                  {job.takenById && <Link className="button button--secondary" to={`/chat?jobId=${job.id}`}>Czat</Link>}
                   {job.status === 'DONE' && (
-                    <button
-                      className="button button--secondary"
-                      type="button"
-                      disabled={reviewedJobIds.has(job.id)}
-                      onClick={() => setReviewJob(job)}
-                    >
+                    <button className="button button--secondary" type="button" disabled={reviewedJobIds.has(job.id)} onClick={() => setReviewJob(job)}>
                       {reviewedJobIds.has(job.id) ? 'Oceniono' : 'Oceń współpracę'}
                     </button>
                   )}
-                  {tab === 'created' && job.status === 'OPEN' && (
-                    <button className="button button--danger" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, cancelJob)}>Anuluj</button>
-                  )}
-                  {tab === 'created' && job.status === 'COMPLETION_REQUESTED' && (
-                    <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, confirmJobCompletion)}>Potwierdź wykonanie</button>
-                  )}
-                  {tab === 'taken' && job.status === 'IN_PROGRESS' && (
-                    <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, requestJobCompletion)}>Zgłoś wykonanie</button>
-                  )}
-                  {['IN_PROGRESS', 'COMPLETION_REQUESTED'].includes(job.status) && (
-                    <Link className="button button--secondary" to={`/disputes?jobId=${job.id}`}>Otwórz spór</Link>
-                  )}
-                  {job.status === 'DISPUTED' && (
-                    <Link className="button button--secondary" to="/disputes">Zobacz spór</Link>
-                  )}
+                  {tab === 'created' && job.status === 'OPEN' && <button className="button button--danger" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, cancelJob)}>Anuluj</button>}
+                  {tab === 'created' && job.status === 'COMPLETION_REQUESTED' && <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, confirmJobCompletion)}>Potwierdź wykonanie</button>}
+                  {tab === 'taken' && job.status === 'IN_PROGRESS' && <button className="button button--primary" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, requestJobCompletion)}>Zgłoś wykonanie</button>}
+                  {['IN_PROGRESS', 'COMPLETION_REQUESTED'].includes(job.status) && <Link className="button button--secondary" to={`/disputes?jobId=${job.id}`}>Otwórz spór</Link>}
+                  {job.status === 'DISPUTED' && <Link className="button button--secondary" to="/disputes">Zobacz spór</Link>}
                 </div>
               </article>
             )
@@ -140,15 +113,25 @@ function MyJobsPage() {
         </div>
       )}
 
-      {reviewJob && (
-        <ReviewDialog
-          job={reviewJob}
-          onClose={() => setReviewJob(null)}
-          onSubmitted={handleReviewSubmitted}
-        />
-      )}
+      {reviewJob && <ReviewDialog job={reviewJob} onClose={() => setReviewJob(null)} onSubmitted={handleReviewSubmitted} />}
     </main>
   )
+}
+
+function routeLabel(job) {
+  return job.destinationLabel ? `${job.locationLabel} → ${job.destinationLabel}` : job.locationLabel
+}
+
+function formatDistance(meters) {
+  return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(meters < 10_000 ? 1 : 0)} km`
+}
+
+function formatDuration(seconds) {
+  const minutes = Math.max(1, Math.round(seconds / 60))
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  return remainder ? `${hours} godz. ${remainder} min` : `${hours} godz.`
 }
 
 export default MyJobsPage
