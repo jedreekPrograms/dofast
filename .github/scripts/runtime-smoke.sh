@@ -170,7 +170,7 @@ DISPUTE_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["dispute"][
 echo "$DISPUTE" | grep -q '"status":"OPEN"'
 
 ESCROW_HELD=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
-  "SELECT status FROM transactions WHERE job_id=$JOB_ID;")
+  "SELECT status FROM escrow_transactions WHERE job_id=$JOB_ID;")
 test "${ESCROW_HELD//[[:space:]]/}" = "HELD"
 
 ADMIN_QUEUE=$(curl --fail --silent -H "Authorization: Bearer $ADMIN_TOKEN" \
@@ -197,7 +197,7 @@ FINAL_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
 test "${FINAL_BALANCE//[[:space:]]/}" = "100.00"
 
 ESCROW_FINAL=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
-  "SELECT status FROM transactions WHERE job_id=$JOB_ID;")
+  "SELECT status FROM escrow_transactions WHERE job_id=$JOB_ID;")
 test "${ESCROW_FINAL//[[:space:]]/}" = "REFUNDED"
 
 WORKER_ROUTE_AFTER=$(curl --silent --output /tmp/worker-route-after.json --write-out '%{http_code}' \
