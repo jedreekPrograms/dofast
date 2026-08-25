@@ -1,18 +1,28 @@
-# ===== BUILD STAGE =====
-FROM maven:3.9.9-eclipse-temurin-17 AS build
-WORKDIR /build
+# syntax=docker/dockerfile:1.7
 
-COPY pom.xml .
-RUN mvn dependency:go-offline
+FROM maven:3.9.11-eclipse-temurin-21 AS build
+WORKDIR /workspace
 
-COPY src ./src
-RUN mvn clean package -DskipTests
+COPY apps/api/pom.xml ./pom.xml
+RUN --mount=type=cache,target=/root/.m2 mvn -B -q dependency:go-offline
 
-# ===== RUNTIME STAGE =====
-FROM eclipse-temurin:17-jre
+COPY apps/api/src ./src
+RUN --mount=type=cache,target=/root/.m2 mvn -B clean package -DskipTests
+
+FROM eclipse-temurin:21-jre-jammy AS runtime
 WORKDIR /app
 
-COPY --from=build /build/target/*.jar app.jar
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system dofast \
+    && useradd --system --gid dofast --home-dir /app --shell /usr/sbin/nologin dofast
 
+COPY --from=build --chown=dofast:dofast /workspace/target/*.jar /app/app.jar
+
+USER dofast:dofast
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -Dfile.encoding=UTF-8"
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

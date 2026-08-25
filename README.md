@@ -1,0 +1,67 @@
+# doFast
+
+**doFast** is a local peer-to-peer task marketplace for getting everyday jobs done quickly and safely. A requester publishes a paid task, another user accepts it, funds are protected while the task is in progress, and payment is released after completion.
+
+The repository is organized as a production-oriented monorepo so the API, web client, infrastructure and operational documentation evolve together.
+
+## Repository layout
+
+```text
+.
+├── apps/
+│   ├── api/                 # Spring Boot API
+│   └── web/                 # React + Vite web client
+├── infra/
+│   ├── compose/             # production-oriented Compose definition
+│   └── nginx/               # web gateway configuration
+├── docs/                    # architecture, development and security docs
+├── scripts/                 # developer convenience scripts
+├── .github/                 # CI and dependency automation
+├── compose.yaml             # local full-stack environment
+└── .env.example             # documented local configuration contract
+```
+
+## Local quick start
+
+Requirements: Docker Desktop / Docker Engine with Compose v2.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+Services:
+
+- Web: `http://localhost:5173`
+- API: `http://localhost:8080`
+- API health: `http://localhost:8080/actuator/health`
+- MariaDB: `localhost:3307`
+
+For IDE-based backend development you can start only the database with `docker compose up -d db` and run the API from `apps/api`.
+
+## Technology baseline
+
+- Java 21 LTS
+- Spring Boot 4.1.x
+- React 19 + Vite
+- MariaDB 11.4 LTS
+- Docker / Docker Compose
+- Nginx
+- GitHub Actions
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development](docs/DEVELOPMENT.md)
+- [Security baseline](docs/SECURITY.md)
+
+## Project status
+
+The repository is being rebuilt as the commercial foundation for doFast. Core marketplace concepts already exist, but the product is still under active development and should not yet be treated as production-ready for real customer funds.

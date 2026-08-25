@@ -1,0 +1,36 @@
+# Security baseline
+
+This document defines minimum engineering rules for doFast while the product is developed toward handling real users and money.
+
+## Secrets
+
+- Never commit API keys, JWT secrets, passwords or webhook secrets.
+- `.env` is local-only; `.env.example` contains placeholders/documentation only.
+- Production secrets must come from the deployment platform's secret store.
+- Rotate any credential immediately if it is exposed in source control or logs.
+
+## Authentication
+
+- Passwords are stored only as adaptive password hashes.
+- JWT signing material must be externally configured and high entropy.
+- Authentication failures must not reveal whether an account exists.
+- Authorization is enforced server-side for every mutating resource operation.
+
+## Money and webhooks
+
+- Stripe webhook signatures must be verified before processing events.
+- Provider event IDs/payment intent IDs must be idempotent in storage.
+- Wallet changes require an auditable ledger entry and transactional consistency.
+- Monetary values use decimal types; floating-point types are prohibited.
+
+## Application surface
+
+- Production CORS is allowlisted, not wildcarded.
+- Security headers are applied at the edge gateway.
+- Actuator exposes only explicitly allowed endpoints.
+- Error responses must not expose stack traces or secrets.
+- Dependencies are scanned/updated continuously by CI automation.
+
+## Before accepting real customer funds
+
+A dedicated security review is required for authentication/session design, authorization, payment flows, replay/idempotency, race conditions, account recovery, abuse prevention, logging/PII, data retention, backup/restore and incident response.
