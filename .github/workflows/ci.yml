@@ -84,6 +84,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          trap 'echo "Smoke assertion failed at script line $LINENO"' ERR
 
           POSTGIS_VERSION=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT extversion FROM pg_extension WHERE extname = 'postgis';")
           test -n "${POSTGIS_VERSION//[[:space:]]/}"
