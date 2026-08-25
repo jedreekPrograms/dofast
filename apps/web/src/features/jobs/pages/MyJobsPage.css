@@ -79,6 +79,9 @@
 .my-job__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
   flex: 0 0 auto;
 }
 
@@ -94,6 +97,7 @@
 .status-pill--cancelled { background: #f8ecec; color: #8a3434; }
 .status-pill--completion_requested { background: #fff5db; color: #805d08; }
 .status-pill--in_progress { background: #eaf1ff; color: #345f9d; }
+.status-pill--disputed { background: #fff0d5; color: #8a5500; }
 
 @media (max-width: 680px) {
   .segmented-control {
@@ -106,5 +110,9 @@
 
   .my-job {
     flex-direction: column;
+  }
+
+  .my-job__actions {
+    justify-content: flex-start;
   }
 }
