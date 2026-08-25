@@ -24,8 +24,10 @@ function AppShell() {
             <NavLink className={navClass} to="/" end>Zlecenia</NavLink>
             {user && <NavLink className={navClass} to="/my-jobs">Moje zlecenia</NavLink>}
             {user && <NavLink className={navClass} to="/jobs/new">Dodaj zlecenie</NavLink>}
+            {user && <NavLink className={navClass} to="/disputes">Spory</NavLink>}
             {user && <NavLink className={navClass} to="/wallet">Portfel</NavLink>}
             {user?.role === 'ADMIN' && <NavLink className={navClass} to="/admin">Admin</NavLink>}
+            {user?.role === 'ADMIN' && <NavLink className={navClass} to="/admin/disputes">Spory admin</NavLink>}
           </nav>
           <div className="app-account">
             {!ready && <span className="app-account__muted">Sesja…</span>}
