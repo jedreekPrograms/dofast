@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mariadb://localhost:3307/dofast}
+    username: ${SPRING_DATASOURCE_USERNAME:dofast}
+    password: ${SPRING_DATASOURCE_PASSWORD:dofast-local-password}
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    com.doFast.dofastapp: DEBUG

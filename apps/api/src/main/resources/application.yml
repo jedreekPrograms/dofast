@@ -1,23 +1,61 @@
 spring:
+  application:
+    name: dofast-api
+  profiles:
+    default: local
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.mariadb.jdbc.Driver
     hikari:
-      initialization-fail-timeout: 0   # <<< CZEKA na DB (BARDZO WAŻNE)
-
+      initialization-fail-timeout: 60000
+      connection-timeout: 30000
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
   jpa:
+    open-in-view: false
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
 
 server:
   address: 0.0.0.0
-  port: 8080
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: WARN
 
 stripe:
   secret:
-    key: ${STRIPE_SECRET_KEY}
+    key: ${STRIPE_SECRET_KEY:sk_test_not_configured}
   webhook:
-    secret: ${STRIPE_WEBHOOK_SECRET}
+    secret: ${STRIPE_WEBHOOK_SECRET:whsec_not_configured}
+
+dofast:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:local-only-change-this-jwt-secret-please-32-bytes-minimum}
+      expiration-ms: ${JWT_EXPIRATION_MS:3600000}

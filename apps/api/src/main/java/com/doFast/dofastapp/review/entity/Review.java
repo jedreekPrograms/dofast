@@ -2,27 +2,46 @@ package com.doFast.dofastapp.review.entity;
 
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.user.entity.User;
-import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 @Entity
+@Table(
+        name = "reviews",
+        uniqueConstraints = @UniqueConstraint(name = "uk_reviews_job", columnNames = "job_id"),
+        indexes = @Index(name = "idx_reviews_reviewed", columnList = "reviewed_id")
+)
 public class Review {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne
+    @OneToOne(optional = false)
+    @JoinColumn(name = "job_id", nullable = false)
     private Job job;
 
-    @ManyToOne
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "reviewer_id", nullable = false)
     private User reviewer;
 
-    @ManyToOne
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "reviewed_id", nullable = false)
     private User reviewed;
 
+    @Column(nullable = false)
     private int rating;
 
+    @Column(length = 2000)
     private String comment;
 
     public Review() {}
