@@ -47,3 +47,20 @@ export function resolveAdminDispute(disputeId, resolution, note) {
     body: JSON.stringify({ resolution, note }),
   })
 }
+
+export function getAdminVerifications({ status = '', page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (status) params.set('status', status)
+  return apiRequest(`/admin/verifications?${params.toString()}`)
+}
+
+export function getAdminVerificationEvents(verificationId) {
+  return apiRequest(`/admin/verifications/${verificationId}/events`)
+}
+
+export function decideAdminVerification(verificationId, decision, reason = '') {
+  return apiRequest(`/admin/verifications/${verificationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ decision, reason: reason || null }),
+  })
+}

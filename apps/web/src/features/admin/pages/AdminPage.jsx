@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAdminOverview, getAdminUsers, getFinanceReconciliation, updateAdminUserStatus } from '../api/adminApi.js'
+import {
+  getAdminOverview,
+  getAdminUsers,
+  getAdminVerifications,
+  getFinanceReconciliation,
+  updateAdminUserStatus,
+} from '../api/adminApi.js'
 import './AdminPage.css'
 
 const moneyFormatter = new Intl.NumberFormat('pl-PL', {
@@ -11,6 +17,7 @@ const moneyFormatter = new Intl.NumberFormat('pl-PL', {
 function AdminPage() {
   const [overview, setOverview] = useState(null)
   const [finance, setFinance] = useState(null)
+  const [pendingVerifications, setPendingVerifications] = useState(0)
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -18,12 +25,18 @@ function AdminPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([getAdminOverview(), getAdminUsers(), getFinanceReconciliation()])
-      .then(([overviewData, usersData, financeData]) => {
+    Promise.all([
+      getAdminOverview(),
+      getAdminUsers(),
+      getFinanceReconciliation(),
+      getAdminVerifications({ status: 'PENDING', page: 0, size: 1 }),
+    ])
+      .then(([overviewData, usersData, financeData, verificationData]) => {
         if (!active) return
         setOverview(overviewData)
         setUsers(usersData)
         setFinance(financeData)
+        setPendingVerifications(verificationData.totalElements)
       })
       .catch((requestError) => {
         if (active) setError(requestError.message || 'Nie udało się pobrać panelu administratora.')
@@ -59,9 +72,12 @@ function AdminPage() {
         <div>
           <span className="eyebrow">Administracja</span>
           <h1>Panel administratora</h1>
-          <p>Zarządzaj kontami, kontroluj spory i monitoruj spójność rozliczeń.</p>
+          <p>Zarządzaj kontami, kontroluj spory, weryfikacje i spójność rozliczeń.</p>
         </div>
-        <Link className="button button--primary" to="/admin/disputes">Przejdź do sporów</Link>
+        <div className="admin-heading-actions">
+          <Link className="button button--secondary" to="/admin/verifications">Weryfikacje</Link>
+          <Link className="button button--primary" to="/admin/disputes">Spory</Link>
+        </div>
       </header>
 
       {loading && <div className="page-state">Pobieranie danych administracyjnych…</div>}
@@ -72,6 +88,9 @@ function AdminPage() {
           <div className="panel"><span>Użytkownicy</span><strong>{overview.totalUsers}</strong></div>
           <div className="panel"><span>Aktywne konta</span><strong>{overview.activeUsers}</strong></div>
           <div className="panel"><span>Zawieszone</span><strong>{overview.suspendedUsers}</strong></div>
+          <Link className="panel admin-stat-link" to="/admin/verifications">
+            <span>Weryfikacje oczekujące</span><strong>{pendingVerifications}</strong>
+          </Link>
         </section>
       )}
 

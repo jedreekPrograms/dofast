@@ -7,5 +7,6 @@ public record UserProfileResponse(
         long reviewsCount,
         long completedJobsAsRequester,
         long completedJobsAsWorker,
-        long completedJobsTotal
+        long completedJobsTotal,
+        boolean identityVerified
 ) {}

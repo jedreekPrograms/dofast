@@ -49,7 +49,10 @@ function ProfilePage() {
           <h1>Profil i ustawienia</h1>
           <p>Zarządzaj podstawowymi danymi konta i bezpieczeństwem logowania.</p>
         </div>
-        <Link className="button button--secondary" to={`/users/${user.id}`}>Zobacz publiczny profil</Link>
+        <div className="profile-actions">
+          <Link className="button button--secondary" to="/verification">Weryfikacja tożsamości</Link>
+          <Link className="button button--secondary" to={`/users/${user.id}`}>Zobacz publiczny profil</Link>
+        </div>
       </header>
 
       <div className="account-grid">

@@ -65,7 +65,10 @@ function PublicProfilePage() {
           <div className="trust-profile__avatar" aria-hidden="true">{profile.username?.slice(0, 1).toUpperCase()}</div>
           <div>
             <span className="eyebrow">Profil użytkownika</span>
-            <h1>{profile.username}</h1>
+            <div className="trust-profile__name-row">
+              <h1>{profile.username}</h1>
+              {profile.identityVerified && <span className="identity-badge" title="Tożsamość zweryfikowana">✓ Zweryfikowana tożsamość</span>}
+            </div>
             <p>Publiczna historia współpracy w doFast.</p>
           </div>
         </div>

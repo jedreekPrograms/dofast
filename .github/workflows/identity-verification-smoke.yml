@@ -1,0 +1,229 @@
+name: Identity verification smoke
+
+on:
+  push:
+    branches: [master, "feature/carlisle-verification"]
+    paths:
+      - ".github/workflows/identity-verification-smoke.yml"
+      - "apps/api/src/main/java/com/doFast/dofastapp/verification/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/dto/UserProfileResponse.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/repository/UserRepository.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/service/UserProfileService.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/notification/enums/NotificationType.java"
+      - "apps/api/src/main/resources/db/migration/V10__identity_verification.sql"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/identity-verification-smoke.yml"
+      - "apps/api/src/main/java/com/doFast/dofastapp/verification/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/**"
+      - "apps/api/src/main/resources/db/migration/V10__identity_verification.sql"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: identity-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verification-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare local configuration
+        shell: bash
+        run: |
+          cp .env.example .env
+          sed -i 's/^ADMIN_BOOTSTRAP_EMAIL=.*/ADMIN_BOOTSTRAP_EMAIL=admin-verification@example.com/' .env
+          sed -i 's/^ADMIN_BOOTSTRAP_PASSWORD=.*/ADMIN_BOOTSTRAP_PASSWORD=AdminVerificationPass123!/' .env
+          sed -i 's/^ADMIN_BOOTSTRAP_NICKNAME=.*/ADMIN_BOOTSTRAP_NICKNAME=Verification Admin/' .env
+
+      - name: Build API with transient registry retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if docker compose build api; then
+              exit 0
+            fi
+            if test "$attempt" = "3"; then
+              echo "API image build failed after $attempt attempts"
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
+
+      - name: Start PostgreSQL and API
+        run: docker compose up -d --no-build db api
+
+      - name: Wait for API
+        shell: bash
+        run: |
+          for attempt in {1..45}; do
+            if curl --fail --silent http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs db api
+          exit 1
+
+      - name: Verify identity state machine, authorization, audit and privacy
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'echo "Identity verification smoke failed at line $LINENO"' ERR
+
+          register_and_login() {
+            local email="$1"
+            local nickname="$2"
+            local password="$3"
+            local prefix="$4"
+
+            curl --fail --silent \
+              -H 'Content-Type: application/json' \
+              -d "{\"email\":\"$email\",\"nickname\":\"$nickname\",\"password\":\"$password\"}" \
+              http://localhost:8080/users > "/tmp/${prefix}-register.json"
+
+            curl --fail --silent \
+              -H 'Content-Type: application/json' \
+              -d "{\"email\":\"$email\",\"password\":\"$password\"}" \
+              http://localhost:8080/users/login > "/tmp/${prefix}-login.json"
+          }
+
+          register_and_login 'verified-smoke@example.com' 'verifiedSmoke' 'VerifiedPass123!' verified
+          VERIFIED_USER_ID=$(python3 -c 'import json; print(json.load(open("/tmp/verified-register.json"))["id"])')
+          VERIFIED_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/verified-login.json"))["accessToken"])')
+
+          INITIAL=$(curl --fail --silent -H "Authorization: Bearer $VERIFIED_TOKEN" \
+            http://localhost:8080/verification/me)
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "NOT_STARTED"; assert d["canRequest"] is True; assert d["id"] is None' <<< "$INITIAL"
+
+          REQUESTED=$(curl --fail --silent -X POST -H "Authorization: Bearer $VERIFIED_TOKEN" \
+            http://localhost:8080/verification/request)
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "PENDING"; assert d["canRequest"] is False' <<< "$REQUESTED"
+          VERIFICATION_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REQUESTED")
+
+          RETRY=$(curl --fail --silent -X POST -H "Authorization: Bearer $VERIFIED_TOKEN" \
+            http://localhost:8080/verification/request)
+          RETRY_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$RETRY")
+          test "$RETRY_ID" = "$VERIFICATION_ID"
+
+          CASE_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+            "SELECT COUNT(*) FROM identity_verifications WHERE user_id = $VERIFIED_USER_ID;")
+          test "${CASE_COUNT//[[:space:]]/}" = "1"
+          REQUEST_EVENT_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+            "SELECT COUNT(*) FROM identity_verification_events WHERE verification_id = $VERIFICATION_ID AND event_type = 'REQUESTED';")
+          test "${REQUEST_EVENT_COUNT//[[:space:]]/}" = "1"
+
+          USER_ADMIN_STATUS=$(curl --silent --output /tmp/user-verifications.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer $VERIFIED_TOKEN" \
+            'http://localhost:8080/admin/verifications?status=PENDING&page=0&size=20')
+          test "$USER_ADMIN_STATUS" = "403"
+
+          ADMIN_LOGIN=$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin-verification@example.com","password":"AdminVerificationPass123!"}' \
+            http://localhost:8080/users/login)
+          ADMIN_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])' <<< "$ADMIN_LOGIN")
+          ADMIN_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["user"]["id"])' <<< "$ADMIN_LOGIN")
+          echo "$ADMIN_LOGIN" | grep -q '"role":"ADMIN"'
+
+          QUEUE=$(curl --fail --silent -H "Authorization: Bearer $ADMIN_TOKEN" \
+            'http://localhost:8080/admin/verifications?status=PENDING&page=0&size=20')
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert any(v["id"] == int(sys.argv[1]) for v in d["content"])' "$VERIFICATION_ID" <<< "$QUEUE"
+
+          APPROVED=$(curl --fail --silent -X PATCH \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"decision":"APPROVE","reason":null}' \
+            "http://localhost:8080/admin/verifications/$VERIFICATION_ID")
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "VERIFIED"; assert d["verifiedAt"] is not None' <<< "$APPROVED"
+
+          CURRENT=$(curl --fail --silent -H "Authorization: Bearer $VERIFIED_TOKEN" \
+            http://localhost:8080/verification/me)
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "VERIFIED"; assert d["canRequest"] is False' <<< "$CURRENT"
+
+          PUBLIC_PROFILE=$(curl --fail --silent "http://localhost:8080/users/$VERIFIED_USER_ID/profile")
+          python3 -c 'import json,sys; assert json.load(sys.stdin)["identityVerified"] is True' <<< "$PUBLIC_PROFILE"
+
+          USER_NOTIFICATIONS=$(curl --fail --silent -H "Authorization: Bearer $VERIFIED_TOKEN" \
+            'http://localhost:8080/notifications?page=0&size=20')
+          echo "$USER_NOTIFICATIONS" | grep -q '"type":"VERIFICATION_APPROVED"'
+
+          EVENTS=$(curl --fail --silent -H "Authorization: Bearer $ADMIN_TOKEN" \
+            "http://localhost:8080/admin/verifications/$VERIFICATION_ID/events")
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert [e["eventType"] for e in d] == ["REQUESTED", "APPROVED"]' <<< "$EVENTS"
+
+          DUPLICATE_APPROVE_STATUS=$(curl --silent --output /tmp/duplicate-approve.json --write-out '%{http_code}' -X PATCH \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"decision":"APPROVE","reason":null}' \
+            "http://localhost:8080/admin/verifications/$VERIFICATION_ID")
+          test "$DUPLICATE_APPROVE_STATUS" = "409"
+
+          ADMIN_REQUEST=$(curl --fail --silent -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+            http://localhost:8080/verification/request)
+          ADMIN_VERIFICATION_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$ADMIN_REQUEST")
+          SELF_REVIEW_STATUS=$(curl --silent --output /tmp/self-review.json --write-out '%{http_code}' -X PATCH \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"decision":"APPROVE","reason":null}' \
+            "http://localhost:8080/admin/verifications/$ADMIN_VERIFICATION_ID")
+          test "$SELF_REVIEW_STATUS" = "403"
+
+          register_and_login 'rejected-smoke@example.com' 'rejectedSmoke' 'RejectedPass123!' rejected
+          REJECTED_USER_ID=$(python3 -c 'import json; print(json.load(open("/tmp/rejected-register.json"))["id"])')
+          REJECTED_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/rejected-login.json"))["accessToken"])')
+          REJECTED_REQUEST=$(curl --fail --silent -X POST -H "Authorization: Bearer $REJECTED_TOKEN" \
+            http://localhost:8080/verification/request)
+          REJECTED_VERIFICATION_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REJECTED_REQUEST")
+
+          SHORT_REASON_STATUS=$(curl --silent --output /tmp/short-reason.json --write-out '%{http_code}' -X PATCH \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"decision":"REJECT","reason":"no"}' \
+            "http://localhost:8080/admin/verifications/$REJECTED_VERIFICATION_ID")
+          test "$SHORT_REASON_STATUS" = "400"
+
+          REJECTED_DECISION=$(curl --fail --silent -X PATCH \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"decision":"REJECT","reason":"Wymagane jest ponowne przejście procesu weryfikacji"}' \
+            "http://localhost:8080/admin/verifications/$REJECTED_VERIFICATION_ID")
+          echo "$REJECTED_DECISION" | grep -q '"status":"REJECTED"'
+
+          REJECTED_CURRENT=$(curl --fail --silent -H "Authorization: Bearer $REJECTED_TOKEN" \
+            http://localhost:8080/verification/me)
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "REJECTED"; assert d["canRequest"] is True; assert "ponowne" in d["decisionReason"]' <<< "$REJECTED_CURRENT"
+          REJECTED_PUBLIC=$(curl --fail --silent "http://localhost:8080/users/$REJECTED_USER_ID/profile")
+          python3 -c 'import json,sys; assert json.load(sys.stdin)["identityVerified"] is False' <<< "$REJECTED_PUBLIC"
+
+          RESUBMITTED=$(curl --fail --silent -X POST -H "Authorization: Bearer $REJECTED_TOKEN" \
+            http://localhost:8080/verification/request)
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "PENDING"; assert d["decisionReason"] is None' <<< "$RESUBMITTED"
+
+          RESUBMIT_EVENTS=$(curl --fail --silent -H "Authorization: Bearer $ADMIN_TOKEN" \
+            "http://localhost:8080/admin/verifications/$REJECTED_VERIFICATION_ID/events")
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert [e["eventType"] for e in d] == ["REQUESTED", "REJECTED", "RESUBMITTED"]' <<< "$RESUBMIT_EVENTS"
+
+          SENSITIVE_COLUMNS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_name IN ('identity_verifications','identity_verification_events') AND lower(column_name) ~ '(document|passport|selfie|biometric|pesel)';")
+          test "${SENSITIVE_COLUMNS//[[:space:]]/}" = "0"
+
+          REVIEWER_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+            "SELECT reviewed_by_id FROM identity_verifications WHERE id = $VERIFICATION_ID;")
+          test "${REVIEWER_ID//[[:space:]]/}" = "$ADMIN_ID"
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs db api || true
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down --remove-orphans

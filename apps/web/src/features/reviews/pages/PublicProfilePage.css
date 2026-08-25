@@ -27,6 +27,27 @@
   color: var(--text-muted, #6f7682);
 }
 
+.trust-profile__name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.identity-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid #cbe2d1;
+  border-radius: 999px;
+  background: #f2faf4;
+  color: #2f6c41;
+  font-size: 0.76rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
 .trust-profile__avatar {
   width: 68px;
   height: 68px;

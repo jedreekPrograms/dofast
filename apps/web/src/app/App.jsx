@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AdminDisputesPage from '../features/admin/pages/AdminDisputesPage.jsx'
 import AdminPage from '../features/admin/pages/AdminPage.jsx'
+import AdminVerificationsPage from '../features/admin/pages/AdminVerificationsPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import RegisterPage from '../features/auth/pages/RegisterPage.jsx'
 import RequireAdmin from '../features/auth/components/RequireAdmin.jsx'
@@ -13,6 +14,7 @@ import MyJobsPage from '../features/jobs/pages/MyJobsPage.jsx'
 import NotificationsPage from '../features/notifications/pages/NotificationsPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import PublicProfilePage from '../features/reviews/pages/PublicProfilePage.jsx'
+import VerificationPage from '../features/verification/pages/VerificationPage.jsx'
 import WalletPage from '../features/wallet/pages/WalletPage.jsx'
 import AppShell from '../shared/components/AppShell.jsx'
 
@@ -34,10 +36,12 @@ function App() {
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet" element={<WalletPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/verification" element={<VerificationPage />} />
 
             <Route element={<RequireAdmin />}>
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin/disputes" element={<AdminDisputesPage />} />
+              <Route path="/admin/verifications" element={<AdminVerificationsPage />} />
             </Route>
           </Route>
 

@@ -7,6 +7,7 @@ import com.doFast.dofastapp.review.repository.ReviewRepository;
 import com.doFast.dofastapp.user.dto.UserProfileResponse;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
+import com.doFast.dofastapp.verification.service.VerificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,15 +18,18 @@ public class UserProfileService {
     private final UserRepository userRepository;
     private final ReviewRepository reviewRepository;
     private final JobRepository jobRepository;
+    private final VerificationService verificationService;
 
     public UserProfileService(
             UserRepository userRepository,
             ReviewRepository reviewRepository,
-            JobRepository jobRepository
+            JobRepository jobRepository,
+            VerificationService verificationService
     ) {
         this.userRepository = userRepository;
         this.reviewRepository = reviewRepository;
         this.jobRepository = jobRepository;
+        this.verificationService = verificationService;
     }
 
     public UserProfileResponse getProfile(Long userId) {
@@ -44,7 +48,8 @@ public class UserProfileService {
                 reviewsCount,
                 completedAsRequester,
                 completedAsWorker,
-                completedAsRequester + completedAsWorker
+                completedAsRequester + completedAsWorker,
+                verificationService.isVerified(userId)
         );
     }
 }
