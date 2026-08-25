@@ -8,6 +8,10 @@ export function getAdminUsers() {
   return apiRequest('/admin/users')
 }
 
+export function getFinanceReconciliation() {
+  return apiRequest('/admin/finance/reconciliation')
+}
+
 export function updateAdminUserStatus(userId, status) {
   return apiRequest(`/admin/users/${userId}/status`, {
     method: 'PATCH',

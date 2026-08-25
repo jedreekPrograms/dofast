@@ -16,8 +16,10 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(
@@ -25,7 +27,8 @@ import java.math.BigDecimal;
         uniqueConstraints = @UniqueConstraint(name = "uk_escrow_transactions_job", columnNames = "job_id"),
         indexes = {
                 @Index(name = "idx_escrow_transactions_payer", columnList = "payer_id"),
-                @Index(name = "idx_escrow_transactions_payee", columnList = "payee_id")
+                @Index(name = "idx_escrow_transactions_payee", columnList = "payee_id"),
+                @Index(name = "idx_escrow_transactions_status", columnList = "status")
         }
 )
 public class Transaction {
@@ -33,6 +36,10 @@ public class Transaction {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    @Column(nullable = false)
+    private int version;
 
     @OneToOne(optional = false)
     @JoinColumn(name = "job_id", nullable = false)
@@ -53,6 +60,12 @@ public class Transaction {
     @Column(nullable = false, length = 32)
     private TransactionStatus status;
 
+    @Column(name = "held_at", nullable = false)
+    private LocalDateTime heldAt;
+
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
+
     public Transaction() {}
 
     public Long getId() { return id; }
@@ -61,10 +74,28 @@ public class Transaction {
     public User getPayee() { return payee; }
     public BigDecimal getAmount() { return amount; }
     public TransactionStatus getStatus() { return status; }
+    public LocalDateTime getHeldAt() { return heldAt; }
+    public LocalDateTime getResolvedAt() { return resolvedAt; }
 
-    public void setJob(Job job) { this.job = job; }
-    public void setPayer(User payer) { this.payer = payer; }
-    public void setPayee(User payee) { this.payee = payee; }
-    public void setAmount(BigDecimal amount) { this.amount = amount; }
-    public void setStatus(TransactionStatus status) { this.status = status; }
+    public void initializeHeld(Job job, User payer, BigDecimal amount, LocalDateTime at) {
+        this.job = job;
+        this.payer = payer;
+        this.amount = amount;
+        this.status = TransactionStatus.HELD;
+        this.heldAt = at;
+        this.resolvedAt = null;
+        this.payee = null;
+    }
+
+    public void releaseTo(User payee, LocalDateTime at) {
+        this.payee = payee;
+        this.status = TransactionStatus.RELEASED;
+        this.resolvedAt = at;
+    }
+
+    public void refund(LocalDateTime at) {
+        this.payee = null;
+        this.status = TransactionStatus.REFUNDED;
+        this.resolvedAt = at;
+    }
 }

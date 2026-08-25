@@ -37,7 +37,8 @@
   border-bottom: 1px solid #eceef1;
 }
 
-.wallet-transaction > div:first-child {
+.wallet-transaction > div:first-child,
+.wallet-transaction__values {
   display: grid;
   gap: 4px;
 }
@@ -47,6 +48,23 @@
   font-size: 0.84rem;
 }
 
-.wallet-transaction__amount {
+.wallet-transaction__values {
+  justify-items: end;
+  text-align: right;
+}
+
+.wallet-transaction__values strong {
   font-weight: 850;
+}
+
+@media (max-width: 560px) {
+  .wallet-transaction {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .wallet-transaction__values {
+    justify-items: start;
+    text-align: left;
+  }
 }

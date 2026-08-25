@@ -2,6 +2,19 @@ import { useEffect, useState } from 'react'
 import { getWallet, getWalletTransactions } from '../api/walletApi.js'
 import './WalletPage.css'
 
+const TYPE_LABELS = {
+  TOP_UP: 'Wpłata',
+  ESCROW_LOCK: 'Blokada środków',
+  ESCROW_RELEASE: 'Wypłata za zlecenie',
+  WITHDRAW: 'Wypłata z portfela',
+  REFUND: 'Zwrot środków',
+}
+
+const moneyFormatter = new Intl.NumberFormat('pl-PL', {
+  style: 'currency',
+  currency: 'PLN',
+})
+
 function WalletPage() {
   const [wallet, setWallet] = useState(null)
   const [transactions, setTransactions] = useState([])
@@ -30,7 +43,7 @@ function WalletPage() {
       <header className="page-heading">
         <span className="eyebrow">Rozliczenia</span>
         <h1>Portfel</h1>
-        <p>Saldo i historia operacji związanych z Twoimi zleceniami.</p>
+        <p>Saldo i pełna historia operacji związanych z Twoimi zleceniami.</p>
       </header>
 
       {loading && <div className="page-state">Pobieranie portfela…</div>}
@@ -39,8 +52,8 @@ function WalletPage() {
         <>
           <section className="wallet-balance panel">
             <span>Dostępne saldo</span>
-            <strong>{Number(wallet.balance).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}</strong>
-            <small>Integrację z realnymi wpłatami uruchomimy dopiero po domknięciu bezpiecznego przepływu płatności.</small>
+            <strong>{moneyFormatter.format(Number(wallet.balance))}</strong>
+            <small>Każda zmiana salda jest zapisywana w historii. Wpłaty kartą pojawią się w interfejsie po konfiguracji produkcyjnych płatności.</small>
           </section>
           <section className="panel">
             <h2>Historia</h2>
@@ -50,11 +63,13 @@ function WalletPage() {
                 {transactions.map((transaction, index) => (
                   <div className="wallet-transaction" key={`${transaction.createdAt}-${index}`}>
                     <div>
-                      <strong>{transaction.type}</strong>
+                      <strong>{TYPE_LABELS[transaction.type] || transaction.type}</strong>
                       <span>{transaction.jobId ? `Zlecenie #${transaction.jobId}` : 'Operacja portfela'}</span>
+                      <span>{new Date(transaction.createdAt).toLocaleString('pl-PL')}</span>
                     </div>
-                    <div className="wallet-transaction__amount">
-                      {Number(transaction.amount).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                    <div className="wallet-transaction__values">
+                      <strong>{moneyFormatter.format(Number(transaction.amount))}</strong>
+                      <span>Saldo: {moneyFormatter.format(Number(transaction.balanceAfter))}</span>
                     </div>
                   </div>
                 ))}

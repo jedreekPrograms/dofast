@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAdminOverview, getAdminUsers, updateAdminUserStatus } from '../api/adminApi.js'
+import { getAdminOverview, getAdminUsers, getFinanceReconciliation, updateAdminUserStatus } from '../api/adminApi.js'
 import './AdminPage.css'
+
+const moneyFormatter = new Intl.NumberFormat('pl-PL', {
+  style: 'currency',
+  currency: 'PLN',
+})
 
 function AdminPage() {
   const [overview, setOverview] = useState(null)
+  const [finance, setFinance] = useState(null)
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -12,11 +18,12 @@ function AdminPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([getAdminOverview(), getAdminUsers()])
-      .then(([overviewData, usersData]) => {
+    Promise.all([getAdminOverview(), getAdminUsers(), getFinanceReconciliation()])
+      .then(([overviewData, usersData, financeData]) => {
         if (!active) return
         setOverview(overviewData)
         setUsers(usersData)
+        setFinance(financeData)
       })
       .catch((requestError) => {
         if (active) setError(requestError.message || 'Nie udało się pobrać panelu administratora.')
@@ -52,7 +59,7 @@ function AdminPage() {
         <div>
           <span className="eyebrow">Administracja</span>
           <h1>Panel administratora</h1>
-          <p>Zarządzaj kontami użytkowników oraz przechodź do kolejki sporów powiązanej bezpośrednio z escrow.</p>
+          <p>Zarządzaj kontami, kontroluj spory i monitoruj spójność rozliczeń.</p>
         </div>
         <Link className="button button--primary" to="/admin/disputes">Przejdź do sporów</Link>
       </header>
@@ -65,6 +72,26 @@ function AdminPage() {
           <div className="panel"><span>Użytkownicy</span><strong>{overview.totalUsers}</strong></div>
           <div className="panel"><span>Aktywne konta</span><strong>{overview.activeUsers}</strong></div>
           <div className="panel"><span>Zawieszone</span><strong>{overview.suspendedUsers}</strong></div>
+        </section>
+      )}
+
+      {!loading && finance && (
+        <section className={`panel finance-health ${finance.healthy ? 'finance-health--ok' : 'finance-health--alert'}`}>
+          <div className="finance-health__heading">
+            <div>
+              <span className="eyebrow">Reconciliation</span>
+              <h2>{finance.healthy ? 'Rozliczenia są spójne' : 'Wykryto niespójność rozliczeń'}</h2>
+            </div>
+            <strong className="finance-health__badge">{finance.healthy ? 'OK' : 'WYMAGA UWAGI'}</strong>
+          </div>
+          <div className="finance-health__grid">
+            <div><span>Saldo vs ledger</span><strong>{finance.walletBalanceMismatches}</strong></div>
+            <div><span>Błędy sekwencji ledgera</span><strong>{finance.ledgerSequenceMismatches}</strong></div>
+            <div><span>Stripe vs ledger</span><strong>{finance.stripeLedgerMismatches}</strong></div>
+            <div><span>Aktywne escrow</span><strong>{finance.heldEscrowCount}</strong></div>
+            <div><span>Środki w escrow</span><strong>{moneyFormatter.format(Number(finance.heldEscrowAmount))}</strong></div>
+            <div><span>Rozliczone wpłaty Stripe</span><strong>{finance.processedStripePayments}</strong></div>
+          </div>
         </section>
       )}
 

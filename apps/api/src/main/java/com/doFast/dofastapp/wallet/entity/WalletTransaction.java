@@ -12,6 +12,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,6 +20,10 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "wallet_transactions",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_wallet_transactions_operation",
+                columnNames = "operation_key"
+        ),
         indexes = {
                 @Index(name = "idx_wallet_transactions_wallet_created", columnList = "wallet_id,created_at"),
                 @Index(name = "idx_wallet_transactions_job", columnList = "job_id")
@@ -41,6 +46,12 @@ public class WalletTransaction {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
+    @Column(name = "balance_after", nullable = false, precision = 19, scale = 2)
+    private BigDecimal balanceAfter;
+
+    @Column(name = "operation_key", nullable = false, length = 160)
+    private String operationKey;
+
     @Column(name = "job_id")
     private Long jobId;
 
@@ -49,16 +60,29 @@ public class WalletTransaction {
 
     public WalletTransaction() {}
 
-    public WalletTransaction(Wallet wallet, WalletTransactionType type, BigDecimal amount, Long jobId) {
+    public WalletTransaction(
+            Wallet wallet,
+            WalletTransactionType type,
+            BigDecimal amount,
+            BigDecimal balanceAfter,
+            String operationKey,
+            Long jobId
+    ) {
         this.wallet = wallet;
         this.type = type;
         this.amount = amount;
+        this.balanceAfter = balanceAfter;
+        this.operationKey = operationKey;
         this.jobId = jobId;
         this.createdAt = LocalDateTime.now();
     }
 
+    public Long getId() { return id; }
+    public Wallet getWallet() { return wallet; }
     public WalletTransactionType getType() { return type; }
     public BigDecimal getAmount() { return amount; }
+    public BigDecimal getBalanceAfter() { return balanceAfter; }
+    public String getOperationKey() { return operationKey; }
     public Long getJobId() { return jobId; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

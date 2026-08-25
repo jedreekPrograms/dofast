@@ -57,13 +57,31 @@ public class StripeWebhookController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("unable to deserialize event");
         }
 
-        boolean processed = stripePaymentService.processSuccessfulPayment(paymentIntent);
-        if (!processed) {
-            log.info("Stripe PaymentIntent {} was already processed", paymentIntent.getId());
-            return ResponseEntity.ok("already processed");
-        }
+        try {
+            boolean processed = stripePaymentService.processSuccessfulPayment(paymentIntent, event.getId());
+            if (!processed) {
+                log.info(
+                        "Stripe event {} / PaymentIntent {} was already processed",
+                        event.getId(),
+                        paymentIntent.getId()
+                );
+                return ResponseEntity.ok("already processed");
+            }
 
-        log.info("Processed successful Stripe PaymentIntent {}", paymentIntent.getId());
-        return ResponseEntity.ok("ok");
+            log.info(
+                    "Processed Stripe event {} / PaymentIntent {}",
+                    event.getId(),
+                    paymentIntent.getId()
+            );
+            return ResponseEntity.ok("ok");
+        } catch (RuntimeException ex) {
+            log.error(
+                    "Failed to process Stripe event {} / PaymentIntent {}",
+                    event.getId(),
+                    paymentIntent.getId(),
+                    ex
+            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
+        }
     }
 }

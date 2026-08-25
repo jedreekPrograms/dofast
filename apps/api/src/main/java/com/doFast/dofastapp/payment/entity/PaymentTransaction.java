@@ -10,15 +10,25 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(
         name = "payment_transactions",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_payment_transactions_stripe_intent",
-                columnNames = "stripe_payment_intent_id"
-        ),
-        indexes = @Index(name = "idx_payment_transactions_user", columnList = "user_id")
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_payment_transactions_stripe_intent",
+                        columnNames = "stripe_payment_intent_id"
+                ),
+                @UniqueConstraint(
+                        name = "uk_payment_transactions_stripe_event",
+                        columnNames = "stripe_event_id"
+                )
+        },
+        indexes = {
+                @Index(name = "idx_payment_transactions_user", columnList = "user_id"),
+                @Index(name = "idx_payment_transactions_processed", columnList = "processed_at")
+        }
 )
 public class PaymentTransaction {
 
@@ -29,19 +39,27 @@ public class PaymentTransaction {
     @Column(name = "stripe_payment_intent_id", nullable = false, length = 255)
     private String stripePaymentIntentId;
 
+    @Column(name = "stripe_event_id", nullable = false, length = 255)
+    private String stripeEventId;
+
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
+    @Column(nullable = false, length = 3)
+    private String currency;
+
+    @Column(name = "processed_at", nullable = false)
+    private LocalDateTime processedAt;
+
     public PaymentTransaction() {}
 
-    public PaymentTransaction(String stripePaymentIntentId, Long userId, BigDecimal amount) {
-        this.stripePaymentIntentId = stripePaymentIntentId;
-        this.userId = userId;
-        this.amount = amount;
-    }
-
     public String getStripePaymentIntentId() { return stripePaymentIntentId; }
+    public String getStripeEventId() { return stripeEventId; }
+    public Long getUserId() { return userId; }
+    public BigDecimal getAmount() { return amount; }
+    public String getCurrency() { return currency; }
+    public LocalDateTime getProcessedAt() { return processedAt; }
 }

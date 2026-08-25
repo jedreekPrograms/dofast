@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.common.exception;
 
+import com.doFast.dofastapp.payment.exception.PaymentProviderException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException ex) {
         return response(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(PaymentProviderException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentProviderFailure(PaymentProviderException ex) {
+        log.error("Payment provider operation failed", ex);
+        return response(HttpStatus.BAD_GATEWAY, "Operator płatności jest chwilowo niedostępny");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

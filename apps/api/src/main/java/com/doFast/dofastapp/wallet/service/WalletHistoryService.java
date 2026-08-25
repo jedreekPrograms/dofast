@@ -7,35 +7,38 @@ import com.doFast.dofastapp.wallet.entity.Wallet;
 import com.doFast.dofastapp.wallet.repository.WalletRepository;
 import com.doFast.dofastapp.wallet.repository.WalletTransactionRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
+@Transactional(readOnly = true)
 public class WalletHistoryService {
 
     private final WalletRepository walletRepository;
     private final WalletTransactionRepository transactionRepository;
 
-    public WalletHistoryService(WalletRepository walletRepository, WalletTransactionRepository transactionRepository) {
+    public WalletHistoryService(
+            WalletRepository walletRepository,
+            WalletTransactionRepository transactionRepository
+    ) {
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
     }
 
     public List<WalletTransactionResponse> getHistory(User user) {
-
         Wallet wallet = walletRepository.findByUser(user)
                 .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
 
-        return transactionRepository
-                .findByWalletOrderByCreatedAtDesc(wallet)
+        return transactionRepository.findByWalletOrderByCreatedAtDescIdDesc(wallet)
                 .stream()
                 .map(tx -> new WalletTransactionResponse(
                         tx.getType(),
                         tx.getAmount(),
+                        tx.getBalanceAfter(),
                         tx.getCreatedAt(),
                         tx.getJobId()
                 ))
-                .collect(Collectors.toList());
+                .toList();
     }
 }

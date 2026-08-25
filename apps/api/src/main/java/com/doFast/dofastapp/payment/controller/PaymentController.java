@@ -1,9 +1,11 @@
 package com.doFast.dofastapp.payment.controller;
 
 import com.doFast.dofastapp.payment.dto.CreatePaymentIntentRequest;
+import com.doFast.dofastapp.payment.dto.CreatePaymentIntentResponse;
 import com.doFast.dofastapp.payment.service.StripePaymentService;
 import com.doFast.dofastapp.user.entity.User;
-import org.springframework.security.core.context.SecurityContextHolder;
+import jakarta.validation.Valid;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,15 +22,14 @@ public class PaymentController {
     }
 
     @PostMapping("/create-intent")
-    public String createIntent(@RequestBody CreatePaymentIntentRequest request) throws Exception {
-
-        User user = (User) SecurityContextHolder
-                .getContext()
-                .getAuthentication()
-                .getPrincipal();
-
-        return stripePaymentService
-                .createPaymentIntent(request.getAmount(), user.getId())
-                .getClientSecret();
+    public CreatePaymentIntentResponse createIntent(
+            @RequestBody @Valid CreatePaymentIntentRequest request,
+            @AuthenticationPrincipal User user
+    ) {
+        return stripePaymentService.createPaymentIntent(
+                request.amount(),
+                user.getId(),
+                request.requestId()
+        );
     }
 }
