@@ -3,6 +3,7 @@ package com.doFast.dofastapp.common.exception;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -70,11 +71,11 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, "Nieprawidłowy format żądania");
     }
 
-    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
-    public ResponseEntity<ErrorResponse> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, DataIntegrityViolationException.class})
+    public ResponseEntity<ErrorResponse> handleConcurrentOrIntegrityConflict(Exception ex) {
         return response(
                 HttpStatus.CONFLICT,
-                "Zasób został zmieniony przez inną operację. Spróbuj ponownie."
+                "Operacja koliduje z aktualnym stanem danych. Odśwież dane i spróbuj ponownie."
         );
     }
 
