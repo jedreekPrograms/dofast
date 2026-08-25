@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getAdminOverview, getAdminUsers, updateAdminUserStatus } from '../api/adminApi.js'
 import './AdminPage.css'
 
@@ -47,10 +48,13 @@ function AdminPage() {
 
   return (
     <main className="admin-page">
-      <header className="page-heading">
-        <span className="eyebrow">Administracja</span>
-        <h1>Panel administratora</h1>
-        <p>Fundament moderacji kont. Kolejne moduły dołączą tu kolejkę sporów, zgłoszenia i narzędzia bezpieczeństwa.</p>
+      <header className="page-heading page-heading--row">
+        <div>
+          <span className="eyebrow">Administracja</span>
+          <h1>Panel administratora</h1>
+          <p>Zarządzaj kontami użytkowników oraz przechodź do kolejki sporów powiązanej bezpośrednio z escrow.</p>
+        </div>
+        <Link className="button button--primary" to="/admin/disputes">Przejdź do sporów</Link>
       </header>
 
       {loading && <div className="page-state">Pobieranie danych administracyjnych…</div>}
