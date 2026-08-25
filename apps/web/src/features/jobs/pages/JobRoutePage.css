@@ -1,0 +1,14 @@
+.job-route-page { display: grid; gap: 22px; max-width: 1100px; }
+.job-route-summary { display: grid; grid-template-columns: 1fr 1fr auto; gap: 18px; align-items: center; }
+.job-route-summary > div:not(.job-route-summary__metrics) { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.job-route-summary small, .job-route-summary strong { display: block; }
+.job-route-summary strong { overflow-wrap: anywhere; }
+.job-route-summary__badge { display: inline-grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-weight: 800; }
+.job-route-summary__metrics { display: grid; gap: 3px; text-align: right; white-space: nowrap; }
+.job-route-map { width: 100%; min-height: 540px; border-radius: 20px; overflow: hidden; background: rgba(127, 127, 127, 0.08); }
+.job-route-map-fallback { line-height: 1.6; }
+@media (max-width: 760px) {
+  .job-route-summary { grid-template-columns: 1fr; }
+  .job-route-summary__metrics { text-align: left; }
+  .job-route-map { min-height: 390px; }
+}
