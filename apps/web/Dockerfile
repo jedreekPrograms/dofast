@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:24.19.0-alpine AS build
+FROM node:26.7.0-alpine AS build
 WORKDIR /workspace
 
 COPY apps/web/package.json apps/web/package-lock.json ./
