@@ -33,7 +33,7 @@ jobs:
       - name: Build web image
         run: docker compose build web
       - name: Create compose network and web container
-        run: docker compose create web
+        run: docker compose create --no-deps web
       - name: Provide API DNS alias for nginx startup
         shell: bash
         run: |
