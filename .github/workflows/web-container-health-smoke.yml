@@ -30,23 +30,14 @@ jobs:
       - uses: actions/checkout@v7
       - name: Prepare local configuration
         run: cp .env.example .env
-      - name: Build web image
-        run: docker compose build web
-      - name: Create compose network and web container
-        run: docker compose create --no-deps web
-      - name: Provide API DNS alias for nginx startup
+      - name: Build API and web images
+        run: docker compose build api web
+      - name: Start full local stack
+        run: docker compose up -d --no-build db api web
+      - name: Wait for Docker web health status
         shell: bash
         run: |
-          docker run -d --name dofast-health-api-dns \
-            --network dofast_dofast \
-            --network-alias api \
-            alpine:3.22 sleep 300
-      - name: Start web container
-        run: docker compose start web
-      - name: Wait for Docker health status
-        shell: bash
-        run: |
-          for attempt in {1..30}; do
+          for attempt in {1..45}; do
             status=$(docker inspect --format='{{.State.Health.Status}}' dofast-web-1)
             if test "$status" = "healthy"; then
               curl --fail --silent http://localhost:5173/health | grep -qx 'ok'
@@ -61,15 +52,16 @@ jobs:
           done
           docker inspect dofast-web-1 --format '{{json .State.Health}}'
           exit 1
+      - name: Verify gateway still reaches API
+        shell: bash
+        run: |
+          curl --fail --silent http://localhost:5173/api/actuator/health | grep -q '"status":"UP"'
       - name: Diagnostics
         if: failure()
         run: |
           docker compose ps || true
-          docker compose logs web || true
+          docker compose logs db api web || true
           docker inspect dofast-web-1 --format '{{json .State.Health}}' || true
       - name: Cleanup
         if: always()
-        shell: bash
-        run: |
-          docker rm -f dofast-health-api-dns 2>/dev/null || true
-          docker compose down --remove-orphans
+        run: docker compose down --remove-orphans
