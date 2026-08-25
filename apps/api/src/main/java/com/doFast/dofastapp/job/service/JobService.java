@@ -1,20 +1,23 @@
 package com.doFast.dofastapp.job.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
-import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
-import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-@Transactional
+@Transactional(readOnly = true)
 public class JobService {
 
     private final JobRepository jobRepository;
@@ -25,10 +28,11 @@ public class JobService {
         this.transactionService = transactionService;
     }
 
+    @Transactional
     public JobResponse createJob(JobRequest request, User user) {
         Job job = new Job();
-        job.setTitle(request.getTitle());
-        job.setDescription(request.getDescription());
+        job.setTitle(request.getTitle().trim());
+        job.setDescription(request.getDescription().trim());
         job.setPrice(request.getPrice());
         job.setStatus(JobStatus.OPEN);
         job.setCreatedBy(user);
@@ -40,75 +44,112 @@ public class JobService {
     }
 
     public List<JobResponse> getOpenJobs() {
-        return jobRepository.findByStatus(JobStatus.OPEN)
+        return jobRepository.findByStatusOrderByCreatedAtDesc(JobStatus.OPEN)
                 .stream()
                 .map(this::toResponse)
                 .toList();
     }
 
-    public JobResponse takeJob(Long jobId, User currentUser) {
-        Job job = getJob(jobId);
+    public JobResponse getJob(Long jobId) {
+        return toResponse(getJobForRead(jobId));
+    }
+
+    @Transactional
+    public JobResponse acceptJob(Long jobId, User currentUser) {
+        Job job = getJobForUpdate(jobId);
 
         if (job.getStatus() != JobStatus.OPEN) {
-            throw new BusinessException("Zlecenie nie jest dostępne");
+            throw new ConflictException("Zlecenie nie jest już dostępne");
         }
 
-        if (job.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new BusinessException("Nie możesz wziąć własnego zlecenia");
+        if (sameUser(job.getCreatedBy(), currentUser)) {
+            throw new ForbiddenOperationException("Nie możesz przyjąć własnego zlecenia");
         }
 
-        job.setStatus(JobStatus.IN_PROGRESS);
-        job.setTakenBy(currentUser);
-
+        job.assignTo(currentUser, LocalDateTime.now());
         return toResponse(jobRepository.save(job));
     }
 
     public List<JobResponse> getMyJobs(User user) {
-        return jobRepository.findByCreatedByOrTakenBy(user, user)
+        return jobRepository.findByCreatedByOrTakenByOrderByCreatedAtDesc(user, user)
                 .stream()
                 .map(this::toResponse)
                 .toList();
     }
 
-    public JobResponse markAsDone(Long jobId, User currentUser) {
-        Job job = getJob(jobId);
+    @Transactional
+    public JobResponse requestCompletion(Long jobId, User currentUser) {
+        Job job = getJobForUpdate(jobId);
 
         if (job.getStatus() != JobStatus.IN_PROGRESS) {
-            throw new BusinessException("Zlecenie nie jest w trakcie");
+            throw new ConflictException("Zlecenie nie jest w trakcie realizacji");
         }
 
-        if (!job.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new BusinessException("Tylko autor może oznaczyć zlecenie jako wykonane");
+        if (job.getTakenBy() == null || !sameUser(job.getTakenBy(), currentUser)) {
+            throw new ForbiddenOperationException("Tylko wykonawca może zgłosić wykonanie zlecenia");
         }
 
-        job.setStatus(JobStatus.DONE);
+        job.requestCompletion(LocalDateTime.now());
+        return toResponse(jobRepository.save(job));
+    }
+
+    @Transactional
+    public JobResponse confirmCompletion(Long jobId, User currentUser) {
+        Job job = getJobForUpdate(jobId);
+
+        if (!sameUser(job.getCreatedBy(), currentUser)) {
+            throw new ForbiddenOperationException("Tylko autor może potwierdzić wykonanie zlecenia");
+        }
+
+        if (job.getStatus() != JobStatus.COMPLETION_REQUESTED) {
+            throw new ConflictException("Wykonawca nie zgłosił jeszcze wykonania zlecenia");
+        }
+
+        if (job.getTakenBy() == null) {
+            throw new ConflictException("Zlecenie nie ma przypisanego wykonawcy");
+        }
+
+        job.complete(LocalDateTime.now());
         Job saved = jobRepository.save(job);
         transactionService.releaseMoney(saved, saved.getTakenBy());
 
         return toResponse(saved);
     }
 
+    @Transactional
     public JobResponse cancelJob(Long jobId, User currentUser) {
-        Job job = getJob(jobId);
+        Job job = getJobForUpdate(jobId);
 
-        if (!job.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new BusinessException("Tylko autor może anulować zlecenie");
+        if (!sameUser(job.getCreatedBy(), currentUser)) {
+            throw new ForbiddenOperationException("Tylko autor może anulować zlecenie");
         }
 
-        if (job.getStatus() == JobStatus.DONE) {
-            throw new BusinessException("Nie można anulować zakończonego zlecenia");
+        if (job.getStatus() != JobStatus.OPEN) {
+            throw new ConflictException("Można anulować tylko zlecenie, którego nikt jeszcze nie przyjął");
         }
 
-        job.setStatus(JobStatus.CANCELLED);
+        job.cancel(LocalDateTime.now());
         Job saved = jobRepository.save(job);
         transactionService.refundMoney(saved);
 
         return toResponse(saved);
     }
 
-    private Job getJob(Long jobId) {
+    private Job getJobForRead(Long jobId) {
         return jobRepository.findById(jobId)
-                .orElseThrow(() -> new BusinessException("Zlecenie nie istnieje"));
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private Job getJobForUpdate(Long jobId) {
+        return jobRepository.findByIdForUpdate(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private boolean sameUser(User first, User second) {
+        return first != null
+                && second != null
+                && first.getId() != null
+                && first.getId().equals(second.getId());
     }
 
     private JobResponse toResponse(Job job) {
@@ -117,8 +158,15 @@ public class JobService {
                 job.getTitle(),
                 job.getDescription(),
                 job.getPrice(),
-                job.getStatus().name(),
-                job.getTakenBy() != null ? job.getTakenBy().getId() : null
+                job.getStatus(),
+                job.getCreatedBy().getId(),
+                job.getTakenBy() != null ? job.getTakenBy().getId() : null,
+                job.getCreatedAt(),
+                job.getUpdatedAt(),
+                job.getTakenAt(),
+                job.getCompletionRequestedAt(),
+                job.getCompletedAt(),
+                job.getCancelledAt()
         );
     }
 }
