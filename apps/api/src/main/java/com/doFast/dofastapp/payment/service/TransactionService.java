@@ -47,7 +47,7 @@ public class TransactionService {
     }
 
     public void releaseMoney(Job job, User payee) {
-        Transaction transaction = getHeldTransaction(job);
+        Transaction transaction = getHeldTransactionForUpdate(job);
 
         walletService.addMoney(
                 payee.getId(),
@@ -62,7 +62,7 @@ public class TransactionService {
     }
 
     public void refundMoney(Job job) {
-        Transaction transaction = getHeldTransaction(job);
+        Transaction transaction = getHeldTransactionForUpdate(job);
 
         walletService.addMoney(
                 transaction.getPayer().getId(),
@@ -75,12 +75,16 @@ public class TransactionService {
         transactionRepository.save(transaction);
     }
 
-    private Transaction getHeldTransaction(Job job) {
-        Transaction transaction = transactionRepository.findByJob(job)
-                .orElseThrow(() -> new BusinessException("Brak transakcji"));
+    public void assertHeld(Job job) {
+        getHeldTransactionForUpdate(job);
+    }
+
+    private Transaction getHeldTransactionForUpdate(Job job) {
+        Transaction transaction = transactionRepository.findByJobForUpdate(job)
+                .orElseThrow(() -> new BusinessException("Brak transakcji escrow"));
 
         if (transaction.getStatus() != TransactionStatus.HELD) {
-            throw new BusinessException("Nieprawidłowy status transakcji");
+            throw new BusinessException("Środki escrow nie są już zablokowane");
         }
 
         return transaction;
