@@ -25,7 +25,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -61,20 +60,11 @@ class DisputeServiceTest {
         requester = user(1L, UserRole.USER, "requester");
         worker = user(2L, UserRole.USER, "worker");
         admin = user(10L, UserRole.ADMIN, "admin");
-
-        when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(anyLong())).thenReturn(List.of());
-        when(disputeRepository.save(any(Dispute.class))).thenAnswer(invocation -> {
-            Dispute dispute = invocation.getArgument(0);
-            if (dispute.getId() == null) {
-                ReflectionTestUtils.setField(dispute, "id", 100L);
-            }
-            return dispute;
-        });
-        when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
     void participantCanOpenDisputeAndEscrowRemainsHeld() {
+        stubSuccessfulPersistence();
         Job job = job(JobStatus.IN_PROGRESS);
         when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
         when(disputeRepository.findFirstByJobAndStatusInOrderByOpenedAtDesc(
@@ -131,6 +121,7 @@ class DisputeServiceTest {
 
     @Test
     void openerCanCancelBeforeAdminClaimsAndJobReturnsToPreviousStatus() {
+        stubSuccessfulPersistence();
         Job job = job(JobStatus.DISPUTED);
         Dispute dispute = dispute(job, requester, DisputeStatus.OPEN, JobStatus.COMPLETION_REQUESTED);
         when(disputeRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(dispute));
@@ -145,6 +136,7 @@ class DisputeServiceTest {
 
     @Test
     void adminCanReleaseHeldMoneyToWorker() {
+        stubSuccessfulPersistence();
         Job job = job(JobStatus.DISPUTED);
         Dispute dispute = dispute(job, requester, DisputeStatus.UNDER_REVIEW, JobStatus.COMPLETION_REQUESTED);
         dispute.startReview(admin, LocalDateTime.now());
@@ -165,6 +157,7 @@ class DisputeServiceTest {
 
     @Test
     void adminCanRefundRequester() {
+        stubSuccessfulPersistence();
         Job job = job(JobStatus.DISPUTED);
         Dispute dispute = dispute(job, worker, DisputeStatus.OPEN, JobStatus.IN_PROGRESS);
         when(disputeRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(dispute));
@@ -182,6 +175,7 @@ class DisputeServiceTest {
 
     @Test
     void adminCanResumeJobWithoutMovingEscrow() {
+        stubSuccessfulPersistence();
         Job job = job(JobStatus.DISPUTED);
         Dispute dispute = dispute(job, requester, DisputeStatus.OPEN, JobStatus.IN_PROGRESS);
         when(disputeRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(dispute));
@@ -215,6 +209,18 @@ class DisputeServiceTest {
                         otherAdmin
                 )
         );
+    }
+
+    private void stubSuccessfulPersistence() {
+        when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(anyLong())).thenReturn(List.of());
+        when(disputeRepository.save(any(Dispute.class))).thenAnswer(invocation -> {
+            Dispute dispute = invocation.getArgument(0);
+            if (dispute.getId() == null) {
+                ReflectionTestUtils.setField(dispute, "id", 100L);
+            }
+            return dispute;
+        });
+        when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     private Job job(JobStatus status) {
