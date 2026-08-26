@@ -8,6 +8,10 @@ import java.util.List;
 
 public record RouteQuoteRequest(
         @NotNull @Valid RoutePointRequest origin,
-        @Size(max = 10) List<@Valid RoutePointRequest> stops,
+        @Size(max = 10) List<@NotNull @Valid RoutePointRequest> stops,
         @NotNull @Valid RoutePointRequest destination
-) {}
+) {
+    public RouteQuoteRequest {
+        stops = stops == null ? List.of() : List.copyOf(stops);
+    }
+}
