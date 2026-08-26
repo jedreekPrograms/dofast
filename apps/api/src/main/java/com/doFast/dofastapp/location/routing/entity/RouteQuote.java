@@ -2,12 +2,15 @@ package com.doFast.dofastapp.location.routing.entity;
 
 import com.doFast.dofastapp.location.routing.provider.RouteProviderResult;
 import com.doFast.dofastapp.user.entity.User;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -15,6 +18,9 @@ import org.hibernate.type.SqlTypes;
 import org.locationtech.jts.geom.Point;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -57,6 +63,10 @@ public class RouteQuote {
 
     @Column(name = "destination_place_id", length = 255)
     private String destinationPlaceId;
+
+    @OneToMany(mappedBy = "routeQuote", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sequenceNo ASC")
+    private List<RouteQuoteStop> stops = new ArrayList<>();
 
     @Column(name = "distance_meters", nullable = false)
     private int distanceMeters;
@@ -114,6 +124,10 @@ public class RouteQuote {
         this.expiresAt = expiresAt;
     }
 
+    public void addStop(Point location, String publicLabel, String privateLabel, String placeId) {
+        stops.add(new RouteQuoteStop(this, stops.size(), location, publicLabel, privateLabel, placeId));
+    }
+
     public void markConsumed(LocalDateTime at) {
         this.consumedAt = at;
     }
@@ -128,6 +142,7 @@ public class RouteQuote {
     public String getDestinationPublicLabel() { return destinationPublicLabel; }
     public String getDestinationPrivateLabel() { return destinationPrivateLabel; }
     public String getDestinationPlaceId() { return destinationPlaceId; }
+    public List<RouteQuoteStop> getStops() { return Collections.unmodifiableList(stops); }
     public int getDistanceMeters() { return distanceMeters; }
     public int getDurationSeconds() { return durationSeconds; }
     public String getEncodedPolyline() { return encodedPolyline; }
