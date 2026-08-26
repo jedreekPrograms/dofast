@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.auth.apple;
 
 import com.doFast.dofastapp.common.exception.AuthenticationFailedException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -17,6 +18,7 @@ public class AppleTokenClient {
     private final AppleAuthConfiguration configuration;
     private final AppleClientSecretService clientSecretService;
 
+    @Autowired
     public AppleTokenClient(
             AppleAuthConfiguration configuration,
             AppleClientSecretService clientSecretService
