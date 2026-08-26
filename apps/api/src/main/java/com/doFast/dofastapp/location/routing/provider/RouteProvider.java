@@ -1,5 +1,10 @@
 package com.doFast.dofastapp.location.routing.provider;
 
 public interface RouteProvider {
-    RouteProviderResult estimate(RouteCoordinate origin, RouteCoordinate destination);
+
+    default RouteProviderResult estimate(RouteCoordinate origin, RouteCoordinate destination) {
+        return estimate(origin, destination, RouteTravelMode.DRIVE);
+    }
+
+    RouteProviderResult estimate(RouteCoordinate origin, RouteCoordinate destination, RouteTravelMode travelMode);
 }
