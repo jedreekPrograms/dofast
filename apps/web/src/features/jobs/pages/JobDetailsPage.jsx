@@ -4,10 +4,15 @@ import { useAuth } from '../../auth/AuthContext.js'
 import ReviewDialog from '../../reviews/components/ReviewDialog.jsx'
 import {
   acceptJob,
+  approveJobCancellation,
   cancelJob,
   confirmJobCompletion,
+  declineJobCancellation,
   getJob,
+  getPendingJobCancellation,
+  requestJobCancellation,
   requestJobCompletion,
+  withdrawJobCancellation,
 } from '../api/jobsApi.js'
 import './JobDetailsPage.css'
 
@@ -53,6 +58,8 @@ function JobDetailsPage() {
   const [busyAction, setBusyAction] = useState('')
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewed, setReviewed] = useState(false)
+  const [cancellation, setCancellation] = useState(null)
+  const [cancellationReason, setCancellationReason] = useState('')
 
   const loadJob = useCallback(async () => {
     setLoading(true)
@@ -66,9 +73,33 @@ function JobDetailsPage() {
     }
   }, [jobId])
 
+  const loadCancellation = useCallback(async () => {
+    if (!user?.id) {
+      setCancellation(null)
+      return
+    }
+    try {
+      setCancellation(await getPendingJobCancellation(jobId))
+    } catch (requestError) {
+      if (requestError.status === 403 || requestError.status === 404 || requestError.status === 409) {
+        setCancellation(null)
+        return
+      }
+      setError(requestError.message || 'Nie udało się pobrać stanu anulowania zlecenia.')
+    }
+  }, [jobId, user?.id])
+
   useEffect(() => {
     loadJob()
   }, [loadJob])
+
+  useEffect(() => {
+    if (job?.status === 'IN_PROGRESS' && (job.createdById === user?.id || job.takenById === user?.id)) {
+      loadCancellation()
+    } else {
+      setCancellation(null)
+    }
+  }, [job, loadCancellation, user?.id])
 
   async function runAction(actionName, action, successMessage) {
     setBusyAction(actionName)
@@ -80,6 +111,44 @@ function JobDetailsPage() {
       setSuccess(successMessage)
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się wykonać operacji.')
+    } finally {
+      setBusyAction('')
+    }
+  }
+
+  async function runCancellationAction(actionName, action, successMessage) {
+    setBusyAction(actionName)
+    setError('')
+    setSuccess('')
+    try {
+      await action(job.id)
+      setSuccess(successMessage)
+      await Promise.all([loadJob(), loadCancellation()])
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się zaktualizować prośby o anulowanie.')
+    } finally {
+      setBusyAction('')
+    }
+  }
+
+  async function handleRequestCancellation(event) {
+    event.preventDefault()
+    const reason = cancellationReason.trim()
+    if (!reason) {
+      setError('Podaj krótki powód prośby o anulowanie.')
+      return
+    }
+
+    setBusyAction('cancellation-request')
+    setError('')
+    setSuccess('')
+    try {
+      const created = await requestJobCancellation(job.id, reason)
+      setCancellation(created)
+      setCancellationReason('')
+      setSuccess('Prośba o anulowanie została wysłana do drugiej strony.')
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się wysłać prośby o anulowanie.')
     } finally {
       setBusyAction('')
     }
@@ -129,6 +198,8 @@ function JobDetailsPage() {
   )
   const canOpenDispute = isParticipant && DISPUTABLE_STATUSES.has(job.status)
   const canReview = isParticipant && job.status === 'DONE'
+  const canNegotiateCancellation = isParticipant && job.status === 'IN_PROGRESS'
+  const cancellationRequestedByMe = cancellation?.requestedById === user?.id
 
   return (
     <main className="job-details-page">
@@ -239,6 +310,70 @@ function JobDetailsPage() {
             </div>
           </div>
         </section>
+
+        {canNegotiateCancellation && (
+          <section className="job-details-panel job-details-panel--cancellation">
+            <span className="eyebrow">Anulowanie za zgodą stron</span>
+            <h2>{cancellation ? 'Oczekująca prośba' : 'Potrzebujesz anulować aktywne zlecenie?'}</h2>
+            {cancellation ? (
+              <>
+                <p>{cancellation.reason}</p>
+                <div className="job-details-cancellation__meta">
+                  <span>Wysłano {dateFormatter.format(new Date(cancellation.requestedAt))}</span>
+                  <span>{cancellationRequestedByMe ? 'Czeka na decyzję drugiej strony.' : 'Twoja decyzja jest wymagana.'}</span>
+                </div>
+                <div className="job-details-actions">
+                  {cancellationRequestedByMe ? (
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      disabled={Boolean(busyAction)}
+                      onClick={() => runCancellationAction('cancellation-withdraw', withdrawJobCancellation, 'Prośba o anulowanie została wycofana.')}
+                    >
+                      {busyAction === 'cancellation-withdraw' ? 'Wycofywanie…' : 'Wycofaj prośbę'}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className="button button--danger"
+                        type="button"
+                        disabled={Boolean(busyAction)}
+                        onClick={() => runCancellationAction('cancellation-approve', approveJobCancellation, 'Anulowanie zostało zaakceptowane. Środki wracają do zlecającego.')}
+                      >
+                        {busyAction === 'cancellation-approve' ? 'Anulowanie…' : 'Zaakceptuj anulowanie'}
+                      </button>
+                      <button
+                        className="button button--secondary"
+                        type="button"
+                        disabled={Boolean(busyAction)}
+                        onClick={() => runCancellationAction('cancellation-decline', declineJobCancellation, 'Prośba o anulowanie została odrzucona. Zlecenie pozostaje aktywne.')}
+                      >
+                        {busyAction === 'cancellation-decline' ? 'Odrzucanie…' : 'Odrzuć prośbę'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <form className="job-details-cancellation__form" onSubmit={handleRequestCancellation}>
+                <p>Anulowanie po przyjęciu zlecenia wymaga zgody drugiej strony. Do czasu akceptacji realizacja pozostaje aktywna.</p>
+                <label htmlFor="cancellation-reason">Powód</label>
+                <textarea
+                  id="cancellation-reason"
+                  maxLength={1000}
+                  rows={4}
+                  value={cancellationReason}
+                  onChange={(event) => setCancellationReason(event.target.value)}
+                  placeholder="Krótko wyjaśnij, dlaczego prosisz o anulowanie."
+                  disabled={Boolean(busyAction)}
+                />
+                <button className="button button--secondary" type="submit" disabled={Boolean(busyAction) || !cancellationReason.trim()}>
+                  {busyAction === 'cancellation-request' ? 'Wysyłanie…' : 'Poproś o anulowanie'}
+                </button>
+              </form>
+            )}
+          </section>
+        )}
 
         <section className="job-details-panel job-details-panel--timeline">
           <span className="eyebrow">Historia</span>
