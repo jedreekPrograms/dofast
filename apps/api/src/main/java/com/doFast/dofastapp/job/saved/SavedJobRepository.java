@@ -15,14 +15,23 @@ public interface SavedJobRepository extends JpaRepository<SavedJob, Long> {
     @Modifying
     long deleteByUser_IdAndJob_Id(Long userId, Long jobId);
 
-    @Query("""
-            select saved
-            from SavedJob saved
-            join fetch saved.job job
-            where saved.user.id = :userId
-              and job.status = :status
-            order by saved.createdAt desc
-            """)
+    @Query(
+            value = """
+                    select saved
+                    from SavedJob saved
+                    join fetch saved.job job
+                    where saved.user.id = :userId
+                      and job.status = :status
+                    order by saved.createdAt desc
+                    """,
+            countQuery = """
+                    select count(saved)
+                    from SavedJob saved
+                    join saved.job job
+                    where saved.user.id = :userId
+                      and job.status = :status
+                    """
+    )
     Page<SavedJob> findByUserAndJobStatus(
             @Param("userId") Long userId,
             @Param("status") JobStatus status,
