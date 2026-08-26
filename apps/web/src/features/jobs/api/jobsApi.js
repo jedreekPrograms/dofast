@@ -47,6 +47,10 @@ export function updateLiveTracking(id, payload) {
   })
 }
 
+export function confirmRouteCheckpoint(id) {
+  return apiRequest(`/jobs/${id}/tracking/checkpoint`, { method: 'POST' })
+}
+
 export function confirmJobPickup(id) {
   return apiRequest(`/jobs/${id}/tracking/pickup`, { method: 'POST' })
 }
