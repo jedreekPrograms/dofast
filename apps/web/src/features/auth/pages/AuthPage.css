@@ -27,11 +27,13 @@
 
 .auth-card__federated {
   display: grid;
+  gap: 10px;
   place-items: center;
   margin-top: 24px;
 }
 
-.google-sign-in {
+.google-sign-in,
+.apple-sign-in {
   width: min(400px, 100%);
   min-height: 44px;
 }
@@ -42,12 +44,19 @@
   width: 100%;
 }
 
-.google-sign-in--disabled {
+.google-sign-in--disabled,
+.apple-sign-in--disabled {
   opacity: 0.55;
   pointer-events: none;
 }
 
-.google-sign-in small {
+.apple-sign-in #appleid-signin {
+  width: 100%;
+  min-height: 44px;
+}
+
+.google-sign-in small,
+.apple-sign-in small {
   display: block;
   margin-top: 8px;
   color: #a13e3e;

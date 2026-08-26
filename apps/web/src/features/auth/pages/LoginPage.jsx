@@ -1,13 +1,18 @@
 import { useCallback, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import AppleSignInButton from '../components/AppleSignInButton.jsx'
 import GoogleSignInButton from '../components/GoogleSignInButton.jsx'
 import { useAuth } from '../AuthContext.js'
 import './AuthPage.css'
 
 const GOOGLE_ENABLED = Boolean(import.meta.env.VITE_GOOGLE_AUTH_CLIENT_ID?.trim())
+const APPLE_ENABLED = Boolean(
+  import.meta.env.VITE_APPLE_AUTH_CLIENT_ID?.trim()
+  && import.meta.env.VITE_APPLE_AUTH_REDIRECT_URI?.trim()
+)
 
 function LoginPage() {
-  const { login, loginWithGoogle } = useAuth()
+  const { login, loginWithApple, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
@@ -47,6 +52,22 @@ function LoginPage() {
     }
   }, [destination, loginWithGoogle, navigate])
 
+  const handleAppleAuthorization = useCallback(async (payload) => {
+    setSubmitting(true)
+    setError('')
+    try {
+      await loginWithApple(payload)
+      navigate(destination, { replace: true })
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się zalogować przez Apple.')
+      throw requestError
+    } finally {
+      setSubmitting(false)
+    }
+  }, [destination, loginWithApple, navigate])
+
+  const federatedEnabled = GOOGLE_ENABLED || APPLE_ENABLED
+
   return (
     <main className="auth-page">
       <section className="auth-card">
@@ -56,10 +77,11 @@ function LoginPage() {
           <p>Zarządzaj zleceniami, rozmawiaj z wykonawcami i kontroluj rozliczenia z jednego miejsca.</p>
         </div>
 
-        {GOOGLE_ENABLED && (
+        {federatedEnabled && (
           <>
             <div className="auth-card__federated">
-              <GoogleSignInButton onCredential={handleGoogleCredential} disabled={submitting} />
+              {GOOGLE_ENABLED && <GoogleSignInButton onCredential={handleGoogleCredential} disabled={submitting} />}
+              {APPLE_ENABLED && <AppleSignInButton onAuthorization={handleAppleAuthorization} disabled={submitting} />}
             </div>
             <div className="auth-card__divider"><span>lub</span></div>
           </>

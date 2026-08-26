@@ -7,6 +7,7 @@ import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.auth.GoogleIdentity;
 import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
+import com.doFast.dofastapp.user.auth.apple.AppleIdentity;
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
 import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
@@ -103,6 +104,35 @@ public class UserService {
         return createAuthResponse(user);
     }
 
+    @Transactional
+    public AuthResponse loginWithAppleIdentity(AppleIdentity appleIdentity) {
+        User linkedUser = authIdentityRepository
+                .findByProviderAndProviderSubject(AuthProvider.APPLE, appleIdentity.subject())
+                .map(UserAuthIdentity::getUser)
+                .orElse(null);
+
+        if (linkedUser != null) {
+            requireActive(linkedUser);
+            return createAuthResponse(linkedUser);
+        }
+
+        String email = normalizeOptionalEmail(appleIdentity.email());
+        if (email == null) {
+            throw new BusinessException(
+                    "Apple nie przekazało adresu email potrzebnego do utworzenia nowego konta doFast"
+            );
+        }
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException(
+                    "Konto doFast z tym adresem email już istnieje. Zaloguj się dotychczasową metodą, aby bezpiecznie połączyć Apple."
+            );
+        }
+
+        User user = createFederatedUser(email, normalizeAppleNickname(appleIdentity));
+        saveAuthIdentity(user, AuthProvider.APPLE, appleIdentity.subject(), email);
+        return createAuthResponse(user);
+    }
+
     public UserResponse getCurrentUser(User principal) {
         return toResponse(principal);
     }
@@ -175,9 +205,9 @@ public class UserService {
         String email = normalizeEmail(googleIdentity.email());
         User user = userRepository.findByEmailIgnoreCase(email)
                 .map(existing -> linkGoogleToExistingUser(existing, googleIdentity))
-                .orElseGet(() -> createGoogleUser(googleIdentity));
+                .orElseGet(() -> createFederatedUser(email, normalizeGoogleNickname(googleIdentity)));
 
-        saveGoogleIdentity(user, googleIdentity);
+        saveAuthIdentity(user, AuthProvider.GOOGLE, googleIdentity.subject(), email);
         return user;
     }
 
@@ -194,10 +224,10 @@ public class UserService {
         return user;
     }
 
-    private User createGoogleUser(GoogleIdentity googleIdentity) {
+    private User createFederatedUser(String email, String nickname) {
         User user = new User();
-        user.setEmail(normalizeEmail(googleIdentity.email()));
-        user.setNickname(normalizeGoogleNickname(googleIdentity));
+        user.setEmail(email);
+        user.setNickname(nickname);
         user.setPassword(passwordEncoder.encode(generateUnusablePassword()));
         user.setPasswordLoginEnabled(false);
         user.setRole(UserRole.USER);
@@ -208,12 +238,12 @@ public class UserService {
         return saved;
     }
 
-    private void saveGoogleIdentity(User user, GoogleIdentity googleIdentity) {
+    private void saveAuthIdentity(User user, AuthProvider provider, String subject, String providerEmail) {
         UserAuthIdentity identity = new UserAuthIdentity();
         identity.setUser(user);
-        identity.setProvider(AuthProvider.GOOGLE);
-        identity.setProviderSubject(googleIdentity.subject());
-        identity.setProviderEmail(normalizeEmail(googleIdentity.email()));
+        identity.setProvider(provider);
+        identity.setProviderSubject(subject);
+        identity.setProviderEmail(providerEmail);
         authIdentityRepository.save(identity);
     }
 
@@ -232,10 +262,24 @@ public class UserService {
         return value.trim().toLowerCase(Locale.ROOT);
     }
 
+    private String normalizeOptionalEmail(String value) {
+        if (value == null || value.isBlank()) return null;
+        return normalizeEmail(value);
+    }
+
     private String normalizeGoogleNickname(GoogleIdentity googleIdentity) {
-        String value = googleIdentity.displayName();
+        return normalizeFederatedNickname(googleIdentity.displayName(), googleIdentity.email());
+    }
+
+    private String normalizeAppleNickname(AppleIdentity appleIdentity) {
+        return normalizeFederatedNickname(appleIdentity.displayName(), appleIdentity.email());
+    }
+
+    private String normalizeFederatedNickname(String displayName, String email) {
+        String value = displayName;
         if (value == null || value.isBlank()) {
-            value = googleIdentity.email().split("@", 2)[0];
+            String normalizedEmail = normalizeOptionalEmail(email);
+            value = normalizedEmail == null ? "doFast user" : normalizedEmail.split("@", 2)[0];
         }
         String trimmed = value.trim();
         if (trimmed.length() < 3) {
