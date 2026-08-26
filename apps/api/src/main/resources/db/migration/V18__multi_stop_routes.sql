@@ -32,12 +32,7 @@ ALTER TABLE job_live_tracking
     ADD CONSTRAINT chk_live_tracking_phase
         CHECK (phase IN ('TO_ORIGIN', 'TO_STOP', 'TO_DESTINATION')),
     ADD CONSTRAINT chk_live_tracking_stop_sequence_range
-        CHECK (next_stop_sequence IS NULL OR next_stop_sequence BETWEEN 0 AND 9),
-    ADD CONSTRAINT chk_live_tracking_stop_sequence_state
-        CHECK (
-            (phase = 'TO_STOP' AND next_stop_sequence IS NOT NULL)
-            OR (phase <> 'TO_STOP' AND next_stop_sequence IS NULL)
-        );
+        CHECK (next_stop_sequence IS NULL OR next_stop_sequence BETWEEN 0 AND 9);
 
 CREATE OR REPLACE FUNCTION clear_live_tracking_when_job_pauses_or_closes()
 RETURNS TRIGGER AS $$
