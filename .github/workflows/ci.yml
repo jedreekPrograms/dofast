@@ -67,6 +67,9 @@ jobs:
           # The legacy end-to-end smoke intentionally teleports its synthetic courier between route phases.
           # Keep that scenario focused on lifecycle/privacy; the production speed guard has dedicated unit tests.
           sed -i 's/^TRACKING_MAX_IMPLIED_SPEED_METERS_PER_SECOND=.*/TRACKING_MAX_IMPLIED_SPEED_METERS_PER_SECOND=100000/' .env
+          # The smoke sends two valid GPS samples 100ms apart; keep it focused on the full tracking lifecycle.
+          # Production keeps the 1000ms default and the throttle contract is covered by focused backend tests.
+          sed -i 's/^TRACKING_MIN_UPDATE_INTERVAL_MILLIS=.*/TRACKING_MIN_UPDATE_INTERVAL_MILLIS=50/' .env
       - name: Build containers
         run: docker compose build api web
       - name: Start PostgreSQL and API
