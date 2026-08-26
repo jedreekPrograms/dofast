@@ -64,6 +64,9 @@ jobs:
           sed -i 's/^ADMIN_BOOTSTRAP_EMAIL=.*/ADMIN_BOOTSTRAP_EMAIL=admin-smoke@example.com/' .env
           sed -i 's/^ADMIN_BOOTSTRAP_PASSWORD=.*/ADMIN_BOOTSTRAP_PASSWORD=AdminSmokePass123!/' .env
           sed -i 's/^ADMIN_BOOTSTRAP_NICKNAME=.*/ADMIN_BOOTSTRAP_NICKNAME=Smoke Admin/' .env
+          # The legacy end-to-end smoke intentionally teleports its synthetic courier between route phases.
+          # Keep that scenario focused on lifecycle/privacy; the production speed guard has dedicated unit tests.
+          sed -i 's/^TRACKING_MAX_IMPLIED_SPEED_METERS_PER_SECOND=.*/TRACKING_MAX_IMPLIED_SPEED_METERS_PER_SECOND=100000/' .env
       - name: Build containers
         run: docker compose build api web
       - name: Start PostgreSQL and API
