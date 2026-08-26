@@ -38,6 +38,12 @@ export function getSavedJobStatus(id, options = {}) {
   return apiRequest(`/saved-jobs/${id}/status`, options)
 }
 
+export function getSavedJobStatuses(jobIds, options = {}) {
+  const params = new URLSearchParams()
+  jobIds.forEach((jobId) => params.append('jobIds', String(jobId)))
+  return apiRequest(`/saved-jobs/status?${params.toString()}`, options)
+}
+
 export function saveJob(id) {
   return apiRequest(`/saved-jobs/${id}`, { method: 'PUT' })
 }
