@@ -14,6 +14,7 @@ import com.doFast.dofastapp.job.dto.JobRoutePointResponse;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.entity.JobRouteStop;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
@@ -83,6 +84,12 @@ public class JobService {
         job.setDestinationLocation(quote.getDestination());
         job.setDestinationLabel(quote.getDestinationPublicLabel());
         job.setDestinationPrivateLabel(quote.getDestinationPrivateLabel());
+        quote.getStops().forEach(stop -> job.addRouteStop(
+                stop.getLocation(),
+                stop.getPublicLabel(),
+                stop.getPrivateLabel(),
+                stop.getPlaceId()
+        ));
         job.setRouteDistanceMeters(quote.getDistanceMeters());
         job.setRouteDurationSeconds(quote.getDurationSeconds());
         job.setRouteEncodedPolyline(quote.getEncodedPolyline());
@@ -140,6 +147,9 @@ public class JobService {
         }
         return new JobRouteResponse(
                 pointResponse(job.getLocation(), exactOriginLabel(job)),
+                job.getRouteStops().stream()
+                        .map(stop -> pointResponse(stop.getLocation(), exactStopLabel(stop)))
+                        .toList(),
                 pointResponse(job.getDestinationLocation(), exactDestinationLabel(job)),
                 job.getRouteDistanceMeters(),
                 job.getRouteDurationSeconds(),
@@ -237,6 +247,10 @@ public class JobService {
 
     private String exactDestinationLabel(Job job) {
         return job.getDestinationPrivateLabel() != null ? job.getDestinationPrivateLabel() : job.getDestinationLabel();
+    }
+
+    private String exactStopLabel(JobRouteStop stop) {
+        return stop.getPrivateLabel() != null ? stop.getPrivateLabel() : stop.getPublicLabel();
     }
 
     private JobRoutePointResponse pointResponse(Point point, String label) {
