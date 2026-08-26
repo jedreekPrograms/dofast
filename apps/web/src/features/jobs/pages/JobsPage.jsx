@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../../auth/AuthContext.js'
 import JobCard from '../components/JobCard.jsx'
-import { getJobCategories, getJobs } from '../api/jobsApi.js'
+import { getJobCategories, getJobs, getSavedJobStatuses } from '../api/jobsApi.js'
 import './JobsPage.css'
 
 const DEFAULT_FILTERS = {
@@ -13,10 +14,13 @@ const DEFAULT_FILTERS = {
 }
 
 function JobsPage() {
+  const { user } = useAuth()
+  const userId = user?.id ?? null
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS)
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [categories, setCategories] = useState([])
   const [result, setResult] = useState(null)
+  const [savedJobIds, setSavedJobIds] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -41,6 +45,21 @@ function JobsPage() {
 
       try {
         const data = await getJobs(filters, { signal: controller.signal })
+        let nextSavedJobIds = new Set()
+
+        if (userId && data.content?.length) {
+          try {
+            const statuses = await getSavedJobStatuses(
+              data.content.map((job) => job.id),
+              { signal: controller.signal },
+            )
+            nextSavedJobIds = new Set(statuses.savedJobIds ?? [])
+          } catch (requestError) {
+            if (requestError.name === 'AbortError') throw requestError
+          }
+        }
+
+        setSavedJobIds(nextSavedJobIds)
         setResult(data)
       } catch (requestError) {
         if (requestError.name !== 'AbortError') {
@@ -55,7 +74,7 @@ function JobsPage() {
 
     loadJobs()
     return () => controller.abort()
-  }, [filters])
+  }, [filters, userId])
 
   function updateDraft(event) {
     const { name, value } = event.target
@@ -74,6 +93,15 @@ function JobsPage() {
 
   function changePage(nextPage) {
     setFilters((current) => ({ ...current, page: nextPage }))
+  }
+
+  function updateSavedState(jobId, saved) {
+    setSavedJobIds((current) => {
+      const next = new Set(current)
+      if (saved) next.add(jobId)
+      else next.delete(jobId)
+      return next
+    })
   }
 
   const jobs = result?.content ?? []
@@ -164,7 +192,14 @@ function JobsPage() {
 
         {!loading && !error && jobs.length > 0 && (
           <div className="jobs-grid">
-            {jobs.map((job) => <JobCard key={job.id} job={job} />)}
+            {jobs.map((job) => (
+              <JobCard
+                key={job.id}
+                job={job}
+                initialSaved={savedJobIds.has(job.id)}
+                onSavedChange={updateSavedState}
+              />
+            ))}
           </div>
         )}
 
