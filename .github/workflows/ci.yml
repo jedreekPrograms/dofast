@@ -92,6 +92,8 @@ jobs:
         run: bash .github/scripts/runtime-smoke.sh
       - name: Verify multi-stop routing and tracking
         run: bash .github/scripts/multi-stop-routing-smoke.sh
+      - name: Verify on-site jobs and exact-location privacy
+        run: bash .github/scripts/on-site-job-smoke.sh
       - name: Start web gateway
         run: docker compose up -d --no-build web
       - name: Verify web container and API gateway
