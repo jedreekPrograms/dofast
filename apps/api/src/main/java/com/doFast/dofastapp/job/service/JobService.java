@@ -6,6 +6,7 @@ import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
+import com.doFast.dofastapp.job.category.FulfillmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.dto.JobRequest;
@@ -17,8 +18,10 @@ import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.entity.JobRouteStop;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.dto.LocationResponse;
+import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
+import com.doFast.dofastapp.location.service.GeoPointFactory;
 import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
@@ -70,33 +73,14 @@ public class JobService {
             throw new BusinessException("Wybierz konkretną podkategorię usługi");
         }
 
-        RouteQuote quote = routeQuoteService.consume(request.getRouteQuoteId(), user);
-
         Job job = new Job();
         job.setTitle(request.getTitle().trim());
         job.setDescription(request.getDescription().trim());
         job.setPrice(request.getPrice());
         job.setStatus(JobStatus.OPEN);
         job.setCategory(category);
-        job.setLocation(quote.getOrigin());
-        job.setLocationLabel(quote.getOriginPublicLabel());
-        job.setLocationPrivateLabel(quote.getOriginPrivateLabel());
-        job.setDestinationLocation(quote.getDestination());
-        job.setDestinationLabel(quote.getDestinationPublicLabel());
-        job.setDestinationPrivateLabel(quote.getDestinationPrivateLabel());
-        quote.getStops().forEach(stop -> job.addRouteStop(
-                stop.getLocation(),
-                stop.getPublicLabel(),
-                stop.getPrivateLabel(),
-                stop.getPlaceId()
-        ));
-        job.setRouteDistanceMeters(quote.getDistanceMeters());
-        job.setRouteDurationSeconds(quote.getDurationSeconds());
-        job.setRouteEncodedPolyline(quote.getEncodedPolyline());
-        job.setRouteProvider(quote.getProvider());
-        job.setRouteComputedAt(quote.getCreatedAt());
-        job.setRouteQuote(quote);
         job.setCreatedBy(user);
+        configureFulfillment(job, category, request, user);
 
         Job saved = jobRepository.save(job);
         transactionService.holdMoney(saved);
@@ -158,7 +142,7 @@ public class JobService {
 
     public LocationResponse getExactLocation(Long jobId, User currentUser) {
         Job job = getJobForRead(jobId);
-        assertCanAccessExactRoute(job, currentUser);
+        assertCanAccessExactLocation(job, currentUser);
         Point point = job.getLocation();
         if (point == null) {
             throw new ResourceNotFoundException("Dokładna lokalizacja zlecenia nie jest dostępna");
@@ -168,7 +152,7 @@ public class JobService {
 
     public JobRouteResponse getExactRoute(Long jobId, User currentUser) {
         Job job = getJobForRead(jobId);
-        assertCanAccessExactRoute(job, currentUser);
+        assertCanAccessExactLocation(job, currentUser);
         if (job.getLocation() == null || job.getDestinationLocation() == null) {
             throw new ResourceNotFoundException("Dokładna trasa zlecenia nie jest dostępna");
         }
@@ -193,7 +177,9 @@ public class JobService {
         if (sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Nie możesz przyjąć własnego zlecenia");
         job.assignTo(currentUser, LocalDateTime.now());
         Job saved = jobRepository.save(job);
-        liveTrackingService.initializeForAcceptedJob(saved);
+        if (usesLiveTracking(saved)) {
+            liveTrackingService.initializeForAcceptedJob(saved);
+        }
         notificationService.notify(saved.getCreatedBy(), NotificationType.JOB_ACCEPTED, "Zlecenie zostało przyjęte",
                 currentUser.getNickname() + " przyjął zlecenie „" + saved.getTitle() + "”", saved, null);
         return toResponse(saved);
@@ -245,6 +231,65 @@ public class JobService {
         return toResponse(saved);
     }
 
+    private void configureFulfillment(Job job, JobCategory category, JobRequest request, User user) {
+        if (category.getFulfillmentMode() == FulfillmentMode.ON_SITE) {
+            configureOnSiteJob(job, request);
+            return;
+        }
+        configurePointToPointJob(job, request, user);
+    }
+
+    private void configureOnSiteJob(Job job, JobRequest request) {
+        if (request.getRouteQuoteId() != null) {
+            throw new BusinessException("Zlecenie wykonywane na miejscu nie może korzystać z trasy A → B");
+        }
+        RoutePointRequest location = request.getLocation();
+        if (location == null) {
+            throw new BusinessException("Wskaż miejsce wykonania usługi");
+        }
+        String privateLabel = normalizeOptional(location.privateLabel());
+        if (privateLabel == null) {
+            throw new BusinessException("Podaj dokładny adres wykonania usługi");
+        }
+
+        job.setLocation(GeoPointFactory.from(location.latitude(), location.longitude()));
+        job.setLocationLabel(location.publicLabel().trim());
+        job.setLocationPrivateLabel(privateLabel);
+    }
+
+    private void configurePointToPointJob(Job job, JobRequest request, User user) {
+        if (request.getLocation() != null) {
+            throw new BusinessException("Zlecenie transportowe powinno korzystać z wyznaczonej trasy A → B");
+        }
+        if (request.getRouteQuoteId() == null) {
+            throw new BusinessException("Wyznacz trasę przed opublikowaniem zlecenia");
+        }
+
+        RouteQuote quote = routeQuoteService.consume(request.getRouteQuoteId(), user);
+        job.setLocation(quote.getOrigin());
+        job.setLocationLabel(quote.getOriginPublicLabel());
+        job.setLocationPrivateLabel(quote.getOriginPrivateLabel());
+        job.setDestinationLocation(quote.getDestination());
+        job.setDestinationLabel(quote.getDestinationPublicLabel());
+        job.setDestinationPrivateLabel(quote.getDestinationPrivateLabel());
+        quote.getStops().forEach(stop -> job.addRouteStop(
+                stop.getLocation(),
+                stop.getPublicLabel(),
+                stop.getPrivateLabel(),
+                stop.getPlaceId()
+        ));
+        job.setRouteDistanceMeters(quote.getDistanceMeters());
+        job.setRouteDurationSeconds(quote.getDurationSeconds());
+        job.setRouteEncodedPolyline(quote.getEncodedPolyline());
+        job.setRouteProvider(quote.getProvider());
+        job.setRouteComputedAt(quote.getCreatedAt());
+        job.setRouteQuote(quote);
+    }
+
+    private boolean usesLiveTracking(Job job) {
+        return job.getCategory() != null && job.getCategory().getFulfillmentMode() == FulfillmentMode.POINT_TO_POINT;
+    }
+
     private Job getJobForRead(Long jobId) {
         return jobRepository.findById(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
@@ -253,13 +298,13 @@ public class JobService {
         return jobRepository.findByIdForUpdate(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
-    private void assertCanAccessExactRoute(Job job, User currentUser) {
-        if (!canAccessExactRoute(job, currentUser)) {
-            throw new ForbiddenOperationException("Dokładna trasa jest dostępna tylko dla stron aktywnego zlecenia");
+    private void assertCanAccessExactLocation(Job job, User currentUser) {
+        if (!canAccessExactLocation(job, currentUser)) {
+            throw new ForbiddenOperationException("Dokładna lokalizacja jest dostępna tylko dla stron aktywnego zlecenia");
         }
     }
 
-    private boolean canAccessExactRoute(Job job, User currentUser) {
+    private boolean canAccessExactLocation(Job job, User currentUser) {
         if (sameUser(job.getCreatedBy(), currentUser)) return true;
         boolean assignedWorker = sameUser(job.getTakenBy(), currentUser);
         boolean activeJob = job.getStatus() == JobStatus.IN_PROGRESS
@@ -286,6 +331,12 @@ public class JobService {
 
     private boolean sameUser(User first, User second) {
         return first != null && second != null && first.getId() != null && first.getId().equals(second.getId());
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String normalizeSearchQuery(String value) {
