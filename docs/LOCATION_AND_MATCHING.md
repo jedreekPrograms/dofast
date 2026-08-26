@@ -91,7 +91,9 @@ The worker is the only user allowed to write GPS updates. The requester and assi
 
 GPS and paid road ETA do not have the same cadence.
 
-The web client throttles GPS uploads to roughly five seconds. The backend refreshes the route-provider ETA only when one of these is true:
+The web client throttles GPS uploads to roughly five seconds. The API independently enforces `TRACKING_MIN_UPDATE_INTERVAL_MILLIS` (default 1000 ms) against the previous server receive time stored in the locked tracking row. This prevents modified or malicious clients from flooding the position endpoint or multiplying ETA work while keeping the normal five-second browser cadence well above the server floor. The check runs in the same transaction and row lock as the GPS write, so concurrent requests cannot bypass it. Set the value to `0` only in controlled environments that intentionally need the guard disabled.
+
+The backend refreshes the route-provider ETA only when one of these is true:
 
 - there is no current ETA;
 - `TRACKING_ETA_REFRESH_SECONDS` elapsed (default 30 s);
@@ -117,6 +119,7 @@ This is deliberately a coarse integrity guard rather than fraud detection. It to
 6. Resuming a disputed job never resurrects the old coordinate; a new worker GPS update is required.
 7. Out-of-order device updates are rejected so an old coordinate cannot move the courier backwards in time.
 8. Obviously implausible position jumps are rejected after accounting for GPS accuracy, protecting map/ETA integrity without building a location history.
+9. GPS write cadence is bounded on the server using persisted receive time and a locked tracking row; client-side throttling is never treated as a security boundary.
 
 ## Browser and native-app limitation
 
@@ -139,4 +142,4 @@ The Docker runtime smoke covers the real PostgreSQL/PostGIS stack and verifies:
 - opening a dispute clears exact live GPS in PostgreSQL;
 - escrow/chat/dispute/refund behaviour still works on the same routed job.
 
-Unit coverage additionally verifies first-sample acceptance, plausible movement, GPS-accuracy allowance and rejection of impossible jumps.
+Unit coverage additionally verifies first-sample acceptance, plausible movement, GPS-accuracy allowance, rejection of impossible jumps, and the server-side minimum GPS update interval boundary.
