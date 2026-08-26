@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import JobCard from '../components/JobCard.jsx'
-import { getJobs } from '../api/jobsApi.js'
+import { getJobCategories, getJobs } from '../api/jobsApi.js'
 import './JobsPage.css'
 
 const DEFAULT_FILTERS = {
   query: '',
+  category: '',
   minPrice: '',
   maxPrice: '',
   page: 0,
@@ -14,9 +15,22 @@ const DEFAULT_FILTERS = {
 function JobsPage() {
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS)
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [categories, setCategories] = useState([])
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    getJobCategories({ signal: controller.signal })
+      .then(setCategories)
+      .catch((requestError) => {
+        if (requestError.name !== 'AbortError') setCategories([])
+      })
+
+    return () => controller.abort()
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -70,7 +84,7 @@ function JobsPage() {
         <span className="jobs-hero__badge">Zlecenia lokalne</span>
         <h1>Znajdź zlecenie blisko siebie</h1>
         <p>
-          Przeglądaj aktualne zadania, filtruj po cenie i szukaj po nazwie, opisie lub obszarze.
+          Przeglądaj aktualne zadania i filtruj je po kategorii, cenie, nazwie, opisie lub obszarze.
         </p>
       </header>
 
@@ -85,6 +99,21 @@ function JobsPage() {
             placeholder="np. zakupy, paczka, Plac Grunwaldzki"
             maxLength={100}
           />
+        </label>
+
+        <label className="jobs-filters__category">
+          <span>Kategoria</span>
+          <select name="category" value={draftFilters.category} onChange={updateDraft}>
+            <option value="">Wszystkie kategorie</option>
+            {categories.map((category) => (
+              <optgroup key={category.id} label={category.name}>
+                <option value={category.slug}>Wszystkie: {category.name}</option>
+                {category.children.map((child) => (
+                  <option key={child.id} value={child.slug}>{child.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </label>
 
         <label>
