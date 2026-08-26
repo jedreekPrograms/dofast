@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.dto;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.job.category.FulfillmentMode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -11,6 +12,10 @@ public record JobResponse(
         String description,
         BigDecimal price,
         JobStatus status,
+        Long categoryId,
+        String categorySlug,
+        String categoryName,
+        FulfillmentMode fulfillmentMode,
         String locationLabel,
         String destinationLabel,
         Integer routeDistanceMeters,
