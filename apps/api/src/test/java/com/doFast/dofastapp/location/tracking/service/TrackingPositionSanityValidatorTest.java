@@ -14,11 +14,32 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TrackingPositionSanityValidatorTest {
 
-    private final TrackingPositionSanityValidator validator = new TrackingPositionSanityValidator(80.0);
+    private final TrackingPositionSanityValidator validator = new TrackingPositionSanityValidator(80.0, 150.0);
 
     @Test
-    void acceptsFirstPositionWithoutPreviousSample() {
+    void acceptsFirstPositionWithUsableAccuracy() {
         LiveLocationUpdateRequest request = request(51.1079, 17.0385, 8.0, Instant.parse("2026-08-26T03:00:00Z"));
+
+        assertDoesNotThrow(() -> validator.validate(null, null, null, request));
+    }
+
+    @Test
+    void rejectsPositionWithoutReportedAccuracy() {
+        LiveLocationUpdateRequest request = request(51.1079, 17.0385, null, Instant.parse("2026-08-26T03:00:00Z"));
+
+        assertThrows(ConflictException.class, () -> validator.validate(null, null, null, request));
+    }
+
+    @Test
+    void rejectsPositionWithAccuracyOutsideConfiguredQualityGate() {
+        LiveLocationUpdateRequest request = request(51.1079, 17.0385, 151.0, Instant.parse("2026-08-26T03:00:00Z"));
+
+        assertThrows(ConflictException.class, () -> validator.validate(null, null, null, request));
+    }
+
+    @Test
+    void acceptsPositionAtConfiguredAccuracyBoundary() {
+        LiveLocationUpdateRequest request = request(51.1079, 17.0385, 150.0, Instant.parse("2026-08-26T03:00:00Z"));
 
         assertDoesNotThrow(() -> validator.validate(null, null, null, request));
     }
@@ -53,7 +74,12 @@ class TrackingPositionSanityValidatorTest {
         assertDoesNotThrow(() -> validator.validate(previous, 80.0, previousCapturedAt, request));
     }
 
-    private LiveLocationUpdateRequest request(double latitude, double longitude, double accuracy, Instant capturedAt) {
+    @Test
+    void rejectsNonPositiveAccuracyConfiguration() {
+        assertThrows(IllegalArgumentException.class, () -> new TrackingPositionSanityValidator(80.0, 0.0));
+    }
+
+    private LiveLocationUpdateRequest request(double latitude, double longitude, Double accuracy, Instant capturedAt) {
         return new LiveLocationUpdateRequest(
                 BigDecimal.valueOf(latitude),
                 BigDecimal.valueOf(longitude),
