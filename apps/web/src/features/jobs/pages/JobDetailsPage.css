@@ -198,6 +198,62 @@
   font-weight: 750;
 }
 
+.job-details-panel--cancellation {
+  grid-column: 1 / -1;
+  border-color: #eadfce;
+  background: #fffdf9;
+}
+
+.job-details-cancellation__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 12px;
+  color: #777068;
+  font-size: 0.86rem;
+}
+
+.job-details-cancellation__form {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.job-details-cancellation__form p {
+  margin: 0 0 4px;
+  color: #626975;
+  line-height: 1.55;
+}
+
+.job-details-cancellation__form label {
+  color: #353944;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.job-details-cancellation__form textarea {
+  width: 100%;
+  min-height: 104px;
+  resize: vertical;
+  border: 1px solid #d9dde3;
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: #fff;
+  color: #252832;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.job-details-cancellation__form textarea:focus {
+  border-color: #858c97;
+  outline: 2px solid #e8eaee;
+  outline-offset: 1px;
+}
+
+.job-details-cancellation__form .button {
+  width: fit-content;
+}
+
 .job-details-panel--timeline {
   grid-column: 1 / -1;
 }
@@ -269,6 +325,7 @@
     grid-template-columns: 1fr;
   }
 
+  .job-details-panel--cancellation,
   .job-details-panel--timeline {
     grid-column: auto;
   }
@@ -287,7 +344,8 @@
     transform: rotate(90deg);
   }
 
-  .job-details-actions .button {
+  .job-details-actions .button,
+  .job-details-cancellation__form .button {
     width: 100%;
   }
 }
