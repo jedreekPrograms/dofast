@@ -16,6 +16,7 @@ function RouteMapPicker({
   onRemoveStop,
   disabled = false,
 }) {
+  const stopCount = stops.length
   const mapElementRef = useRef(null)
   const originAutocompleteRef = useRef(null)
   const destinationAutocompleteRef = useRef(null)
@@ -40,20 +41,12 @@ function RouteMapPicker({
     disabledRef.current = disabled
   }, [disabled])
 
-  useEffect(() => {
-    const index = stopIndex(activePoint)
-    if (index !== null && index >= stops.length) {
-      activePointRef.current = 'destination'
-      setActivePoint('destination')
-    }
-  }, [activePoint, stops.length])
-
   const choosePoint = useCallback((kind, point) => {
     onPointChange(kind, point)
-    const next = nextPointKind(kind, stops.length)
+    const next = nextPointKind(kind, stopCount)
     activePointRef.current = next
     setActivePoint(next)
-  }, [onPointChange, stops.length])
+  }, [onPointChange, stopCount])
 
   useEffect(() => {
     if (!hasGoogleMapsKey()) return undefined
@@ -89,7 +82,7 @@ function RouteMapPicker({
           content: new PinElement({ glyphText: 'A', scale: 1.15 }),
           title: 'Punkt A',
         })
-        stopMarkerRefs.current = stops.map((_, index) => new AdvancedMarkerElement({
+        stopMarkerRefs.current = Array.from({ length: stopCount }, (_, index) => new AdvancedMarkerElement({
           map,
           content: new PinElement({ glyphText: String(index + 1), scale: 1.05 }),
           title: `Przystanek ${index + 1}`,
@@ -136,9 +129,9 @@ function RouteMapPicker({
         }
 
         mountAutocomplete(originAutocompleteRef.current, 'origin', 'Punkt A — skąd zacząć?')
-        stops.forEach((_, index) => {
+        for (let index = 0; index < stopCount; index += 1) {
           mountAutocomplete(stopAutocompleteRefs.current[index], `stop-${index}`, `Przystanek ${index + 1} — gdzie po drodze?`)
-        })
+        }
         mountAutocomplete(destinationAutocompleteRef.current, 'destination', 'Punkt B — gdzie zakończyć?')
 
         const mapClickListener = map.addListener('click', async (event) => {
@@ -185,7 +178,7 @@ function RouteMapPicker({
       stopMarkerRefs.current = []
       mapRef.current = null
     }
-  }, [choosePoint, stops.length])
+  }, [choosePoint, stopCount])
 
   useEffect(() => {
     const map = mapRef.current
@@ -261,6 +254,11 @@ function RouteMapPicker({
 
   function removeStop(index, event) {
     event.stopPropagation()
+    const activeStopIndex = stopIndex(activePointRef.current)
+    if (activeStopIndex !== null && activeStopIndex >= index) {
+      activePointRef.current = 'destination'
+      setActivePoint('destination')
+    }
     onRemoveStop?.(index)
   }
 
@@ -313,14 +311,14 @@ function RouteMapPicker({
           </div>
         ))}
 
-        {stops.length < MAX_STOPS && (
+        {stopCount < MAX_STOPS && (
           <button
             type="button"
             className="button button--secondary route-picker__add-stop"
             onClick={onAddStop}
             disabled={disabled}
           >
-            + Dodaj przystanek {stops.length > 0 ? `(${stops.length}/${MAX_STOPS})` : ''}
+            + Dodaj przystanek {stopCount > 0 ? `(${stopCount}/${MAX_STOPS})` : ''}
           </button>
         )}
 
