@@ -18,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,16 +45,17 @@ class RouteQuoteModeComparisonTest {
     }
 
     @Test
-    void comparisonReusesStoredDriveEstimateAndComputesOnlyNonDrivingModes() {
+    void comparisonReusesStoredDriveEstimateAndComputesOnlyNonDrivingModesThroughStops() {
         UUID quoteId = UUID.randomUUID();
         RouteQuote quote = quote(quoteId);
         RouteCoordinate origin = new RouteCoordinate(51.1128, 17.0601);
+        List<RouteCoordinate> stops = List.of(new RouteCoordinate(51.1110, 17.0500));
         RouteCoordinate destination = new RouteCoordinate(51.1090, 17.0320);
 
         when(routeQuoteRepository.findById(quoteId)).thenReturn(Optional.of(quote));
-        when(routeProvider.estimate(origin, destination, RouteTravelMode.BICYCLE))
+        when(routeProvider.estimate(origin, stops, destination, RouteTravelMode.BICYCLE))
                 .thenReturn(new RouteProviderResult(3_900, 900, null, "GOOGLE_ROUTES"));
-        when(routeProvider.estimate(origin, destination, RouteTravelMode.WALK))
+        when(routeProvider.estimate(origin, stops, destination, RouteTravelMode.WALK))
                 .thenReturn(new RouteProviderResult(3_700, 2_800, null, "GOOGLE_ROUTES"));
 
         RouteModeComparisonResponse response = service.getModeComparison(quoteId, user);
@@ -63,9 +65,9 @@ class RouteQuoteModeComparisonTest {
         assertEquals(4_200, response.estimates().get(0).distanceMeters());
         assertEquals(600, response.estimates().get(0).durationSeconds());
         assertTrue(response.estimates().stream().allMatch(estimate -> estimate.available()));
-        verify(routeProvider, never()).estimate(origin, destination, RouteTravelMode.DRIVE);
-        verify(routeProvider).estimate(origin, destination, RouteTravelMode.BICYCLE);
-        verify(routeProvider).estimate(origin, destination, RouteTravelMode.WALK);
+        verify(routeProvider, never()).estimate(origin, stops, destination, RouteTravelMode.DRIVE);
+        verify(routeProvider).estimate(origin, stops, destination, RouteTravelMode.BICYCLE);
+        verify(routeProvider).estimate(origin, stops, destination, RouteTravelMode.WALK);
     }
 
     private RouteQuote quote(UUID id) {
@@ -85,6 +87,12 @@ class RouteQuoteModeComparisonTest {
                 new RouteProviderResult(4_200, 600, "encoded", "GOOGLE_ROUTES"),
                 now,
                 now.plusMinutes(15)
+        );
+        quote.addStop(
+                GeoPointFactory.from(new BigDecimal("51.1110"), new BigDecimal("17.0500")),
+                "Wrocław, Centrum",
+                "Stop 1",
+                "stop-place"
         );
         return quote;
     }
