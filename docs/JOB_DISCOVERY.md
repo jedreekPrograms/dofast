@@ -2,7 +2,7 @@
 
 Carlisle introduces the first scalable public discovery contract for open doFast jobs.
 
-## Public endpoint
+## Public endpoints
 
 `GET /jobs`
 
@@ -17,17 +17,28 @@ Supported query parameters:
 
 Results are ordered deterministically by newest creation time and then by descending job id.
 
+`GET /jobs/nearby`
+
+Supported query parameters:
+
+- `latitude` / `longitude` — required search origin;
+- `radiusMeters` — search radius from 100 m to 50 km, default 5 km;
+- `category` — optional active category or subcategory slug, using the same semantics as `GET /jobs`;
+- `limit` — maximum number of matches from 1 to 100, default 50.
+
+Nearby results remain ordered primarily by geospatial distance and expose only public location labels.
+
 ## Category filtering
 
 The public category catalog from `GET /job-categories` is the source of filter values. Discovery accepts stable slugs rather than database ids so links can remain readable and portable.
 
-Filtering by a leaf slug returns that exact subcategory. Filtering by a parent slug returns jobs from all of its direct selectable children, which lets a user browse a broad area such as transport, home services or shopping without manually selecting every leaf.
+Filtering by a leaf slug returns that exact subcategory. Filtering by a parent slug returns jobs from all of its direct selectable children, which lets a user browse a broad area such as transport, home services or shopping without manually selecting every leaf. The same rule is applied consistently to paginated and nearby discovery.
 
-The endpoint only accepts lowercase URL-safe slugs (`a-z`, digits and hyphens). Unknown but well-formed slugs safely return an empty result set rather than broadening the search.
+The endpoints only accept lowercase URL-safe slugs (`a-z`, digits and hyphens). Unknown but well-formed slugs safely return an empty result set rather than broadening the search.
 
 ## Response envelope
 
-The API deliberately returns an application-owned pagination DTO instead of serializing Spring Data's `Page` implementation directly.
+The paginated API deliberately returns an application-owned pagination DTO instead of serializing Spring Data's `Page` implementation directly.
 
 ```json
 {
@@ -54,7 +65,7 @@ Text search is case-insensitive and matches:
 
 Only `OPEN` jobs participate in public discovery.
 
-Exact coordinates and private location labels are never part of the discovery response.
+Exact coordinates and private location labels are never part of discovery responses. Nearby category filtering is executed server-side against persisted category relationships and does not alter the existing PostGIS privacy boundary.
 
 ## Database indexing
 
@@ -67,7 +78,7 @@ Flyway migration `V4__job_discovery_indexes.sql` enables PostgreSQL `pg_trgm` an
 
 The indexes are designed around the actual public search workload instead of indexing historical completed/cancelled jobs unnecessarily.
 
-Category filtering uses the existing indexed foreign key from jobs to the category catalog and the unique category slug constraint introduced with the catalog; no additional Flyway migration is required for this slice.
+Category filtering uses the existing indexed foreign key from jobs to the category catalog and the unique category slug constraint introduced with the catalog; no additional Flyway migration is required for this slice. Nearby filtering combines those relationships with the existing PostGIS radius predicate.
 
 ## Validation
 
@@ -79,13 +90,14 @@ The API rejects:
 - page sizes outside `1..50`;
 - overlong text/category queries;
 - malformed category slugs;
+- invalid latitude/longitude, radius or nearby limit;
 - malformed request-parameter types.
 
 Validation errors use the shared API error contract and return HTTP 400.
 
 ## Web client
 
-The jobs page consumes the same paginated endpoint and provides:
+The jobs page consumes the paginated endpoint and provides:
 
 - text search;
 - hierarchical category/subcategory selection from the public catalog;
@@ -102,7 +114,7 @@ Carlisle is an internal technical milestone name and is intentionally not expose
 
 CI verifies:
 
-- Maven unit tests, including category-filter routing and normalization;
+- Maven unit tests, including paginated and nearby category-filter routing and normalization;
 - frontend lint/build and production dependency audit;
 - PostGIS and `pg_trgm` availability;
 - Flyway migrations;
@@ -111,5 +123,5 @@ CI verifies:
 - text, category and price filtering contracts;
 - invalid price-range rejection;
 - privacy of exact/private location data;
-- nearby matching;
+- nearby matching with leaf and parent category filters against PostgreSQL/PostGIS;
 - Nginx API gateway behavior.
