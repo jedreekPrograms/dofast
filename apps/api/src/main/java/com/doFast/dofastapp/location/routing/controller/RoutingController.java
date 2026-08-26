@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.location.routing.controller;
 
+import com.doFast.dofastapp.location.routing.dto.RouteModeComparisonResponse;
 import com.doFast.dofastapp.location.routing.dto.RouteQuoteRequest;
 import com.doFast.dofastapp.location.routing.dto.RouteQuoteResponse;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
@@ -39,5 +40,13 @@ public class RoutingController {
     @GetMapping("/quotes/{id}")
     public RouteQuoteResponse getQuote(@PathVariable UUID id, @AuthenticationPrincipal User user) {
         return routeQuoteService.getQuote(id, user);
+    }
+
+    @GetMapping("/quotes/{id}/mode-estimates")
+    public RouteModeComparisonResponse getModeComparison(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal User user
+    ) {
+        return routeQuoteService.getModeComparison(id, user);
     }
 }

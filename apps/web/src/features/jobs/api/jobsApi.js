@@ -28,6 +28,10 @@ export function createRouteQuote(payload) {
   return apiRequest('/routing/quotes', { method: 'POST', body: JSON.stringify(payload) })
 }
 
+export function getRouteModeEstimates(quoteId, options = {}) {
+  return apiRequest(`/routing/quotes/${quoteId}/mode-estimates`, options)
+}
+
 export function getJobRoute(id, options = {}) {
   return apiRequest(`/jobs/${id}/route`, options)
 }

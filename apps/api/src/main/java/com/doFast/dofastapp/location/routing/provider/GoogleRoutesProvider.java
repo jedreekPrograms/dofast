@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,20 +34,25 @@ public class GoogleRoutesProvider implements RouteProvider {
     }
 
     @Override
-    public RouteProviderResult estimate(RouteCoordinate origin, RouteCoordinate destination) {
+    public RouteProviderResult estimate(
+            RouteCoordinate origin,
+            RouteCoordinate destination,
+            RouteTravelMode travelMode
+    ) {
         if (!StringUtils.hasText(apiKey)) {
             throw new RoutingProviderException("Google Routes API key is not configured");
         }
 
-        Map<String, Object> body = Map.of(
-                "origin", waypoint(origin),
-                "destination", waypoint(destination),
-                "travelMode", "DRIVE",
-                "routingPreference", "TRAFFIC_AWARE",
-                "computeAlternativeRoutes", false,
-                "languageCode", "pl-PL",
-                "units", "METRIC"
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("origin", waypoint(origin));
+        body.put("destination", waypoint(destination));
+        body.put("travelMode", travelMode.name());
+        body.put("computeAlternativeRoutes", false);
+        body.put("languageCode", "pl-PL");
+        body.put("units", "METRIC");
+        if (travelMode == RouteTravelMode.DRIVE) {
+            body.put("routingPreference", "TRAFFIC_AWARE");
+        }
 
         try {
             GoogleRoutesResponse response = restClient.post()

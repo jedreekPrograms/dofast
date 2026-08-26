@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import RouteMapPicker from '../components/RouteMapPicker.jsx'
-import { createJob, createRouteQuote, getJobCategories } from '../api/jobsApi.js'
+import { createJob, createRouteQuote, getJobCategories, getRouteModeEstimates } from '../api/jobsApi.js'
 import './CreateJobPage.css'
 
 const EMPTY_FORM = { title: '', description: '', price: '', categoryId: '' }
@@ -14,6 +14,8 @@ function CreateJobPage() {
   const [origin, setOrigin] = useState(null)
   const [destination, setDestination] = useState(null)
   const [routeQuote, setRouteQuote] = useState(null)
+  const [modeComparison, setModeComparison] = useState(null)
+  const [modesLoading, setModesLoading] = useState(false)
   const [routing, setRouting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -44,6 +46,7 @@ function CreateJobPage() {
     if (kind === 'origin') setOrigin(point)
     else setDestination(point)
     setRouteQuote(null)
+    setModeComparison(null)
     setRouteError('')
   }, [])
 
@@ -57,6 +60,7 @@ function CreateJobPage() {
     const timer = window.setTimeout(async () => {
       setRouting(true)
       setRouteError('')
+      setModeComparison(null)
       try {
         const quote = await createRouteQuote({
           origin: normalizePoint(origin),
@@ -78,6 +82,24 @@ function CreateJobPage() {
       window.clearTimeout(timer)
     }
   }, [destination, origin])
+
+  useEffect(() => {
+    if (!routeQuote?.id) {
+      setModesLoading(false)
+      setModeComparison(null)
+      return undefined
+    }
+
+    const controller = new AbortController()
+    setModesLoading(true)
+    getRouteModeEstimates(routeQuote.id, { signal: controller.signal })
+      .then(setModeComparison)
+      .catch((requestError) => {
+        if (requestError.name !== 'AbortError') setModeComparison(null)
+      })
+      .finally(() => setModesLoading(false))
+    return () => controller.abort()
+  }, [routeQuote?.id])
 
   function updateField(event) {
     const { name, value } = event.target
@@ -112,6 +134,13 @@ function CreateJobPage() {
       setSubmitting(false)
     }
   }
+
+  const modeEstimates = modeComparison?.estimates || (routeQuote ? [{
+    mode: 'DRIVE',
+    distanceMeters: routeQuote.distanceMeters,
+    durationSeconds: routeQuote.durationSeconds,
+    available: true,
+  }] : [])
 
   return (
     <main className="create-job-page">
@@ -151,8 +180,25 @@ function CreateJobPage() {
           {routing && <span>Wyznaczanie trasy i czasu dojazdu…</span>}
           {!routing && routeQuote && (
             <>
-              <strong>{formatDistance(routeQuote.distanceMeters)} · około {formatDuration(routeQuote.durationSeconds)}</strong>
-              <span>{routeQuote.origin.publicLabel} → {routeQuote.destination.publicLabel}</span>
+              <strong>{routeQuote.origin.publicLabel} → {routeQuote.destination.publicLabel}</strong>
+              <div className="route-mode-grid">
+                {modeEstimates.map((estimate) => (
+                  <div className="route-mode-card" key={estimate.mode}>
+                    <span>{modeLabel(estimate.mode)}</span>
+                    {estimate.available ? (
+                      <strong>{formatDuration(estimate.durationSeconds)} · {formatDistance(estimate.distanceMeters)}</strong>
+                    ) : (
+                      <strong>Niedostępna</strong>
+                    )}
+                  </div>
+                ))}
+                {modesLoading && modeEstimates.length === 1 && (
+                  <div className="route-mode-card route-mode-card--loading">Liczenie roweru i pieszo…</div>
+                )}
+              </div>
+              {modeComparison?.nonDrivingBetaWarningRequired && (
+                <small>Trasy piesze i rowerowe Google są w wersji beta i mogą nie uwzględniać wszystkich chodników, ścieżek lub warunków terenowych.</small>
+              )}
               {routeQuote.provider === 'DETERMINISTIC_DEV' && <small>Tryb deweloperski — prawdziwe ETA Google pojawi się po konfiguracji Routes API.</small>}
             </>
           )}
@@ -204,6 +250,12 @@ function normalizePoint(point) {
     privateLabel: point.privateLabel.trim(),
     placeId: point.placeId || null,
   }
+}
+
+function modeLabel(mode) {
+  if (mode === 'BICYCLE') return 'Rowerem'
+  if (mode === 'WALK') return 'Pieszo'
+  return 'Samochodem'
 }
 
 function formatDistance(meters) {
