@@ -36,6 +36,7 @@ public class GoogleRoutesProvider implements RouteProvider {
     @Override
     public RouteProviderResult estimate(
             RouteCoordinate origin,
+            List<RouteCoordinate> intermediates,
             RouteCoordinate destination,
             RouteTravelMode travelMode
     ) {
@@ -46,6 +47,9 @@ public class GoogleRoutesProvider implements RouteProvider {
         Map<String, Object> body = new HashMap<>();
         body.put("origin", waypoint(origin));
         body.put("destination", waypoint(destination));
+        if (intermediates != null && !intermediates.isEmpty()) {
+            body.put("intermediates", intermediates.stream().map(this::waypoint).toList());
+        }
         body.put("travelMode", travelMode.name());
         body.put("computeAlternativeRoutes", false);
         body.put("languageCode", "pl-PL");
