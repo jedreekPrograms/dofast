@@ -39,6 +39,9 @@ public class JobLiveTracking {
     @Column(nullable = false, length = 32)
     private TrackingPhase phase;
 
+    @Column(name = "next_stop_sequence")
+    private Integer nextStopSequence;
+
     @JdbcTypeCode(SqlTypes.GEOGRAPHY)
     @Column(name = "current_location", columnDefinition = "geography(Point,4326)")
     private Point currentLocation;
@@ -111,8 +114,15 @@ public class JobLiveTracking {
         this.sharingStoppedAt = null;
     }
 
+    public void switchToStop(int sequenceNo) {
+        this.phase = TrackingPhase.TO_STOP;
+        this.nextStopSequence = sequenceNo;
+        clearEstimate();
+    }
+
     public void switchToDestination(Instant now) {
         this.phase = TrackingPhase.TO_DESTINATION;
+        this.nextStopSequence = null;
         clearEstimate();
     }
 
@@ -133,6 +143,7 @@ public class JobLiveTracking {
         capturedAt = null;
         receivedAt = now;
         sharingStoppedAt = now;
+        nextStopSequence = null;
         clearEstimate();
     }
 
@@ -148,6 +159,7 @@ public class JobLiveTracking {
     public Long getJobId() { return jobId; }
     public User getWorker() { return worker; }
     public TrackingPhase getPhase() { return phase; }
+    public Integer getNextStopSequence() { return nextStopSequence; }
     public Point getCurrentLocation() { return currentLocation; }
     public Double getAccuracyMeters() { return accuracyMeters; }
     public Double getHeadingDegrees() { return headingDegrees; }
