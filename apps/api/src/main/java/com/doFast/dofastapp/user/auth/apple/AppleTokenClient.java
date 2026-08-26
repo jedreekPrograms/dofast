@@ -11,16 +11,25 @@ import org.springframework.web.client.RestClientResponseException;
 @Service
 public class AppleTokenClient {
 
+    private static final String APPLE_ID_BASE_URL = "https://appleid.apple.com";
+
     private final RestClient restClient;
     private final AppleAuthConfiguration configuration;
     private final AppleClientSecretService clientSecretService;
 
     public AppleTokenClient(
-            RestClient.Builder restClientBuilder,
             AppleAuthConfiguration configuration,
             AppleClientSecretService clientSecretService
     ) {
-        this.restClient = restClientBuilder.baseUrl("https://appleid.apple.com").build();
+        this(RestClient.create(APPLE_ID_BASE_URL), configuration, clientSecretService);
+    }
+
+    AppleTokenClient(
+            RestClient restClient,
+            AppleAuthConfiguration configuration,
+            AppleClientSecretService clientSecretService
+    ) {
+        this.restClient = restClient;
         this.configuration = configuration;
         this.clientSecretService = clientSecretService;
     }
