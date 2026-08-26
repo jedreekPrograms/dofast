@@ -3,7 +3,6 @@ package com.doFast.dofastapp.job.saved;
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.user.entity.User;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
