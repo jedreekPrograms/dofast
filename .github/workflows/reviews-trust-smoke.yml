@@ -17,6 +17,7 @@ on:
   pull_request:
     branches: [master]
     paths:
+      - ".github/workflows/reviews-trust-smoke.yml"
       - "apps/api/src/main/java/com/doFast/dofastapp/review/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/user/dto/UserProfileResponse.java"
       - "apps/api/src/main/java/com/doFast/dofastapp/user/service/UserProfileService.java"
@@ -97,11 +98,15 @@ jobs:
 
           docker compose exec -T db psql -U dofast -d dofast -c \
             "UPDATE wallets SET balance = 100.00 WHERE user_id = $REQUESTER_ID;"
+          CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+            "SELECT id FROM job_categories WHERE slug = 'malowanie' AND active = TRUE;")
+          CATEGORY_ID="${CATEGORY_ID//[[:space:]]/}"
+          test -n "$CATEGORY_ID"
 
           JOB=$(curl --fail --silent \
             -H "Authorization: Bearer $REQUESTER_TOKEN" \
             -H 'Content-Type: application/json' \
-            -d '{"title":"Trust smoke job","description":"A completed job used to verify bilateral reputation.","price":20.00,"location":{"latitude":51.1128,"longitude":17.0601,"publicLabel":"Wrocław","privateLabel":"Test address"}}' \
+            -d "{\"title\":\"Trust smoke job\",\"description\":\"A completed job used to verify bilateral reputation.\",\"price\":20.00,\"categoryId\":$CATEGORY_ID,\"location\":{\"latitude\":51.1128,\"longitude\":17.0601,\"publicLabel\":\"Wrocław\",\"privateLabel\":\"Test address\"}}" \
             http://localhost:8080/jobs)
           JOB_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$JOB")
 
