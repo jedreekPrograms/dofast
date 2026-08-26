@@ -64,7 +64,8 @@ function MyJobsPage() {
       {!loading && visibleJobs.length > 0 && <div className="my-jobs-list">
         {visibleJobs.map((job) => {
           const counterpartId = tab === 'created' ? job.takenById : job.createdById
-          const canOpenRoute = tab === 'created' || WORKER_ROUTE_STATUSES.has(job.status)
+          const canOpenExecution = tab === 'created' || WORKER_ROUTE_STATUSES.has(job.status)
+          const executionAvailable = job.fulfillmentMode === 'ON_SITE' || Boolean(job.destinationLabel)
           return <article className="my-job" key={job.id}>
             <div className="my-job__body">
               <div className="my-job__meta">
@@ -78,7 +79,11 @@ function MyJobsPage() {
             </div>
             <div className="my-job__actions">
               <Link className="button button--secondary" to={`/jobs/${job.id}`}>Szczegóły</Link>
-              {canOpenRoute && job.destinationLabel && <Link className="button button--secondary" to={`/jobs/${job.id}/route`}>Trasa A → B</Link>}
+              {canOpenExecution && executionAvailable && (
+                <Link className="button button--secondary" to={`/jobs/${job.id}/route`}>
+                  {job.fulfillmentMode === 'ON_SITE' ? 'Miejsce realizacji' : 'Trasa A → B'}
+                </Link>
+              )}
               {job.takenById && <Link className="button button--secondary" to={`/chat?jobId=${job.id}`}>Czat</Link>}
               {job.status === 'DONE' && <button className="button button--secondary" type="button" disabled={reviewedJobIds.has(job.id)} onClick={() => setReviewJob(job)}>{reviewedJobIds.has(job.id) ? 'Oceniono' : 'Oceń współpracę'}</button>}
               {tab === 'created' && job.status === 'OPEN' && <button className="button button--danger" type="button" disabled={actionId === job.id} onClick={() => runAction(job.id, cancelJob)}>Anuluj</button>}
