@@ -4,9 +4,18 @@
 
 doFast treats location as execution data, not as a public user attribute. A delivery-style task has an origin **A**, a destination **B**, a server-computed route snapshot and, after a worker accepts it, an optional live courier position. Public discovery intentionally receives much less information than the two participants of an active job.
 
+## Fulfillment-specific location model
+
+Leaf service categories define how location is collected and the backend enforces that contract rather than trusting the browser:
+
+- `POINT_TO_POINT` requires a short-lived, owner-bound `routeQuoteId` and rejects a direct single-location payload;
+- `ON_SITE` requires exactly one validated location point and rejects any route quote.
+
+For on-site work (for example handyman, plumbing, electrical or cleaning), `jobs.location` stores the service point, `destination_location` and route snapshot fields remain null, and public responses expose only the coarse `locationLabel`. Exact coordinates and the private address stay behind the same participant access boundary used by routed jobs. This avoids fake A → B routes and avoids paid routing calls for work that happens at one place.
+
 ## A → B route model
 
-New jobs are created from a short-lived server route quote instead of trusting distance or ETA values sent by the browser.
+New delivery-style jobs are created from a short-lived server route quote instead of trusting distance or ETA values sent by the browser.
 
 The browser selects:
 
@@ -17,14 +26,13 @@ The browser selects:
 
 `POST /routing/quotes` stores both points and obtains a route estimate. A route quote belongs to one user, expires after the configured TTL and can be consumed only once by `POST /jobs`.
 
-The existing `jobs.location` column remains the physical PostGIS origin column to preserve migration safety and nearby-search indexes. V11 adds the destination and route snapshot fields.
+The existing `jobs.location` column remains the physical PostGIS origin/service-point column to preserve migration safety and nearby-search indexes. V11 adds the destination and route snapshot fields.
 
 Public job DTOs expose only:
 
-- public origin label;
-- public destination label;
-- route distance;
-- route duration.
+- public origin/service-area label;
+- public destination label when the category is point-to-point;
+- route distance and duration when a route exists.
 
 They never expose exact coordinates, private labels or route execution details.
 
@@ -54,14 +62,14 @@ For local `npm run dev`, provide the same Vite variables in the frontend process
 
 ## Exact route access
 
-`GET /jobs/{id}/route` is authenticated.
+`GET /jobs/{id}/route` is authenticated and applies to point-to-point jobs. `GET /jobs/{id}/location` provides the exact service/origin point under the same authorization rules.
 
-- the requester can inspect the exact route for their own job;
-- the assigned worker receives exact A/B while the job is active (including dispute evidence rules already used by the job lifecycle);
+- the requester can inspect the exact execution location for their own job;
+- the assigned worker receives exact execution location while the job is active (including dispute evidence rules already used by the job lifecycle);
 - unrelated users cannot access it;
-- public lists never contain exact A/B.
+- public lists never contain exact coordinates.
 
-Nearby matching remains based on origin A and is executed in PostgreSQL/PostGIS with `ST_DWithin`, `ST_Distance` and the GiST index.
+Nearby matching remains based on `jobs.location` (origin A for routed work, service point for on-site work) and is executed in PostgreSQL/PostGIS with `ST_DWithin`, `ST_Distance` and the GiST index.
 
 ## Live courier tracking
 
@@ -123,6 +131,7 @@ This is deliberately a coarse integrity guard rather than fraud detection. It to
 8. Obviously implausible position jumps are rejected after accounting for GPS accuracy, protecting map/ETA integrity without building a location history.
 9. GPS write cadence is bounded on the server using persisted receive time and a locked tracking row; client-side throttling is never treated as a security boundary.
 10. Missing or excessively coarse GPS accuracy is rejected before a live coordinate is stored, avoiding false precision in participant-only tracking.
+11. Fulfillment mode is resolved from the persisted category; clients cannot downgrade a routed delivery to an arbitrary point or force an on-site job through a fake route quote.
 
 ## Browser and native-app limitation
 
@@ -145,4 +154,4 @@ The Docker runtime smoke covers the real PostgreSQL/PostGIS stack and verifies:
 - opening a dispute clears exact live GPS in PostgreSQL;
 - escrow/chat/dispute/refund behaviour still works on the same routed job.
 
-Unit coverage additionally verifies first-sample acceptance with usable accuracy, rejection of missing or excessively coarse accuracy, the configured accuracy boundary, plausible movement, GPS-accuracy allowance, rejection of impossible jumps, and the server-side minimum GPS update interval boundary.
+Unit coverage additionally verifies fulfillment-specific job creation rules, first-sample acceptance with usable accuracy, rejection of missing or excessively coarse accuracy, the configured accuracy boundary, plausible movement, GPS-accuracy allowance, rejection of impossible jumps, and the server-side minimum GPS update interval boundary.
