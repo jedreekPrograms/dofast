@@ -53,6 +53,7 @@ function JobCard({ job }) {
       )}
 
       <div className="job-card__actions">
+        {user && <Link className="button button--secondary" to={`/jobs/${job.id}`}>Szczegóły</Link>}
         {canAccept && (
           <button className="button button--primary" type="button" disabled={accepting} onClick={handleAccept}>
             {accepting ? 'Przyjmowanie…' : 'Przyjmij zlecenie'}
