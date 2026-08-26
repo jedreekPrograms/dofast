@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public record RouteQuoteRequest(
@@ -12,6 +14,8 @@ public record RouteQuoteRequest(
         @NotNull @Valid RoutePointRequest destination
 ) {
     public RouteQuoteRequest {
-        stops = stops == null ? List.of() : List.copyOf(stops);
+        stops = stops == null
+                ? List.of()
+                : Collections.unmodifiableList(new ArrayList<>(stops));
     }
 }
