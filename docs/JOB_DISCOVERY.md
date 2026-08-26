@@ -36,6 +36,17 @@ Filtering by a leaf slug returns that exact subcategory. Filtering by a parent s
 
 The endpoints only accept lowercase URL-safe slugs (`a-z`, digits and hyphens). Unknown but well-formed slugs safely return an empty result set rather than broadening the search.
 
+## Saved jobs
+
+Authenticated users can keep a private shortlist of currently available jobs:
+
+- `PUT /saved-jobs/{jobId}` saves an `OPEN` job and is idempotent;
+- `DELETE /saved-jobs/{jobId}` removes the bookmark and is idempotent;
+- `GET /saved-jobs/{jobId}/status` returns whether the current user has saved the job;
+- `GET /saved-jobs?page=0&size=20` returns a stable paginated list of the user's saved jobs.
+
+Bookmarks are private to the authenticated user and are protected by a database uniqueness constraint on `(user_id, job_id)`. The list endpoint deliberately excludes jobs that are no longer `OPEN`, so stale accepted/completed/cancelled offers do not remain actionable in the shortlist. Foreign keys cascade bookmark cleanup when a user or job is deleted.
+
 ## Response envelope
 
 The paginated API deliberately returns an application-owned pagination DTO instead of serializing Spring Data's `Page` implementation directly.
@@ -80,6 +91,8 @@ The indexes are designed around the actual public search workload instead of ind
 
 Category filtering uses the existing indexed foreign key from jobs to the category catalog and the unique category slug constraint introduced with the catalog; no additional Flyway migration is required for this slice. Nearby filtering combines those relationships with the existing PostGIS radius predicate.
 
+`V19__saved_jobs.sql` adds the bookmark table, a user/creation-time index for ordered shortlist reads, a job lookup index and the uniqueness constraint that keeps repeated save requests idempotent at the persistence boundary.
+
 ## Validation
 
 The API rejects:
@@ -115,6 +128,7 @@ Carlisle is an internal technical milestone name and is intentionally not expose
 CI verifies:
 
 - Maven unit tests, including paginated and nearby category-filter routing and normalization;
+- saved-job idempotency, open-job eligibility and pagination behavior;
 - frontend lint/build and production dependency audit;
 - PostGIS and `pg_trgm` availability;
 - Flyway migrations;
