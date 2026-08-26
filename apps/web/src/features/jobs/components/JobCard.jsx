@@ -25,7 +25,7 @@ function JobCard({ job }) {
     setError('')
     try {
       const updated = await acceptJob(job.id)
-      navigate(updated.fulfillmentMode === 'POINT_TO_POINT' ? `/jobs/${updated.id}/route` : `/jobs/${updated.id}`)
+      navigate(`/jobs/${updated.id}/route`)
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się przyjąć zlecenia.')
     } finally {
