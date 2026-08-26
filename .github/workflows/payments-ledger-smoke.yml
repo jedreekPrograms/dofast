@@ -8,6 +8,7 @@ on:
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/location/routing/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/dispute/**"
       - "apps/api/src/main/resources/db/migration/V9__payments_and_ledger_hardening.sql"
   pull_request:
@@ -16,6 +17,8 @@ on:
       - ".github/workflows/payments-ledger-smoke.yml"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/location/routing/**"
       - "apps/api/src/main/resources/db/migration/V9__payments_and_ledger_hardening.sql"
 
 permissions:
@@ -96,6 +99,20 @@ jobs:
             printf '%s' "$login" > "/tmp/${prefix}-login.json"
           }
 
+          create_route_quote() {
+            local token="$1"
+            local origin_private="$2"
+            local destination_private="$3"
+            local quote
+
+            quote=$(curl --fail --silent \
+              -H "Authorization: Bearer $token" \
+              -H 'Content-Type: application/json' \
+              -d "{\"origin\":{\"latitude\":51.1128,\"longitude\":17.0601,\"publicLabel\":\"Wrocław\",\"privateLabel\":\"$origin_private\"},\"destination\":{\"latitude\":51.1099,\"longitude\":17.0325,\"publicLabel\":\"Wrocław\",\"privateLabel\":\"$destination_private\"}}" \
+              http://localhost:8080/routing/quotes)
+            python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$quote"
+          }
+
           register_and_login 'ledger-requester@example.com' 'ledgerRequester' requester
           register_and_login 'ledger-worker@example.com' 'ledgerWorker' worker
           register_and_login 'ledger-refund@example.com' 'ledgerRefund' refund
@@ -133,22 +150,26 @@ jobs:
           COMMIT;
           SQL
 
+          QUOTE_A=$(create_route_quote "$REQUESTER_TOKEN" 'Ledger A origin' 'Ledger A destination')
+          QUOTE_B=$(create_route_quote "$REQUESTER_TOKEN" 'Ledger B origin' 'Ledger B destination')
+
           create_job() {
             local title="$1"
-            local output="$2"
-            local status_file="$3"
+            local quote_id="$2"
+            local output="$3"
+            local status_file="$4"
             curl --silent \
               --output "$output" \
               --write-out '%{http_code}' \
               -H "Authorization: Bearer $REQUESTER_TOKEN" \
               -H 'Content-Type: application/json' \
-              -d "{\"title\":\"$title\",\"description\":\"Concurrent wallet debit smoke test.\",\"price\":40.00,\"location\":{\"latitude\":51.1128,\"longitude\":17.0601,\"publicLabel\":\"Wrocław\",\"privateLabel\":\"Ledger smoke address\"}}" \
+              -d "{\"title\":\"$title\",\"description\":\"Concurrent wallet debit smoke test.\",\"price\":40.00,\"routeQuoteId\":\"$quote_id\"}" \
               http://localhost:8080/jobs > "$status_file"
           }
 
-          create_job 'Ledger concurrent A' /tmp/job-a.json /tmp/job-a.status &
+          create_job 'Ledger concurrent A' "$QUOTE_A" /tmp/job-a.json /tmp/job-a.status &
           PID_A=$!
-          create_job 'Ledger concurrent B' /tmp/job-b.json /tmp/job-b.status &
+          create_job 'Ledger concurrent B' "$QUOTE_B" /tmp/job-b.json /tmp/job-b.status &
           PID_B=$!
           wait "$PID_A"
           wait "$PID_B"
@@ -204,10 +225,11 @@ jobs:
             "SELECT status || '|' || payee_id || '|' || (resolved_at IS NOT NULL) FROM escrow_transactions WHERE job_id = $JOB_ID;")
           test "${ESCROW_RELEASED//[[:space:]]/}" = "RELEASED|${WORKER_ID}|true"
 
+          REFUND_QUOTE=$(create_route_quote "$REFUND_TOKEN" 'Refund origin' 'Refund destination')
           REFUND_JOB=$(curl --fail --silent \
             -H "Authorization: Bearer $REFUND_TOKEN" \
             -H 'Content-Type: application/json' \
-            -d '{"title":"Ledger refund","description":"Refund ledger smoke test.","price":15.00,"location":{"latitude":51.1128,"longitude":17.0601,"publicLabel":"Wrocław","privateLabel":"Refund smoke address"}}' \
+            -d "{\"title\":\"Ledger refund\",\"description\":\"Refund ledger smoke test.\",\"price\":15.00,\"routeQuoteId\":\"$REFUND_QUOTE\"}" \
             http://localhost:8080/jobs)
           REFUND_JOB_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REFUND_JOB")
 

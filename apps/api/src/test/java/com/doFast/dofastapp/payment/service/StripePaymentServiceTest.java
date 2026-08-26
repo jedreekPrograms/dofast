@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.payment.service;
 
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.payment.entity.PaymentTransaction;
 import com.doFast.dofastapp.payment.repository.PaymentTransactionRepository;
@@ -38,6 +39,18 @@ class StripePaymentServiceTest {
     @BeforeEach
     void setUp() {
         stripePaymentService = new StripePaymentService(walletService, paymentTransactionRepository);
+    }
+
+    @Test
+    void paymentIntentCreationRejectsAmountsOutsideSupportedTopUpRange() {
+        assertThrows(
+                BusinessException.class,
+                () -> stripePaymentService.createPaymentIntent(new BigDecimal("0.99"), 7L, "req_low")
+        );
+        assertThrows(
+                BusinessException.class,
+                () -> stripePaymentService.createPaymentIntent(new BigDecimal("10000.01"), 7L, "req_high")
+        );
     }
 
     @Test
@@ -168,6 +181,32 @@ class StripePaymentServiceTest {
                 any(BigDecimal.class),
                 any(String.class),
                 any(LocalDateTime.class)
+        );
+    }
+
+    @Test
+    void signedWebhookCannotCreditAmountAboveSupportedTopUpRange() {
+        PaymentIntent intent = succeededIntent("pi_oversized", 1_000_001L, "pln", "7");
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> stripePaymentService.processSuccessfulPayment(intent, "evt_oversized")
+        );
+
+        verify(paymentTransactionRepository, never()).claimSuccessfulPayment(
+                any(String.class),
+                any(String.class),
+                any(Long.class),
+                any(BigDecimal.class),
+                any(String.class),
+                any(LocalDateTime.class)
+        );
+        verify(walletService, never()).credit(
+                any(Long.class),
+                any(BigDecimal.class),
+                any(WalletTransactionType.class),
+                eq(null),
+                any(String.class)
         );
     }
 
