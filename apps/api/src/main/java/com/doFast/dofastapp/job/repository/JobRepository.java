@@ -24,7 +24,29 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     @Query("""
             select j
             from Job j
-            left join j.category category
+            where j.status = :status
+              and (
+                    :query = ''
+                    or lower(j.title) like lower(concat('%', :query, '%'))
+                    or lower(j.description) like lower(concat('%', :query, '%'))
+                    or lower(j.locationLabel) like lower(concat('%', :query, '%'))
+                    or lower(j.destinationLabel) like lower(concat('%', :query, '%'))
+              )
+              and (:minPrice is null or j.price >= :minPrice)
+              and (:maxPrice is null or j.price <= :maxPrice)
+            """)
+    Page<Job> findOpenJobs(
+            @Param("status") JobStatus status,
+            @Param("query") String query,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            Pageable pageable
+    );
+
+    @Query("""
+            select j
+            from Job j
+            join j.category category
             left join category.parent parentCategory
             where j.status = :status
               and (
@@ -35,14 +57,13 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                     or lower(j.destinationLabel) like lower(concat('%', :query, '%'))
               )
               and (
-                    :categorySlug = ''
-                    or lower(category.slug) = lower(:categorySlug)
+                    lower(category.slug) = lower(:categorySlug)
                     or lower(parentCategory.slug) = lower(:categorySlug)
               )
               and (:minPrice is null or j.price >= :minPrice)
               and (:maxPrice is null or j.price <= :maxPrice)
             """)
-    Page<Job> findOpenJobs(
+    Page<Job> findOpenJobsByCategory(
             @Param("status") JobStatus status,
             @Param("query") String query,
             @Param("categorySlug") String categorySlug,
