@@ -77,6 +77,7 @@ function MyJobsPage() {
               <div className="my-job__footer"><strong>{Number(job.price).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}</strong><span>#{job.id}</span>{counterpartId && <Link to={`/users/${counterpartId}`}>Profil drugiej strony</Link>}</div>
             </div>
             <div className="my-job__actions">
+              <Link className="button button--secondary" to={`/jobs/${job.id}`}>Szczegóły</Link>
               {canOpenRoute && job.destinationLabel && <Link className="button button--secondary" to={`/jobs/${job.id}/route`}>Trasa A → B</Link>}
               {job.takenById && <Link className="button button--secondary" to={`/chat?jobId=${job.id}`}>Czat</Link>}
               {job.status === 'DONE' && <button className="button button--secondary" type="button" disabled={reviewedJobIds.has(job.id)} onClick={() => setReviewJob(job)}>{reviewedJobIds.has(job.id) ? 'Oceniono' : 'Oceń współpracę'}</button>}
