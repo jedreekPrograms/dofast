@@ -4,6 +4,7 @@ export function getJobs(filters, options = {}) {
   const params = new URLSearchParams()
 
   if (filters.query?.trim()) params.set('query', filters.query.trim())
+  if (filters.category) params.set('category', filters.category)
   if (filters.minPrice !== '') params.set('minPrice', filters.minPrice)
   if (filters.maxPrice !== '') params.set('maxPrice', filters.maxPrice)
   params.set('page', String(filters.page ?? 0))
