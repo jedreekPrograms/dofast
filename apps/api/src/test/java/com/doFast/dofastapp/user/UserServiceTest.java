@@ -6,6 +6,7 @@ import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.auth.GoogleIdentity;
 import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
+import com.doFast.dofastapp.user.auth.apple.AppleIdentity;
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
 import com.doFast.dofastapp.user.dto.LoginRequest;
@@ -23,6 +24,7 @@ import com.doFast.dofastapp.wallet.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -140,8 +142,7 @@ class UserServiceTest {
         User user = activeUser();
         when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("StrongPass123!", "hash")).thenReturn(true);
-        when(jwtUtil.generateToken("user@example.com")).thenReturn("token");
-        when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
+        stubJwt(user);
 
         AuthResponse response = userService.login(request);
 
@@ -164,12 +165,7 @@ class UserServiceTest {
         when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123"))
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmailIgnoreCase("person@gmail.com")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode(anyString())).thenReturn("random-password-hash");
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
-            User saved = invocation.getArgument(0);
-            ReflectionTestUtils.setField(saved, "id", 22L);
-            return saved;
-        });
+        stubFederatedUserSave(22L);
         when(jwtUtil.generateToken("person@gmail.com")).thenReturn("google-session-token");
         when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
 
@@ -179,7 +175,6 @@ class UserServiceTest {
         assertEquals("person@gmail.com", response.user().email());
         verify(walletService).createWalletForUser(22L);
         verify(authIdentityRepository).save(any(UserAuthIdentity.class));
-        verify(userRepository).save(any(User.class));
     }
 
     @Test
@@ -192,16 +187,12 @@ class UserServiceTest {
                 true
         );
         User user = activeUser();
-        UserAuthIdentity identity = new UserAuthIdentity();
-        identity.setUser(user);
-        identity.setProvider(AuthProvider.GOOGLE);
-        identity.setProviderSubject("google-subject-123");
+        UserAuthIdentity identity = linkedIdentity(user, AuthProvider.GOOGLE, "google-subject-123");
 
         when(googleIdentityVerifier.verify("google-id-token")).thenReturn(googleIdentity);
         when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123"))
                 .thenReturn(Optional.of(identity));
-        when(jwtUtil.generateToken("user@example.com")).thenReturn("token");
-        when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
+        stubJwt(user);
 
         AuthResponse response = userService.loginWithGoogle(request);
 
@@ -233,6 +224,87 @@ class UserServiceTest {
 
         assertFalse(exception.getMessage().isBlank());
         verify(authIdentityRepository, never()).save(any(UserAuthIdentity.class));
+    }
+
+    @Test
+    void appleLoginCreatesFederatedUserWalletAndAppleIdentity() {
+        AppleIdentity appleIdentity = new AppleIdentity(
+                "apple-subject-123",
+                "private-relay@privaterelay.appleid.com",
+                "Apple Person",
+                true
+        );
+
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123"))
+                .thenReturn(Optional.empty());
+        when(userRepository.existsByEmailIgnoreCase("private-relay@privaterelay.appleid.com")).thenReturn(false);
+        stubFederatedUserSave(31L);
+        when(jwtUtil.generateToken("private-relay@privaterelay.appleid.com")).thenReturn("apple-session-token");
+        when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
+
+        AuthResponse response = userService.loginWithAppleIdentity(appleIdentity);
+
+        assertEquals("apple-session-token", response.accessToken());
+        assertEquals("private-relay@privaterelay.appleid.com", response.user().email());
+        verify(walletService).createWalletForUser(31L);
+
+        ArgumentCaptor<UserAuthIdentity> identityCaptor = ArgumentCaptor.forClass(UserAuthIdentity.class);
+        verify(authIdentityRepository).save(identityCaptor.capture());
+        assertEquals(AuthProvider.APPLE, identityCaptor.getValue().getProvider());
+        assertEquals("apple-subject-123", identityCaptor.getValue().getProviderSubject());
+    }
+
+    @Test
+    void returningAppleSubjectDoesNotNeedEmailFromAppleAgain() {
+        User user = activeUser();
+        UserAuthIdentity linked = linkedIdentity(user, AuthProvider.APPLE, "apple-subject-123");
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123"))
+                .thenReturn(Optional.of(linked));
+        stubJwt(user);
+
+        AuthResponse response = userService.loginWithAppleIdentity(
+                new AppleIdentity("apple-subject-123", null, null, false)
+        );
+
+        assertEquals("user@example.com", response.user().email());
+        verify(userRepository, never()).existsByEmailIgnoreCase(anyString());
+    }
+
+    @Test
+    void appleNeverSilentlyLinksAnExistingAccountByEmail() {
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123"))
+                .thenReturn(Optional.empty());
+        when(userRepository.existsByEmailIgnoreCase("user@example.com")).thenReturn(true);
+
+        assertThrows(
+                ConflictException.class,
+                () -> userService.loginWithAppleIdentity(
+                        new AppleIdentity("apple-subject-123", "user@example.com", "Existing User", false)
+                )
+        );
+        verify(authIdentityRepository, never()).save(any(UserAuthIdentity.class));
+    }
+
+    private void stubFederatedUserSave(long id) {
+        when(passwordEncoder.encode(anyString())).thenReturn("random-password-hash");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", id);
+            return saved;
+        });
+    }
+
+    private void stubJwt(User user) {
+        when(jwtUtil.generateToken(user.getEmail())).thenReturn("token");
+        when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
+    }
+
+    private UserAuthIdentity linkedIdentity(User user, AuthProvider provider, String subject) {
+        UserAuthIdentity identity = new UserAuthIdentity();
+        identity.setUser(user);
+        identity.setProvider(provider);
+        identity.setProviderSubject(subject);
+        return identity;
     }
 
     private User activeUser() {

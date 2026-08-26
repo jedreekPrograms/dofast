@@ -4,6 +4,7 @@ import {
   changeCurrentUserPassword,
   getCurrentUser,
   loginUser,
+  loginUserWithApple,
   loginUserWithGoogle,
   registerUser,
   updateCurrentUser,
@@ -52,6 +53,10 @@ function AuthProvider({ children }) {
     return applyAuthResponse(await loginUserWithGoogle(credential))
   }
 
+  async function loginWithApple(payload) {
+    return applyAuthResponse(await loginUserWithApple(payload))
+  }
+
   async function register(payload) {
     await registerUser(payload)
     return login({ email: payload.email, password: payload.password })
@@ -74,7 +79,17 @@ function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, ready, login, loginWithGoogle, register, logout, updateProfile, changePassword }}>
+    <AuthContext.Provider value={{
+      user,
+      ready,
+      login,
+      loginWithGoogle,
+      loginWithApple,
+      register,
+      logout,
+      updateProfile,
+      changePassword,
+    }}>
       {children}
     </AuthContext.Provider>
   )

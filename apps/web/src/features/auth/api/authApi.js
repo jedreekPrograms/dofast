@@ -24,6 +24,21 @@ export function loginUserWithGoogle(credential) {
   })
 }
 
+export function createAppleLoginChallenge() {
+  return apiRequest('/users/login/apple/challenge', {
+    method: 'POST',
+    auth: false,
+  })
+}
+
+export function loginUserWithApple(payload) {
+  return apiRequest('/users/login/apple', {
+    method: 'POST',
+    auth: false,
+    body: JSON.stringify(payload),
+  })
+}
+
 export function getCurrentUser() {
   return apiRequest('/users/me')
 }
