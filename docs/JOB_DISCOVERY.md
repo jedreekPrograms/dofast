@@ -121,6 +121,8 @@ The jobs page consumes the paginated endpoint and provides:
 - previous/next pagination controls;
 - cancellation of obsolete fetch requests when filters change.
 
+Authenticated users can save an open job directly from its discovery card. The `/saved-jobs` route is protected by the normal authentication boundary and provides a paginated shortlist using the same privacy-safe `JobResponse` cards. Removing a bookmark is idempotent; after removal the current page is refreshed, and an emptied trailing page automatically steps back so the user is never stranded on a blank page.
+
 Carlisle is an internal technical milestone name and is intentionally not exposed in customer-facing UI text.
 
 ## Verification
