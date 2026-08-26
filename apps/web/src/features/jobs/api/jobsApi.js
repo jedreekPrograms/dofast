@@ -12,6 +12,10 @@ export function getJobs(filters, options = {}) {
   return apiRequest(`/jobs?${params.toString()}`, { ...options, auth: false })
 }
 
+export function getJobCategories(options = {}) {
+  return apiRequest('/job-categories', { ...options, auth: false })
+}
+
 export function getJob(id, options = {}) {
   return apiRequest(`/jobs/${id}`, options)
 }
