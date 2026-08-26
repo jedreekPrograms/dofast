@@ -24,6 +24,8 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     @Query("""
             select j
             from Job j
+            left join j.category category
+            left join category.parent parentCategory
             where j.status = :status
               and (
                     :query = ''
@@ -32,12 +34,18 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                     or lower(j.locationLabel) like lower(concat('%', :query, '%'))
                     or lower(j.destinationLabel) like lower(concat('%', :query, '%'))
               )
+              and (
+                    :categorySlug = ''
+                    or lower(category.slug) = lower(:categorySlug)
+                    or lower(parentCategory.slug) = lower(:categorySlug)
+              )
               and (:minPrice is null or j.price >= :minPrice)
               and (:maxPrice is null or j.price <= :maxPrice)
             """)
     Page<Job> findOpenJobs(
             @Param("status") JobStatus status,
             @Param("query") String query,
+            @Param("categorySlug") String categorySlug,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
             Pageable pageable
