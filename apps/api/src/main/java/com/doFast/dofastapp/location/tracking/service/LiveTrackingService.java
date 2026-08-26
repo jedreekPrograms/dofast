@@ -41,6 +41,7 @@ public class LiveTrackingService {
     private final JobLiveTrackingRepository trackingRepository;
     private final LiveTrackingAccessService accessService;
     private final TrackingPositionSanityValidator positionSanityValidator;
+    private final TrackingUpdateRateLimiter updateRateLimiter;
     private final RouteProvider routeProvider;
     private final SimpMessagingTemplate messagingTemplate;
     private final TransactionTemplate transactionTemplate;
@@ -53,6 +54,7 @@ public class LiveTrackingService {
             JobLiveTrackingRepository trackingRepository,
             LiveTrackingAccessService accessService,
             TrackingPositionSanityValidator positionSanityValidator,
+            TrackingUpdateRateLimiter updateRateLimiter,
             RouteProvider routeProvider,
             SimpMessagingTemplate messagingTemplate,
             PlatformTransactionManager transactionManager,
@@ -64,6 +66,7 @@ public class LiveTrackingService {
         this.trackingRepository = trackingRepository;
         this.accessService = accessService;
         this.positionSanityValidator = positionSanityValidator;
+        this.updateRateLimiter = updateRateLimiter;
         this.routeProvider = routeProvider;
         this.messagingTemplate = messagingTemplate;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -157,6 +160,7 @@ public class LiveTrackingService {
             throw new ConflictException("Nowsza lokalizacja wykonawcy została już zapisana");
         }
 
+        updateRateLimiter.validate(tracking.getReceivedAt(), now);
         positionSanityValidator.validate(
                 tracking.getCurrentLocation(),
                 tracking.getAccuracyMeters(),

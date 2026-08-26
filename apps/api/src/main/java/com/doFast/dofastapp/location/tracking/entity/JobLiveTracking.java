@@ -113,7 +113,6 @@ public class JobLiveTracking {
 
     public void switchToDestination(Instant now) {
         this.phase = TrackingPhase.TO_DESTINATION;
-        this.receivedAt = now;
         clearEstimate();
     }
 
