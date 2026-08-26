@@ -1,5 +1,7 @@
 package com.doFast.dofastapp.job.dto;
 
+import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -29,18 +31,22 @@ public class JobRequest {
     @Positive
     private Long categoryId;
 
-    @NotNull
     private UUID routeQuoteId;
+
+    @Valid
+    private RoutePointRequest location;
 
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public BigDecimal getPrice() { return price; }
     public Long getCategoryId() { return categoryId; }
     public UUID getRouteQuoteId() { return routeQuoteId; }
+    public RoutePointRequest getLocation() { return location; }
 
     public void setTitle(String title) { this.title = title; }
     public void setDescription(String description) { this.description = description; }
     public void setPrice(BigDecimal price) { this.price = price; }
     public void setCategoryId(Long categoryId) { this.categoryId = categoryId; }
     public void setRouteQuoteId(UUID routeQuoteId) { this.routeQuoteId = routeQuoteId; }
+    public void setLocation(RoutePointRequest location) { this.location = location; }
 }
