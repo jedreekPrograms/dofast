@@ -21,6 +21,10 @@ export function getJob(id, options = {}) {
   return apiRequest(`/jobs/${id}`, options)
 }
 
+export function getJobLocation(id, options = {}) {
+  return apiRequest(`/jobs/${id}/location`, options)
+}
+
 export function getMyJobs(options = {}) {
   return apiRequest('/jobs/my', options)
 }

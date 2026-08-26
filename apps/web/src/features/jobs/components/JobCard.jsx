@@ -24,8 +24,8 @@ function JobCard({ job }) {
     setAccepting(true)
     setError('')
     try {
-      await acceptJob(job.id)
-      navigate(`/jobs/${job.id}/route`)
+      const updated = await acceptJob(job.id)
+      navigate(`/jobs/${updated.id}/route`)
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się przyjąć zlecenia.')
     } finally {
@@ -33,11 +33,15 @@ function JobCard({ job }) {
     }
   }
 
+  const locationSummary = job.fulfillmentMode === 'ON_SITE'
+    ? (job.locationLabel || 'Lokalizacja do ustalenia')
+    : `${job.locationLabel || 'Lokalizacja do ustalenia'} → ${job.destinationLabel || 'cel'}`
+
   return (
     <article className="job-card">
       <div className="job-card__header">
         <div>
-          <span className="job-card__eyebrow">{job.locationLabel || 'Lokalizacja do ustalenia'} → {job.destinationLabel || 'cel'}</span>
+          <span className="job-card__eyebrow">{locationSummary}</span>
           <h3>{job.title}</h3>
         </div>
         <strong className="job-card__price">{priceFormatter.format(Number(job.price))}</strong>

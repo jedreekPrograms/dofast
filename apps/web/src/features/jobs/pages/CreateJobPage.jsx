@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import LocationMapPicker from '../components/LocationMapPicker.jsx'
 import RouteMapPicker from '../components/RouteMapPicker.jsx'
 import { createJob, createRouteQuote, getJobCategories, getRouteModeEstimates } from '../api/jobsApi.js'
 import './CreateJobPage.css'
@@ -12,6 +13,7 @@ function CreateJobPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [categories, setCategories] = useState([])
   const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const [location, setLocation] = useState(null)
   const [origin, setOrigin] = useState(null)
   const [stops, setStops] = useState([])
   const [destination, setDestination] = useState(null)
@@ -37,12 +39,21 @@ function CreateJobPage() {
     return () => controller.abort()
   }, [])
 
-  const pointToPointGroups = useMemo(() => categories
-    .map((group) => ({
-      ...group,
-      children: (group.children || []).filter((child) => child.fulfillmentMode === 'POINT_TO_POINT'),
-    }))
+  const selectableGroups = useMemo(() => categories
+    .map((group) => ({ ...group, children: (group.children || []).filter((child) => child.fulfillmentMode) }))
     .filter((group) => group.children.length > 0), [categories])
+
+  const selectedCategory = useMemo(() => {
+    const selectedId = Number(form.categoryId)
+    if (!selectedId) return null
+    for (const group of selectableGroups) {
+      const match = group.children.find((category) => category.id === selectedId)
+      if (match) return match
+    }
+    return null
+  }, [form.categoryId, selectableGroups])
+
+  const fulfillmentMode = selectedCategory?.fulfillmentMode || null
 
   const invalidateRoute = useCallback(() => {
     setRouteQuote(null)
@@ -64,6 +75,11 @@ function CreateJobPage() {
     invalidateRoute()
   }, [invalidateRoute])
 
+  const updateOnSiteLocation = useCallback((point) => {
+    setLocation(point)
+    setError('')
+  }, [])
+
   const addStop = useCallback(() => {
     setStops((current) => (current.length >= MAX_STOPS ? current : [...current, null]))
     invalidateRoute()
@@ -75,6 +91,7 @@ function CreateJobPage() {
   }, [invalidateRoute])
 
   useEffect(() => {
+    if (fulfillmentMode !== 'POINT_TO_POINT') return undefined
     if (!isCompletePoint(origin)
       || !isCompletePoint(destination)
       || !stops.every(isCompletePoint)) {
@@ -108,10 +125,10 @@ function CreateJobPage() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [destination, origin, stops])
+  }, [destination, fulfillmentMode, origin, stops])
 
   useEffect(() => {
-    if (!routeQuote?.id) {
+    if (!routeQuote?.id || fulfillmentMode !== 'POINT_TO_POINT') {
       setModesLoading(false)
       setModeComparison(null)
       return undefined
@@ -126,20 +143,36 @@ function CreateJobPage() {
       })
       .finally(() => setModesLoading(false))
     return () => controller.abort()
-  }, [routeQuote?.id])
+  }, [fulfillmentMode, routeQuote?.id])
 
   function updateField(event) {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
   }
 
+  function updateCategory(event) {
+    const value = event.target.value
+    setForm((current) => ({ ...current, categoryId: value }))
+    setLocation(null)
+    setOrigin(null)
+    setStops([])
+    setDestination(null)
+    setRouting(false)
+    invalidateRoute()
+    setError('')
+  }
+
   async function submit(event) {
     event.preventDefault()
-    if (!form.categoryId) {
+    if (!selectedCategory) {
       setError('Wybierz konkretną kategorię usługi.')
       return
     }
-    if (!routeQuote?.id) {
+    if (fulfillmentMode === 'ON_SITE' && !isCompletePoint(location)) {
+      setError('Wskaż dokładne miejsce wykonania usługi.')
+      return
+    }
+    if (fulfillmentMode === 'POINT_TO_POINT' && !routeQuote?.id) {
       setError('Najpierw uzupełnij całą trasę i poczekaj na jej wyznaczenie.')
       return
     }
@@ -147,13 +180,16 @@ function CreateJobPage() {
     setSubmitting(true)
     setError('')
     try {
-      await createJob({
+      const payload = {
         title: form.title,
         description: form.description,
         price: Number(form.price),
         categoryId: Number(form.categoryId),
-        routeQuoteId: routeQuote.id,
-      })
+      }
+      if (fulfillmentMode === 'ON_SITE') payload.location = normalizePoint(location)
+      else payload.routeQuoteId = routeQuote.id
+
+      await createJob(payload)
       navigate('/my-jobs')
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się opublikować zlecenia.')
@@ -169,20 +205,26 @@ function CreateJobPage() {
     available: true,
   }] : [])
 
+  const locationReady = fulfillmentMode === 'ON_SITE'
+    ? isCompletePoint(location)
+    : fulfillmentMode === 'POINT_TO_POINT' && Boolean(routeQuote?.id)
+
   return (
     <main className="create-job-page">
       <header className="page-heading">
         <span className="eyebrow">Nowe zlecenie</span>
-        <h1>Skąd i dokąd?</h1>
-        <p>Wybierz punkt A i B, a jeśli zadanie wymaga kilku odbiorów lub czynności po drodze, dodaj do 10 przystanków. Dokładne adresy są widoczne wyłącznie dla stron zlecenia.</p>
+        <h1>{fulfillmentMode === 'ON_SITE' ? 'Gdzie ma być wykonane?' : 'Skąd i dokąd?'}</h1>
+        <p>{fulfillmentMode === 'ON_SITE'
+          ? 'Wskaż miejsce wykonania usługi. Publicznie pokażemy tylko obszar, a dokładny adres dostanie wykonawca po przyjęciu zlecenia.'
+          : 'Dla zleceń transportowych wybierz A i B, a w razie potrzeby dodaj do 10 przystanków. Dokładne adresy są widoczne wyłącznie dla stron zlecenia.'}</p>
       </header>
 
       <form className="panel create-job-form" onSubmit={submit}>
         <label className="field create-job-form__wide">
           <span>Kategoria usługi</span>
-          <select name="categoryId" value={form.categoryId} onChange={updateField} required disabled={categoriesLoading || submitting}>
+          <select name="categoryId" value={form.categoryId} onChange={updateCategory} required disabled={categoriesLoading || submitting}>
             <option value="">{categoriesLoading ? 'Ładowanie kategorii…' : 'Wybierz podkategorię'}</option>
-            {pointToPointGroups.map((group) => (
+            {selectableGroups.map((group) => (
               <optgroup key={group.id} label={group.name}>
                 {group.children.map((category) => (
                   <option key={category.id} value={category.id}>{category.name}</option>
@@ -190,59 +232,75 @@ function CreateJobPage() {
               </optgroup>
             ))}
           </select>
-          <small>Przystanki sprawdzą się np. przy odbiorze rzeczy z kilku miejsc, zakupach w kilku punktach albo trasie wymagającej dodatkowej wizyty po drodze.</small>
+          <small>{selectedCategory
+            ? (fulfillmentMode === 'ON_SITE' ? 'Ta usługa jest wykonywana w jednym miejscu.' : 'Ta usługa wymaga przejazdu pomiędzy punktami.')
+            : 'Typ lokalizacji dobierzemy automatycznie na podstawie wybranej usługi.'}</small>
         </label>
 
-        <div className="create-job-form__wide">
-          <RouteMapPicker
-            origin={origin}
-            stops={stops}
-            destination={destination}
-            routeQuote={routeQuote}
-            onPointChange={updatePoint}
-            onAddStop={addStop}
-            onRemoveStop={removeStop}
-            disabled={submitting}
-          />
-        </div>
+        {!selectedCategory && (
+          <div className="create-job-form__wide route-summary">Wybierz kategorię, aby wskazać miejsce lub trasę realizacji.</div>
+        )}
 
-        <div className="create-job-form__wide route-summary" aria-live="polite">
-          {routing && <span>Wyznaczanie całej trasy i czasu dojazdu…</span>}
-          {!routing && routeQuote && (
-            <>
-              <strong>{routeLabel(routeQuote)}</strong>
-              <div className="route-mode-grid">
-                {modeEstimates.map((estimate) => (
-                  <div className="route-mode-card" key={estimate.mode}>
-                    <span>{modeLabel(estimate.mode)}</span>
-                    {estimate.available ? (
-                      <strong>{formatDuration(estimate.durationSeconds)} · {formatDistance(estimate.distanceMeters)}</strong>
-                    ) : (
-                      <strong>Niedostępna</strong>
+        {fulfillmentMode === 'ON_SITE' && (
+          <div className="create-job-form__wide">
+            <LocationMapPicker location={location} onLocationChange={updateOnSiteLocation} disabled={submitting} />
+          </div>
+        )}
+
+        {fulfillmentMode === 'POINT_TO_POINT' && (
+          <>
+            <div className="create-job-form__wide">
+              <RouteMapPicker
+                origin={origin}
+                stops={stops}
+                destination={destination}
+                routeQuote={routeQuote}
+                onPointChange={updatePoint}
+                onAddStop={addStop}
+                onRemoveStop={removeStop}
+                disabled={submitting}
+              />
+            </div>
+
+            <div className="create-job-form__wide route-summary" aria-live="polite">
+              {routing && <span>Wyznaczanie całej trasy i czasu dojazdu…</span>}
+              {!routing && routeQuote && (
+                <>
+                  <strong>{routeLabel(routeQuote)}</strong>
+                  <div className="route-mode-grid">
+                    {modeEstimates.map((estimate) => (
+                      <div className="route-mode-card" key={estimate.mode}>
+                        <span>{modeLabel(estimate.mode)}</span>
+                        {estimate.available ? (
+                          <strong>{formatDuration(estimate.durationSeconds)} · {formatDistance(estimate.distanceMeters)}</strong>
+                        ) : (
+                          <strong>Niedostępna</strong>
+                        )}
+                      </div>
+                    ))}
+                    {modesLoading && modeEstimates.length === 1 && (
+                      <div className="route-mode-card route-mode-card--loading">Liczenie roweru i pieszo…</div>
                     )}
                   </div>
-                ))}
-                {modesLoading && modeEstimates.length === 1 && (
-                  <div className="route-mode-card route-mode-card--loading">Liczenie roweru i pieszo…</div>
-                )}
-              </div>
-              {routeQuote.stops?.length > 0 && <small>Trasa obejmuje {routeQuote.stops.length} {routeQuote.stops.length === 1 ? 'przystanek' : 'przystanki/przystanków'} w podanej kolejności.</small>}
-              {modeComparison?.nonDrivingBetaWarningRequired && (
-                <small>Trasy piesze i rowerowe Google są w wersji beta i mogą nie uwzględniać wszystkich chodników, ścieżek lub warunków terenowych.</small>
+                  {routeQuote.stops?.length > 0 && <small>Trasa obejmuje {routeQuote.stops.length} {routeQuote.stops.length === 1 ? 'przystanek' : 'przystanki/przystanków'} w podanej kolejności.</small>}
+                  {modeComparison?.nonDrivingBetaWarningRequired && (
+                    <small>Trasy piesze i rowerowe Google są w wersji beta i mogą nie uwzględniać wszystkich chodników, ścieżek lub warunków terenowych.</small>
+                  )}
+                  {routeQuote.provider === 'DETERMINISTIC_DEV' && <small>Tryb deweloperski — prawdziwe ETA Google pojawi się po konfiguracji Routes API.</small>}
+                </>
               )}
-              {routeQuote.provider === 'DETERMINISTIC_DEV' && <small>Tryb deweloperski — prawdziwe ETA Google pojawi się po konfiguracji Routes API.</small>}
-            </>
-          )}
-          {routeError && <span className="form-message form-message--error">{routeError}</span>}
-        </div>
+              {routeError && <span className="form-message form-message--error">{routeError}</span>}
+            </div>
+          </>
+        )}
 
         <label className="field create-job-form__wide">
           <span>Tytuł</span>
-          <input name="title" value={form.title} onChange={updateField} minLength={3} maxLength={160} placeholder="np. Odbierz dwie paczki po drodze i dowieź do B" required />
+          <input name="title" value={form.title} onChange={updateField} minLength={3} maxLength={160} placeholder={fulfillmentMode === 'ON_SITE' ? 'np. Zmontuj szafę w mieszkaniu' : 'np. Odbierz dwie paczki po drodze i dowieź do B'} required />
         </label>
         <label className="field create-job-form__wide">
           <span>Opis</span>
-          <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder="Opisz co trzeba odebrać lub zrobić w każdym punkcie i wszystkie ważne szczegóły." required />
+          <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder={fulfillmentMode === 'ON_SITE' ? 'Opisz dokładnie, co trzeba zrobić na miejscu i jakie narzędzia mogą być potrzebne.' : 'Opisz co trzeba odebrać lub zrobić w każdym punkcie i wszystkie ważne szczegóły.'} required />
         </label>
         <label className="field">
           <span>Wynagrodzenie</span>
@@ -250,8 +308,10 @@ function CreateJobPage() {
         </label>
 
         <div className="create-job-form__wide create-job-form__actions">
-          <span className="create-job-form__privacy">Dokładne A, przystanki i B są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.</span>
-          <button className="button button--primary" type="submit" disabled={submitting || routing || !routeQuote?.id || !form.categoryId}>
+          <span className="create-job-form__privacy">{fulfillmentMode === 'ON_SITE'
+            ? 'Dokładny adres jest chroniony. Publiczne ogłoszenie pokazuje tylko obszar.'
+            : 'Dokładne A, przystanki i B są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.'}</span>
+          <button className="button button--primary" type="submit" disabled={submitting || routing || !selectedCategory || !locationReady}>
             {submitting ? 'Publikowanie…' : 'Opublikuj zlecenie'}
           </button>
         </div>
