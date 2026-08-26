@@ -6,6 +6,8 @@ import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
+import com.doFast.dofastapp.job.category.JobCategory;
+import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.JobRoutePointResponse;
@@ -37,6 +39,7 @@ import java.util.List;
 public class JobService {
 
     private final JobRepository jobRepository;
+    private final JobCategoryRepository jobCategoryRepository;
     private final TransactionService transactionService;
     private final NotificationService notificationService;
     private final RouteQuoteService routeQuoteService;
@@ -44,12 +47,14 @@ public class JobService {
 
     public JobService(
             JobRepository jobRepository,
+            JobCategoryRepository jobCategoryRepository,
             TransactionService transactionService,
             NotificationService notificationService,
             RouteQuoteService routeQuoteService,
             LiveTrackingService liveTrackingService
     ) {
         this.jobRepository = jobRepository;
+        this.jobCategoryRepository = jobCategoryRepository;
         this.transactionService = transactionService;
         this.notificationService = notificationService;
         this.routeQuoteService = routeQuoteService;
@@ -58,6 +63,12 @@ public class JobService {
 
     @Transactional
     public JobResponse createJob(JobRequest request, User user) {
+        JobCategory category = jobCategoryRepository.findByIdAndActiveTrue(request.getCategoryId())
+                .orElseThrow(() -> new ResourceNotFoundException("Wybrana kategoria zlecenia nie istnieje lub jest nieaktywna"));
+        if (category.getParent() == null || category.getFulfillmentMode() == null) {
+            throw new BusinessException("Wybierz konkretną podkategorię usługi");
+        }
+
         RouteQuote quote = routeQuoteService.consume(request.getRouteQuoteId(), user);
 
         Job job = new Job();
@@ -65,6 +76,7 @@ public class JobService {
         job.setDescription(request.getDescription().trim());
         job.setPrice(request.getPrice());
         job.setStatus(JobStatus.OPEN);
+        job.setCategory(category);
         job.setLocation(quote.getOrigin());
         job.setLocationLabel(quote.getOriginPublicLabel());
         job.setLocationPrivateLabel(quote.getOriginPrivateLabel());
@@ -177,8 +189,6 @@ public class JobService {
         if (job.getTakenBy() == null) throw new ConflictException("Zlecenie nie ma przypisanego wykonawcy");
         job.complete(LocalDateTime.now());
         Job saved = jobRepository.save(job);
-        // V15 keeps terminal-state tracking cleanup in the database as defense-in-depth.
-        // Flush DONE first so the application-side clear can publish the already-stopped state.
         jobRepository.flush();
         liveTrackingService.stopAndClear(saved.getId());
         transactionService.releaseMoney(saved, saved.getTakenBy());
@@ -243,8 +253,13 @@ public class JobService {
     }
 
     private JobResponse toResponse(Job job) {
+        JobCategory category = job.getCategory();
         return new JobResponse(
                 job.getId(), job.getTitle(), job.getDescription(), job.getPrice(), job.getStatus(),
+                category != null ? category.getId() : null,
+                category != null ? category.getSlug() : null,
+                category != null ? category.getName() : null,
+                category != null ? category.getFulfillmentMode() : null,
                 job.getLocationLabel(), job.getDestinationLabel(), job.getRouteDistanceMeters(), job.getRouteDurationSeconds(),
                 job.getCreatedBy().getId(), job.getTakenBy() != null ? job.getTakenBy().getId() : null,
                 job.getCreatedAt(), job.getUpdatedAt(), job.getTakenAt(), job.getCompletionRequestedAt(),

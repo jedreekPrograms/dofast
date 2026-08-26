@@ -65,6 +65,9 @@ WORKER_ID=$(python3 -c 'import json; print(json.load(open("/tmp/worker-register.
 WORKER_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/worker-login.json"))["accessToken"])')
 REFUND_ID=$(python3 -c 'import json; print(json.load(open("/tmp/refund-register.json"))["id"])')
 REFUND_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/refund-login.json"))["accessToken"])')
+CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT id FROM job_categories WHERE slug='mala-paczka' AND active=TRUE;")
+CATEGORY_ID="${CATEGORY_ID//[[:space:]]/}"
+test -n "$CATEGORY_ID"
 
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
 BEGIN;
@@ -105,7 +108,7 @@ create_job() {
     --write-out '%{http_code}' \
     -H "Authorization: Bearer $REQUESTER_TOKEN" \
     -H 'Content-Type: application/json' \
-    -d "{\"title\":\"$title\",\"description\":\"Concurrent wallet debit smoke test.\",\"price\":40.00,\"routeQuoteId\":\"$quote_id\"}" \
+    -d "{\"title\":\"$title\",\"description\":\"Concurrent wallet debit smoke test.\",\"price\":40.00,\"categoryId\":$CATEGORY_ID,\"routeQuoteId\":\"$quote_id\"}" \
     "$api/jobs" > "$status_file"
 }
 
@@ -172,7 +175,7 @@ REFUND_QUOTE=$(create_route_quote "$REFUND_TOKEN" 'Refund origin' 'Refund destin
 REFUND_JOB=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $REFUND_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d "{\"title\":\"Ledger refund\",\"description\":\"Refund ledger smoke test.\",\"price\":15.00,\"routeQuoteId\":\"$REFUND_QUOTE\"}" \
+  -d "{\"title\":\"Ledger refund\",\"description\":\"Refund ledger smoke test.\",\"price\":15.00,\"categoryId\":$CATEGORY_ID,\"routeQuoteId\":\"$REFUND_QUOTE\"}" \
   "$api/jobs")
 REFUND_JOB_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REFUND_JOB")
 

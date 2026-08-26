@@ -5,6 +5,9 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.job.category.FulfillmentMode;
+import com.doFast.dofastapp.job.category.JobCategory;
+import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
@@ -47,6 +50,7 @@ import static org.mockito.Mockito.when;
 class JobServiceTest {
 
     @Mock private JobRepository jobRepository;
+    @Mock private JobCategoryRepository jobCategoryRepository;
     @Mock private TransactionService transactionService;
     @Mock private NotificationService notificationService;
     @Mock private RouteQuoteService routeQuoteService;
@@ -58,27 +62,46 @@ class JobServiceTest {
 
     @BeforeEach
     void setUp() {
-        jobService = new JobService(jobRepository, transactionService, notificationService, routeQuoteService, liveTrackingService);
+        jobService = new JobService(jobRepository, jobCategoryRepository, transactionService, notificationService, routeQuoteService, liveTrackingService);
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
     }
 
     @Test
-    void createJobUsesServerRouteQuoteAndLocksFunds() {
+    void createJobUsesServerRouteQuoteAssignsLeafCategoryAndLocksFunds() {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         UUID quoteId = UUID.randomUUID();
         when(routeQuoteService.consume(quoteId, owner)).thenReturn(routeQuote(quoteId, owner));
+        JobCategory category = leafCategory(42L, "mala-paczka", "Mała paczka", FulfillmentMode.POINT_TO_POINT);
+        when(jobCategoryRepository.findByIdAndActiveTrue(42L)).thenReturn(Optional.of(category));
 
         JobRequest request = request(quoteId);
         JobResponse response = jobService.createJob(request, owner);
 
         assertEquals(JobStatus.OPEN, response.status());
         assertEquals(owner.getId(), response.createdById());
+        assertEquals(42L, response.categoryId());
+        assertEquals("mala-paczka", response.categorySlug());
+        assertEquals(FulfillmentMode.POINT_TO_POINT, response.fulfillmentMode());
         assertEquals("Wrocław, Plac Grunwaldzki", response.locationLabel());
         assertEquals("Wrocław, Rynek", response.destinationLabel());
         assertEquals(4200, response.routeDistanceMeters());
         assertEquals(720, response.routeDurationSeconds());
         verify(transactionService).holdMoney(any(Job.class));
+    }
+
+    @Test
+    void createJobRejectsParentCategory() {
+        JobCategory parent = new JobCategory();
+        ReflectionTestUtils.setField(parent, "id", 10L);
+        ReflectionTestUtils.setField(parent, "slug", "paczki-kurier");
+        ReflectionTestUtils.setField(parent, "name", "Paczki i kurier");
+        ReflectionTestUtils.setField(parent, "active", true);
+        when(jobCategoryRepository.findByIdAndActiveTrue(10L)).thenReturn(Optional.of(parent));
+        JobRequest request = request(UUID.randomUUID());
+        request.setCategoryId(10L);
+
+        assertThrows(BusinessException.class, () -> jobService.createJob(request, owner));
     }
 
     @Test
@@ -200,8 +223,25 @@ class JobServiceTest {
         request.setTitle("Odbierz i dowieź paczkę");
         request.setDescription("Odbierz paczkę z punktu A i dostarcz ją do punktu B.");
         request.setPrice(new BigDecimal("25.00"));
+        request.setCategoryId(42L);
         request.setRouteQuoteId(quoteId);
         return request;
+    }
+
+    private JobCategory leafCategory(Long id, String slug, String name, FulfillmentMode mode) {
+        JobCategory parent = new JobCategory();
+        ReflectionTestUtils.setField(parent, "id", id + 1000);
+        ReflectionTestUtils.setField(parent, "slug", "parent");
+        ReflectionTestUtils.setField(parent, "name", "Parent");
+        ReflectionTestUtils.setField(parent, "active", true);
+        JobCategory category = new JobCategory();
+        ReflectionTestUtils.setField(category, "id", id);
+        ReflectionTestUtils.setField(category, "parent", parent);
+        ReflectionTestUtils.setField(category, "slug", slug);
+        ReflectionTestUtils.setField(category, "name", name);
+        ReflectionTestUtils.setField(category, "fulfillmentMode", mode);
+        ReflectionTestUtils.setField(category, "active", true);
+        return category;
     }
 
     private RouteQuote routeQuote(UUID id, User user) {

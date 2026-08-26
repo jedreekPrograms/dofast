@@ -43,6 +43,9 @@ POSTGIS_VERSION=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELEC
 test -n "${POSTGIS_VERSION//[[:space:]]/}"
 PG_TRGM_VERSION=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_trgm';")
 test -n "${PG_TRGM_VERSION//[[:space:]]/}"
+CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT id FROM job_categories WHERE slug='mala-paczka' AND active=TRUE;")
+CATEGORY_ID="${CATEGORY_ID//[[:space:]]/}"
+test -n "$CATEGORY_ID"
 
 register_and_login 'smoke@example.com' 'smokeuser' 'SmokePass123!' owner
 register_and_login 'worker-smoke@example.com' 'smokeworker' 'WorkerPass123!' worker
@@ -92,7 +95,7 @@ test "$OUTSIDER_QUOTE_STATUS" = "403"
 echo "Route quote ownership/estimate: OK"
 
 JOB_RESPONSE=$(curl --fail --silent -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"title\":\"Smoke delivery\",\"description\":\"Deliver a small package from point A to point B.\",\"price\":25.00,\"routeQuoteId\":\"$ROUTE_QUOTE_ID\"}" \
+  -d "{\"title\":\"Smoke delivery\",\"description\":\"Deliver a small package from point A to point B.\",\"price\":25.00,\"categoryId\":$CATEGORY_ID,\"routeQuoteId\":\"$ROUTE_QUOTE_ID\"}" \
   "$api/jobs")
 echo "$JOB_RESPONSE" > /tmp/job.json
 JOB_ID=$(json_value /tmp/job.json id)
@@ -108,7 +111,7 @@ fi
 
 REUSE_QUOTE_STATUS=$(curl --silent --output /tmp/reused-quote.json --write-out '%{http_code}' \
   -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"title\":\"Duplicate route\",\"description\":\"This must not reuse an already consumed quote.\",\"price\":10.00,\"routeQuoteId\":\"$ROUTE_QUOTE_ID\"}" \
+  -d "{\"title\":\"Duplicate route\",\"description\":\"This must not reuse an already consumed quote.\",\"price\":10.00,\"categoryId\":$CATEGORY_ID,\"routeQuoteId\":\"$ROUTE_QUOTE_ID\"}" \
   "$api/jobs")
 test "$REUSE_QUOTE_STATUS" = "409"
 

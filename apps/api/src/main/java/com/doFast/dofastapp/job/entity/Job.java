@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.entity;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.persistence.Column;
@@ -57,6 +58,10 @@ public class Job {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private JobStatus status;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private JobCategory category;
 
     // Legacy column name retained deliberately: this is the origin/pickup point A.
     @JdbcTypeCode(SqlTypes.GEOGRAPHY)
@@ -175,6 +180,7 @@ public class Job {
     public String getDescription() { return description; }
     public BigDecimal getPrice() { return price; }
     public JobStatus getStatus() { return status; }
+    public JobCategory getCategory() { return category; }
     public Point getLocation() { return location; }
     public String getLocationLabel() { return locationLabel; }
     public String getLocationPrivateLabel() { return locationPrivateLabel; }
@@ -200,6 +206,7 @@ public class Job {
     public void setDescription(String description) { this.description = description; }
     public void setPrice(BigDecimal price) { this.price = price; }
     public void setStatus(JobStatus status) { this.status = status; }
+    public void setCategory(JobCategory category) { this.category = category; }
     public void setLocation(Point location) { this.location = location; }
     public void setLocationLabel(String locationLabel) { this.locationLabel = locationLabel; }
     public void setLocationPrivateLabel(String locationPrivateLabel) { this.locationPrivateLabel = locationPrivateLabel; }
