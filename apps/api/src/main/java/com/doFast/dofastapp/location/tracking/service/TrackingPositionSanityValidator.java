@@ -15,15 +15,22 @@ public class TrackingPositionSanityValidator {
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
 
     private final double maxImpliedSpeedMetersPerSecond;
+    private final double maxAccuracyMeters;
 
     public TrackingPositionSanityValidator(
             @Value("${dofast.tracking.max-implied-speed-meters-per-second:80}")
-            double maxImpliedSpeedMetersPerSecond
+            double maxImpliedSpeedMetersPerSecond,
+            @Value("${dofast.tracking.max-accuracy-meters:150}")
+            double maxAccuracyMeters
     ) {
         if (maxImpliedSpeedMetersPerSecond <= 0) {
             throw new IllegalArgumentException("Tracking max implied speed must be positive");
         }
+        if (maxAccuracyMeters <= 0) {
+            throw new IllegalArgumentException("Tracking max GPS accuracy must be positive");
+        }
         this.maxImpliedSpeedMetersPerSecond = maxImpliedSpeedMetersPerSecond;
+        this.maxAccuracyMeters = maxAccuracyMeters;
     }
 
     public void validate(
@@ -32,6 +39,8 @@ public class TrackingPositionSanityValidator {
             Instant previousCapturedAt,
             LiveLocationUpdateRequest request
     ) {
+        validateAccuracy(request.accuracyMeters());
+
         if (previousLocation == null || previousCapturedAt == null) {
             return;
         }
@@ -47,13 +56,22 @@ public class TrackingPositionSanityValidator {
                 request.latitude().doubleValue(),
                 request.longitude().doubleValue()
         );
-        double accuracyAllowanceMeters = nonNegative(previousAccuracyMeters) + nonNegative(request.accuracyMeters());
+        double accuracyAllowanceMeters = nonNegative(previousAccuracyMeters) + request.accuracyMeters();
         double effectiveDistanceMeters = Math.max(0.0, distanceMeters - accuracyAllowanceMeters);
         double elapsedSeconds = elapsedMillis / 1000.0;
         double impliedSpeedMetersPerSecond = effectiveDistanceMeters / elapsedSeconds;
 
         if (impliedSpeedMetersPerSecond > maxImpliedSpeedMetersPerSecond) {
             throw new ConflictException("Aktualizacja lokalizacji wskazuje nierealny skok pozycji");
+        }
+    }
+
+    private void validateAccuracy(Double accuracyMeters) {
+        if (accuracyMeters == null) {
+            throw new ConflictException("Aktualizacja lokalizacji nie zawiera dokładności GPS");
+        }
+        if (accuracyMeters > maxAccuracyMeters) {
+            throw new ConflictException("Dokładność GPS jest zbyt niska, aby bezpiecznie zaktualizować pozycję");
         }
     }
 
