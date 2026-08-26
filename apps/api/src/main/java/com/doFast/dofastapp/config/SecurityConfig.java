@@ -37,7 +37,7 @@ public class SecurityConfig {
                                 writeSecurityError(response, HttpServletResponse.SC_FORBIDDEN, "Forbidden"))
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/users", "/users/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/users", "/users/login", "/users/login/google").permitAll()
                         .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/*/profile", "/reviews/users/*").permitAll()
                         .requestMatchers("/ws", "/ws/**", "/ws-sockjs/**").permitAll()

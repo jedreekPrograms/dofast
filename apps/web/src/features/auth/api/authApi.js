@@ -16,6 +16,14 @@ export function loginUser(payload) {
   })
 }
 
+export function loginUserWithGoogle(credential) {
+  return apiRequest('/users/login/google', {
+    method: 'POST',
+    auth: false,
+    body: JSON.stringify({ credential }),
+  })
+}
+
 export function getCurrentUser() {
   return apiRequest('/users/me')
 }

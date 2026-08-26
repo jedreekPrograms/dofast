@@ -1,15 +1,22 @@
 package com.doFast.dofastapp.user;
 
 import com.doFast.dofastapp.common.exception.AuthenticationFailedException;
+import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.util.JwtUtil;
+import com.doFast.dofastapp.user.auth.GoogleIdentity;
+import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
 import com.doFast.dofastapp.user.dto.AuthResponse;
+import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
 import com.doFast.dofastapp.user.dto.LoginRequest;
 import com.doFast.dofastapp.user.dto.UserRequest;
 import com.doFast.dofastapp.user.dto.UserResponse;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.entity.UserAuthIdentity;
+import com.doFast.dofastapp.user.enums.AuthProvider;
 import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.enums.UserStatus;
+import com.doFast.dofastapp.user.repository.UserAuthIdentityRepository;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.user.service.UserService;
 import com.doFast.dofastapp.wallet.service.WalletService;
@@ -24,8 +31,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,12 +46,21 @@ class UserServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtUtil jwtUtil;
     @Mock private WalletService walletService;
+    @Mock private UserAuthIdentityRepository authIdentityRepository;
+    @Mock private GoogleIdentityVerifier googleIdentityVerifier;
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, passwordEncoder, jwtUtil, walletService);
+        userService = new UserService(
+                userRepository,
+                passwordEncoder,
+                jwtUtil,
+                walletService,
+                authIdentityRepository,
+                googleIdentityVerifier
+        );
     }
 
     @Test
@@ -85,6 +104,20 @@ class UserServiceTest {
     }
 
     @Test
+    void oauthOnlyAccountCannotUsePasswordLogin() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail("user@example.com");
+        request.setPassword("anything");
+
+        User user = activeUser();
+        user.setPasswordLoginEnabled(false);
+        when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+
+        assertThrows(AuthenticationFailedException.class, () -> userService.login(request));
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+    }
+
+    @Test
     void suspendedUserCannotLogIn() {
         LoginRequest request = new LoginRequest();
         request.setEmail("user@example.com");
@@ -117,12 +150,98 @@ class UserServiceTest {
         assertEquals(UserRole.USER, response.user().role());
     }
 
+    @Test
+    void googleLoginCreatesOauthOnlyUserWalletAndProviderIdentity() {
+        GoogleLoginRequest request = new GoogleLoginRequest("google-id-token");
+        GoogleIdentity googleIdentity = new GoogleIdentity(
+                "google-subject-123",
+                "Person@Gmail.com",
+                "Google Person",
+                true
+        );
+
+        when(googleIdentityVerifier.verify("google-id-token")).thenReturn(googleIdentity);
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCase("person@gmail.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("random-password-hash");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 22L);
+            return saved;
+        });
+        when(jwtUtil.generateToken("person@gmail.com")).thenReturn("google-session-token");
+        when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
+
+        AuthResponse response = userService.loginWithGoogle(request);
+
+        assertEquals("google-session-token", response.accessToken());
+        assertEquals("person@gmail.com", response.user().email());
+        verify(walletService).createWalletForUser(22L);
+        verify(authIdentityRepository).save(any(UserAuthIdentity.class));
+        verify(userRepository).save(any(User.class));
+    }
+
+    @Test
+    void returningGoogleSubjectUsesLinkedUserWithoutEmailLookup() {
+        GoogleLoginRequest request = new GoogleLoginRequest("google-id-token");
+        GoogleIdentity googleIdentity = new GoogleIdentity(
+                "google-subject-123",
+                "changed@gmail.com",
+                "Google Person",
+                true
+        );
+        User user = activeUser();
+        UserAuthIdentity identity = new UserAuthIdentity();
+        identity.setUser(user);
+        identity.setProvider(AuthProvider.GOOGLE);
+        identity.setProviderSubject("google-subject-123");
+
+        when(googleIdentityVerifier.verify("google-id-token")).thenReturn(googleIdentity);
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123"))
+                .thenReturn(Optional.of(identity));
+        when(jwtUtil.generateToken("user@example.com")).thenReturn("token");
+        when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
+
+        AuthResponse response = userService.loginWithGoogle(request);
+
+        assertEquals("user@example.com", response.user().email());
+        verify(userRepository, never()).findByEmailIgnoreCase("changed@gmail.com");
+        verify(authIdentityRepository, never()).save(any(UserAuthIdentity.class));
+    }
+
+    @Test
+    void googleDoesNotAutoLinkExistingThirdPartyEmailWhenGoogleIsNotAuthoritative() {
+        GoogleLoginRequest request = new GoogleLoginRequest("google-id-token");
+        GoogleIdentity googleIdentity = new GoogleIdentity(
+                "google-subject-123",
+                "user@example.com",
+                "Example User",
+                false
+        );
+        User user = activeUser();
+
+        when(googleIdentityVerifier.verify("google-id-token")).thenReturn(googleIdentity);
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+
+        ConflictException exception = assertThrows(
+                ConflictException.class,
+                () -> userService.loginWithGoogle(request)
+        );
+
+        assertFalse(exception.getMessage().isBlank());
+        verify(authIdentityRepository, never()).save(any(UserAuthIdentity.class));
+    }
+
     private User activeUser() {
         User user = new User();
         ReflectionTestUtils.setField(user, "id", 9L);
         user.setEmail("user@example.com");
         user.setNickname("test-user");
         user.setPassword("hash");
+        user.setPasswordLoginEnabled(true);
         user.setRole(UserRole.USER);
         user.setStatus(UserStatus.ACTIVE);
         return user;

@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import GoogleSignInButton from '../components/GoogleSignInButton.jsx'
 import { useAuth } from '../AuthContext.js'
 import './AuthPage.css'
 
+const GOOGLE_ENABLED = Boolean(import.meta.env.VITE_GOOGLE_AUTH_CLIENT_ID?.trim())
+
 function RegisterPage() {
-  const { register } = useAuth()
+  const { register, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', nickname: '', password: '' })
   const [error, setError] = useState('')
@@ -29,6 +32,19 @@ function RegisterPage() {
     }
   }
 
+  const handleGoogleCredential = useCallback(async (credential) => {
+    setSubmitting(true)
+    setError('')
+    try {
+      await loginWithGoogle(credential)
+      navigate('/my-jobs', { replace: true })
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się utworzyć konta przez Google.')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [loginWithGoogle, navigate])
+
   return (
     <main className="auth-page">
       <section className="auth-card">
@@ -37,6 +53,16 @@ function RegisterPage() {
           <h1>Dołącz do doFast</h1>
           <p>Jedno konto pozwala zarówno zlecać zadania, jak i przyjmować zlecenia w Twojej okolicy.</p>
         </div>
+
+        {GOOGLE_ENABLED && (
+          <>
+            <div className="auth-card__federated">
+              <GoogleSignInButton onCredential={handleGoogleCredential} disabled={submitting} />
+            </div>
+            <div className="auth-card__divider"><span>lub</span></div>
+          </>
+        )}
+
         <form className="form-stack" onSubmit={submit}>
           <label className="field">
             <span>Email</span>
@@ -51,7 +77,7 @@ function RegisterPage() {
             <input name="password" type="password" value={form.password} onChange={updateField} minLength={8} maxLength={72} autoComplete="new-password" required />
             <small>Minimum 8 znaków.</small>
           </label>
-          {error && <div className="form-message form-message--error">{error}</div>}
+          {error && <div className="form-message form-message--error" role="alert">{error}</div>}
           <button className="button button--primary" type="submit" disabled={submitting}>
             {submitting ? 'Tworzenie konta…' : 'Załóż konto'}
           </button>

@@ -2,6 +2,7 @@ package com.doFast.dofastapp.user.controller;
 
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
+import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
 import com.doFast.dofastapp.user.dto.LoginRequest;
 import com.doFast.dofastapp.user.dto.UpdateProfileRequest;
 import com.doFast.dofastapp.user.dto.UserRequest;
@@ -38,6 +39,11 @@ public class UserController {
     @PostMapping("/login")
     public AuthResponse login(@RequestBody @Valid LoginRequest request) {
         return userService.login(request);
+    }
+
+    @PostMapping("/login/google")
+    public AuthResponse loginWithGoogle(@RequestBody @Valid GoogleLoginRequest request) {
+        return userService.loginWithGoogle(request);
     }
 
     @GetMapping("/me")

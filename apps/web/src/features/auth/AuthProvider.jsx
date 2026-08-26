@@ -4,6 +4,7 @@ import {
   changeCurrentUserPassword,
   getCurrentUser,
   loginUser,
+  loginUserWithGoogle,
   registerUser,
   updateCurrentUser,
 } from './api/authApi.js'
@@ -36,12 +37,19 @@ function AuthProvider({ children }) {
     }
   }, [])
 
-  async function login(credentials) {
-    const response = await loginUser(credentials)
+  function applyAuthResponse(response) {
     setAccessToken(response.accessToken)
     setUser(response.user)
     setReady(true)
     return response.user
+  }
+
+  async function login(credentials) {
+    return applyAuthResponse(await loginUser(credentials))
+  }
+
+  async function loginWithGoogle(credential) {
+    return applyAuthResponse(await loginUserWithGoogle(credential))
   }
 
   async function register(payload) {
@@ -66,7 +74,7 @@ function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, ready, login, register, logout, updateProfile, changePassword }}>
+    <AuthContext.Provider value={{ user, ready, login, loginWithGoogle, register, logout, updateProfile, changePassword }}>
       {children}
     </AuthContext.Provider>
   )
