@@ -111,9 +111,8 @@ public class JobLiveTracking {
         this.sharingStoppedAt = null;
     }
 
-    public void switchToDestination(Instant now) {
+    public void switchToDestination() {
         this.phase = TrackingPhase.TO_DESTINATION;
-        this.receivedAt = now;
         clearEstimate();
     }
 
