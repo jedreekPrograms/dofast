@@ -90,6 +90,8 @@ jobs:
         run: bash .github/scripts/job-discovery-smoke.sh
       - name: Verify accounts, routing, chat, disputes and escrow
         run: bash .github/scripts/runtime-smoke.sh
+      - name: Verify multi-stop routing and tracking
+        run: bash .github/scripts/multi-stop-routing-smoke.sh
       - name: Start web gateway
         run: docker compose up -d --no-build web
       - name: Verify web container and API gateway
