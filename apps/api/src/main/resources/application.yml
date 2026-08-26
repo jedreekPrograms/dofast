@@ -79,3 +79,5 @@ dofast:
     max-implied-speed-meters-per-second: ${TRACKING_MAX_IMPLIED_SPEED_METERS_PER_SECOND:80}
     max-accuracy-meters: ${TRACKING_MAX_ACCURACY_METERS:150}
     min-update-interval-millis: ${TRACKING_MIN_UPDATE_INTERVAL_MILLIS:1000}
+    max-sample-age-seconds: ${TRACKING_MAX_SAMPLE_AGE_SECONDS:120}
+    future-tolerance-seconds: ${TRACKING_FUTURE_TOLERANCE_SECONDS:30}
