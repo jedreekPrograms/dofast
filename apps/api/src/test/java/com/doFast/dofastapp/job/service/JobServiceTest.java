@@ -159,7 +159,7 @@ class JobServiceTest {
     void unavailableJobCannotBeAcceptedAgain() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
         when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
-        assertThrows(ConflictException.class, () -> jobService.acceptJob(10L, user(3L, "other@example.com"))));
+        assertThrows(ConflictException.class, () -> jobService.acceptJob(10L, user(3L, "other@example.com")));
     }
 
     @Test
