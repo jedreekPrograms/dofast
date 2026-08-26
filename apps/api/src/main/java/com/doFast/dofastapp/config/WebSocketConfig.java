@@ -12,9 +12,14 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final WebSocketSecurityInterceptor securityInterceptor;
+    private final WebSocketOriginPolicy originPolicy;
 
-    public WebSocketConfig(WebSocketSecurityInterceptor securityInterceptor) {
+    public WebSocketConfig(
+            WebSocketSecurityInterceptor securityInterceptor,
+            WebSocketOriginPolicy originPolicy
+    ) {
         this.securityInterceptor = securityInterceptor;
+        this.originPolicy = originPolicy;
     }
 
     @Override
@@ -31,11 +36,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        String[] allowedOrigins = originPolicy.allowedOriginPatterns();
+
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOriginPatterns(allowedOrigins);
 
         registry.addEndpoint("/ws-sockjs")
-                .setAllowedOriginPatterns("*")
+                .setAllowedOriginPatterns(allowedOrigins)
                 .withSockJS();
     }
 }
