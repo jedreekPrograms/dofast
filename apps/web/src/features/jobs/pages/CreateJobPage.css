@@ -16,20 +16,44 @@
 
 .route-summary {
   display: grid;
-  gap: 4px;
+  gap: 10px;
   min-height: 64px;
   padding: 14px 16px;
   border: 1px solid var(--border, #d9dde5);
   border-radius: 14px;
 }
 
-.route-summary strong {
+.route-summary > strong {
   font-size: 1.05rem;
 }
 
 .route-summary small,
 .create-job-form__privacy {
   opacity: 0.7;
+}
+
+.route-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.route-mode-card {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #d9dde5);
+  border-radius: 12px;
+}
+
+.route-mode-card span,
+.route-mode-card--loading {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.route-mode-card strong {
+  font-size: 0.95rem;
 }
 
 .create-job-form__actions {
@@ -52,6 +76,10 @@
 
   .create-job-form__wide {
     grid-column: auto;
+  }
+
+  .route-mode-grid {
+    grid-template-columns: 1fr;
   }
 
   .create-job-form__actions {
