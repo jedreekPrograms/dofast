@@ -25,6 +25,8 @@ import java.util.Map;
 public class StripePaymentService {
 
     private static final String CURRENCY = "PLN";
+    private static final BigDecimal MIN_TOP_UP_AMOUNT = new BigDecimal("1.00");
+    private static final BigDecimal MAX_TOP_UP_AMOUNT = new BigDecimal("10000.00");
 
     private final WalletService walletService;
     private final PaymentTransactionRepository paymentTransactionRepository;
@@ -119,6 +121,10 @@ public class StripePaymentService {
         }
 
         BigDecimal amount = BigDecimal.valueOf(amountInCents, 2);
+        if (amount.compareTo(MIN_TOP_UP_AMOUNT) < 0 || amount.compareTo(MAX_TOP_UP_AMOUNT) > 0) {
+            throw new IllegalStateException("Stripe PaymentIntent amount is outside the supported top-up range");
+        }
+
         int claimed = paymentTransactionRepository.claimSuccessfulPayment(
                 paymentIntentId,
                 eventId,
@@ -173,14 +179,22 @@ public class StripePaymentService {
     }
 
     private BigDecimal normalizeAmount(BigDecimal amount) {
-        if (amount == null || amount.signum() <= 0) {
-            throw new BusinessException("Kwota płatności musi być dodatnia");
+        if (amount == null) {
+            throw new BusinessException("Kwota płatności jest wymagana");
         }
+
+        final BigDecimal normalizedAmount;
         try {
-            return amount.setScale(2, RoundingMode.UNNECESSARY);
+            normalizedAmount = amount.setScale(2, RoundingMode.UNNECESSARY);
         } catch (ArithmeticException ex) {
             throw new BusinessException("Kwota płatności może mieć maksymalnie dwa miejsca po przecinku");
         }
+
+        if (normalizedAmount.compareTo(MIN_TOP_UP_AMOUNT) < 0
+                || normalizedAmount.compareTo(MAX_TOP_UP_AMOUNT) > 0) {
+            throw new BusinessException("Kwota doładowania musi mieścić się w przedziale 1,00–10 000,00 PLN");
+        }
+        return normalizedAmount;
     }
 
     private String normalizeRequestId(String requestId) {

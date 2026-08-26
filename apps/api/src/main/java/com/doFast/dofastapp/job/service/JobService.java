@@ -177,6 +177,9 @@ public class JobService {
         if (job.getTakenBy() == null) throw new ConflictException("Zlecenie nie ma przypisanego wykonawcy");
         job.complete(LocalDateTime.now());
         Job saved = jobRepository.save(job);
+        // V12 also clears tracking in a DB trigger and increments its optimistic-lock version.
+        // Flush the DONE transition first so the following application-side clear reloads that new version.
+        jobRepository.flush();
         liveTrackingService.stopAndClear(saved.getId());
         transactionService.releaseMoney(saved, saved.getTakenBy());
         notificationService.notify(saved.getTakenBy(), NotificationType.JOB_COMPLETED, "Zlecenie potwierdzone",

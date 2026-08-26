@@ -41,6 +41,25 @@ Additional invariants:
 - A processing failure rolls back both the claimed payment row and wallet credit, and returns HTTP 500 so Stripe can retry; invalid signatures return HTTP 400.
 - Creating a PaymentIntent requires a client `requestId`. It is mapped to a Stripe idempotency key, preventing a network retry from creating a second PaymentIntent for the same top-up attempt.
 
+### Web top-up flow
+
+The wallet page provides the user-facing top-up flow without moving card data through the doFast API:
+
+1. The authenticated web client requests `POST /payments/create-intent` with the selected amount and a unique `requestId`.
+2. The API creates an idempotent Stripe PaymentIntent and returns only the client secret required by Stripe.js.
+3. The browser loads Stripe.js directly from `https://js.stripe.com` and mounts Stripe Payment Element. Card/payment-method details therefore go directly to Stripe.
+4. The browser calls `confirmPayment`. Redirect-based methods return to `/wallet`, where the client retrieves and displays the Stripe payment status.
+5. A browser-side `succeeded` result is informational only. It never mutates the wallet. The signed Stripe webhook remains the only top-up credit boundary.
+6. After Stripe reports success or processing, the wallet page refreshes balance/history several times to pick up the asynchronous webhook commit.
+
+Configuration:
+
+- `STRIPE_SECRET_KEY` — server-only Stripe secret key. Never expose it to Vite or commit it.
+- `STRIPE_WEBHOOK_SECRET` — server-only signing secret for `/webhooks/stripe`.
+- `VITE_STRIPE_PUBLISHABLE_KEY` — public Stripe publishable key (`pk_test_...` locally/test, `pk_live_...` only in a controlled production build).
+
+For local end-to-end Stripe testing, configure test keys and forward Stripe test webhooks to `http://localhost:8080/webhooks/stripe`. The signing secret produced for that listener belongs in the local `STRIPE_WEBHOOK_SECRET`; it must not be committed.
+
 ## Reconciliation
 
 The administrator reconciliation endpoint is an operational integrity check, not a balance-calculation shortcut.
@@ -56,4 +75,4 @@ The financial smoke workflow verifies concurrent debit protection, escrow releas
 
 ## Production boundary
 
-The repository is safe to exercise with Stripe test keys. Production money movement must not be enabled until real Stripe secrets, webhook endpoint configuration, operational alerting, reconciliation and production deployment controls are configured outside the repository.
+The repository is safe to exercise with Stripe test keys. Production money movement must not be enabled until real Stripe secrets, webhook endpoint configuration, operational alerting, reconciliation and production deployment controls are configured outside the repository. The web build must receive only the publishable Stripe key; secret and webhook keys remain API-only configuration.

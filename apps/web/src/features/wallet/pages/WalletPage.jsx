@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getWallet, getWalletTransactions } from '../api/walletApi.js'
+import StripeTopUpPanel from '../components/StripeTopUpPanel.jsx'
 import './WalletPage.css'
 
 const TYPE_LABELS = {
@@ -19,31 +20,57 @@ function WalletPage() {
   const [wallet, setWallet] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
+  const refreshTimersRef = useRef([])
+
+  const loadWallet = useCallback(async ({ initial = false } = {}) => {
+    if (initial) setLoading(true)
+    else setRefreshing(true)
+    setError('')
+
+    try {
+      const [walletData, history] = await Promise.all([getWallet(), getWalletTransactions()])
+      setWallet(walletData)
+      setTransactions(history)
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się pobrać portfela.')
+    } finally {
+      if (initial) setLoading(false)
+      else setRefreshing(false)
+    }
+  }, [])
 
   useEffect(() => {
-    let active = true
-    Promise.all([getWallet(), getWalletTransactions()])
-      .then(([walletData, history]) => {
-        if (!active) return
-        setWallet(walletData)
-        setTransactions(history)
-      })
-      .catch((requestError) => {
-        if (active) setError(requestError.message || 'Nie udało się pobrać portfela.')
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => { active = false }
-  }, [])
+    loadWallet({ initial: true })
+    return () => {
+      refreshTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+      refreshTimersRef.current = []
+    }
+  }, [loadWallet])
+
+  const handlePaymentSettled = useCallback(() => {
+    refreshTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    refreshTimersRef.current = []
+
+    const refreshDelays = [0, 1500, 4000, 8000]
+    refreshDelays.forEach((delay) => {
+      const timer = window.setTimeout(() => loadWallet(), delay)
+      refreshTimersRef.current.push(timer)
+    })
+  }, [loadWallet])
 
   return (
     <main className="wallet-page">
-      <header className="page-heading">
-        <span className="eyebrow">Rozliczenia</span>
-        <h1>Portfel</h1>
-        <p>Saldo i pełna historia operacji związanych z Twoimi zleceniami.</p>
+      <header className="page-heading wallet-page__heading">
+        <div>
+          <span className="eyebrow">Rozliczenia</span>
+          <h1>Portfel</h1>
+          <p>Saldo, doładowania i pełna historia operacji związanych z Twoimi zleceniami.</p>
+        </div>
+        <button type="button" className="wallet-refresh" onClick={() => loadWallet()} disabled={loading || refreshing}>
+          {refreshing ? 'Odświeżanie…' : 'Odśwież saldo'}
+        </button>
       </header>
 
       {loading && <div className="page-state">Pobieranie portfela…</div>}
@@ -51,12 +78,23 @@ function WalletPage() {
       {!loading && wallet && (
         <>
           <section className="wallet-balance panel">
-            <span>Dostępne saldo</span>
-            <strong>{moneyFormatter.format(Number(wallet.balance))}</strong>
-            <small>Każda zmiana salda jest zapisywana w historii. Wpłaty kartą pojawią się w interfejsie po konfiguracji produkcyjnych płatności.</small>
+            <div>
+              <span>Dostępne saldo</span>
+              <strong>{moneyFormatter.format(Number(wallet.balance))}</strong>
+            </div>
+            <small>Każda zmiana salda jest zapisywana w ledgerze. Środki z płatności pojawiają się dopiero po potwierdzeniu Stripe.</small>
           </section>
+
+          <StripeTopUpPanel onPaymentSettled={handlePaymentSettled} />
+
           <section className="panel">
-            <h2>Historia</h2>
+            <div className="wallet-history__heading">
+              <div>
+                <span className="eyebrow">Ledger</span>
+                <h2>Historia</h2>
+              </div>
+              <span>{transactions.length} operacji</span>
+            </div>
             {transactions.length === 0 && <div className="page-state">Brak operacji na portfelu.</div>}
             {transactions.length > 0 && (
               <div className="wallet-history">
