@@ -40,6 +40,7 @@ public class LiveTrackingService {
     private final JobRepository jobRepository;
     private final JobLiveTrackingRepository trackingRepository;
     private final LiveTrackingAccessService accessService;
+    private final TrackingPositionSanityValidator positionSanityValidator;
     private final RouteProvider routeProvider;
     private final SimpMessagingTemplate messagingTemplate;
     private final TransactionTemplate transactionTemplate;
@@ -51,6 +52,7 @@ public class LiveTrackingService {
             JobRepository jobRepository,
             JobLiveTrackingRepository trackingRepository,
             LiveTrackingAccessService accessService,
+            TrackingPositionSanityValidator positionSanityValidator,
             RouteProvider routeProvider,
             SimpMessagingTemplate messagingTemplate,
             PlatformTransactionManager transactionManager,
@@ -61,6 +63,7 @@ public class LiveTrackingService {
         this.jobRepository = jobRepository;
         this.trackingRepository = trackingRepository;
         this.accessService = accessService;
+        this.positionSanityValidator = positionSanityValidator;
         this.routeProvider = routeProvider;
         this.messagingTemplate = messagingTemplate;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -153,6 +156,13 @@ public class LiveTrackingService {
         if (tracking.getCapturedAt() != null && !request.capturedAt().isAfter(tracking.getCapturedAt())) {
             throw new ConflictException("Nowsza lokalizacja wykonawcy została już zapisana");
         }
+
+        positionSanityValidator.validate(
+                tracking.getCurrentLocation(),
+                tracking.getAccuracyMeters(),
+                tracking.getCapturedAt(),
+                request
+        );
 
         Point current = GeoPointFactory.from(request.latitude(), request.longitude());
         boolean refreshEstimate = shouldRefreshEstimate(tracking, current, now);
