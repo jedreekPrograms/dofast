@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import { useRealtime } from '../../../shared/realtime/RealtimeContext.js'
 import {
-  confirmJobPickup,
+  confirmRouteCheckpoint,
   getJob,
   getJobRoute,
   getLiveTracking,
@@ -132,7 +132,8 @@ function JobRoutePage() {
           content: new PinElement({ glyphText: 'A' }),
           title: route.origin.label,
         }))
-        ;(route.stops || []).forEach((stop, index) => {
+        const routeStops = route.stops || []
+        routeStops.forEach((stop, index) => {
           markers.push(new AdvancedMarkerElement({
             map,
             position: point(stop),
@@ -148,7 +149,7 @@ function JobRoutePage() {
         }))
 
         const decoded = decodeGooglePolyline(route.encodedPolyline)
-        const fallback = [route.origin, ...(route.stops || []), route.destination].map(point)
+        const fallback = [route.origin, ...routeStops, route.destination].map(point)
         const path = decoded.length >= 2 ? decoded : fallback
         routeLine = new window.google.maps.Polyline({ path, map, strokeOpacity: 0.35, strokeWeight: 5 })
         const bounds = new window.google.maps.LatLngBounds()
@@ -294,7 +295,7 @@ function JobRoutePage() {
     setCheckpointSubmitting(true)
     setTrackingError('')
     try {
-      setTracking(await confirmJobPickup(jobId))
+      setTracking(await confirmRouteCheckpoint(jobId))
     } catch (requestError) {
       setTrackingError(requestError.message || 'Nie udało się potwierdzić punktu trasy.')
     } finally {
