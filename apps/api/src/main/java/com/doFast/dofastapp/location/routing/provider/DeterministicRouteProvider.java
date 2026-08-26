@@ -8,15 +8,22 @@ import org.springframework.stereotype.Component;
 public class DeterministicRouteProvider implements RouteProvider {
 
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
-    private static final double ROAD_FACTOR = 1.25;
-    private static final double AVERAGE_URBAN_SPEED_METERS_PER_SECOND = 35_000.0 / 3_600.0;
 
     @Override
-    public RouteProviderResult estimate(RouteCoordinate origin, RouteCoordinate destination) {
+    public RouteProviderResult estimate(RouteCoordinate origin, RouteCoordinate destination, RouteTravelMode travelMode) {
         double straightLine = haversineMeters(origin, destination);
-        int distance = Math.max(1, (int) Math.ceil(straightLine * ROAD_FACTOR));
-        int duration = Math.max(60, (int) Math.ceil(distance / AVERAGE_URBAN_SPEED_METERS_PER_SECOND));
+        ModeProfile profile = profile(travelMode);
+        int distance = Math.max(1, (int) Math.ceil(straightLine * profile.distanceFactor()));
+        int duration = Math.max(60, (int) Math.ceil(distance / profile.speedMetersPerSecond()));
         return new RouteProviderResult(distance, duration, null, "DETERMINISTIC_DEV");
+    }
+
+    private ModeProfile profile(RouteTravelMode travelMode) {
+        return switch (travelMode) {
+            case DRIVE -> new ModeProfile(1.25, 35_000.0 / 3_600.0);
+            case BICYCLE -> new ModeProfile(1.15, 16_000.0 / 3_600.0);
+            case WALK -> new ModeProfile(1.10, 4_800.0 / 3_600.0);
+        };
     }
 
     private double haversineMeters(RouteCoordinate first, RouteCoordinate second) {
@@ -30,4 +37,6 @@ public class DeterministicRouteProvider implements RouteProvider {
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return EARTH_RADIUS_METERS * c;
     }
+
+    private record ModeProfile(double distanceFactor, double speedMetersPerSecond) {}
 }
