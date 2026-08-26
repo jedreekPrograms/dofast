@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,6 +96,27 @@ class JobServiceTest {
         assertEquals(20, response.size());
         assertEquals("Wrocław, Plac Grunwaldzki", response.content().getFirst().locationLabel());
         assertEquals("Wrocław, Rynek", response.content().getFirst().destinationLabel());
+    }
+
+    @Test
+    void discoveryUsesTypedEmptyStringWhenTextQueryIsMissing() {
+        when(jobRepository.findOpenJobs(eq(JobStatus.OPEN), eq(""), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        PageResponse<JobResponse> response = jobService.getOpenJobs(null, null, null, 0, 20);
+
+        assertEquals(0, response.totalElements());
+        verify(jobRepository).findOpenJobs(eq(JobStatus.OPEN), eq(""), isNull(), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void discoveryUsesTypedEmptyStringWhenTextQueryIsBlank() {
+        when(jobRepository.findOpenJobs(eq(JobStatus.OPEN), eq(""), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        jobService.getOpenJobs("   ", null, null, 0, 20);
+
+        verify(jobRepository).findOpenJobs(eq(JobStatus.OPEN), eq(""), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test

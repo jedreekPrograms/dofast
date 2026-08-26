@@ -89,7 +89,7 @@ public class JobService {
             throw new BusinessException("Minimalna cena nie może być większa od maksymalnej");
         }
 
-        String normalizedQuery = normalizeOptionalLabel(query);
+        String normalizedQuery = normalizeSearchQuery(query);
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
         Page<Job> result = jobRepository.findOpenJobs(JobStatus.OPEN, normalizedQuery, minPrice, maxPrice, pageable);
         List<JobResponse> content = result.getContent().stream().map(this::toResponse).toList();
@@ -177,8 +177,8 @@ public class JobService {
         if (job.getTakenBy() == null) throw new ConflictException("Zlecenie nie ma przypisanego wykonawcy");
         job.complete(LocalDateTime.now());
         Job saved = jobRepository.save(job);
-        // V12 also clears tracking in a DB trigger and increments its optimistic-lock version.
-        // Flush the DONE transition first so the following application-side clear reloads that new version.
+        // V15 keeps terminal-state tracking cleanup in the database as defense-in-depth.
+        // Flush DONE first so the application-side clear can publish the already-stopped state.
         jobRepository.flush();
         liveTrackingService.stopAndClear(saved.getId());
         transactionService.releaseMoney(saved, saved.getTakenBy());
@@ -237,10 +237,9 @@ public class JobService {
         return first != null && second != null && first.getId() != null && first.getId().equals(second.getId());
     }
 
-    private String normalizeOptionalLabel(String value) {
-        if (value == null) return null;
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+    private String normalizeSearchQuery(String value) {
+        if (value == null) return "";
+        return value.trim();
     }
 
     private JobResponse toResponse(Job job) {
