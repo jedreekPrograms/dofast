@@ -86,6 +86,8 @@ jobs:
           docker compose ps
           docker compose logs db api
           exit 1
+      - name: Verify public job discovery without text query
+        run: bash .github/scripts/job-discovery-smoke.sh
       - name: Verify accounts, routing, chat, disputes and escrow
         run: bash .github/scripts/runtime-smoke.sh
       - name: Start web gateway

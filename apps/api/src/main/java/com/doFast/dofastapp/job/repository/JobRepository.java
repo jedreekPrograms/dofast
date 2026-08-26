@@ -26,7 +26,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             from Job j
             where j.status = :status
               and (
-                    :query is null
+                    :query = ''
                     or lower(j.title) like lower(concat('%', :query, '%'))
                     or lower(j.description) like lower(concat('%', :query, '%'))
                     or lower(j.locationLabel) like lower(concat('%', :query, '%'))
