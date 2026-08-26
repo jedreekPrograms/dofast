@@ -43,6 +43,35 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             Pageable pageable
     );
 
+    @Query("""
+            select j
+            from Job j
+            join j.category category
+            left join category.parent parentCategory
+            where j.status = :status
+              and (
+                    :query = ''
+                    or lower(j.title) like lower(concat('%', :query, '%'))
+                    or lower(j.description) like lower(concat('%', :query, '%'))
+                    or lower(j.locationLabel) like lower(concat('%', :query, '%'))
+                    or lower(j.destinationLabel) like lower(concat('%', :query, '%'))
+              )
+              and (
+                    lower(category.slug) = lower(:categorySlug)
+                    or lower(parentCategory.slug) = lower(:categorySlug)
+              )
+              and (:minPrice is null or j.price >= :minPrice)
+              and (:maxPrice is null or j.price <= :maxPrice)
+            """)
+    Page<Job> findOpenJobsByCategory(
+            @Param("status") JobStatus status,
+            @Param("query") String query,
+            @Param("categorySlug") String categorySlug,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            Pageable pageable
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select j from Job j where j.id = :id")
     Optional<Job> findByIdForUpdate(@Param("id") Long id);

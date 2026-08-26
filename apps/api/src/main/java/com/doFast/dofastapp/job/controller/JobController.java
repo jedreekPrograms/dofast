@@ -13,6 +13,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -47,11 +48,12 @@ public class JobController {
     @GetMapping
     public PageResponse<JobResponse> getJobs(
             @RequestParam(required = false) @Size(max = 100) String query,
+            @RequestParam(required = false) @Size(max = 80) @Pattern(regexp = "[a-z0-9-]*") String category,
             @RequestParam(required = false) @DecimalMin("0.00") BigDecimal minPrice,
             @RequestParam(required = false) @DecimalMin("0.00") BigDecimal maxPrice,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
-    ) { return jobService.getOpenJobs(query, minPrice, maxPrice, page, size); }
+    ) { return jobService.getOpenJobs(query, category, minPrice, maxPrice, page, size); }
 
     @GetMapping("/nearby")
     public List<NearbyJobResponse> getNearbyJobs(
