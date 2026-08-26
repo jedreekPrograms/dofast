@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import RouteMapPicker from '../components/RouteMapPicker.jsx'
+import SingleLocationPicker from '../components/SingleLocationPicker.jsx'
 import { createJob, createRouteQuote, getJobCategories, getRouteModeEstimates } from '../api/jobsApi.js'
 import './CreateJobPage.css'
 
@@ -35,12 +36,16 @@ function CreateJobPage() {
     return () => controller.abort()
   }, [])
 
-  const pointToPointGroups = useMemo(() => categories
-    .map((group) => ({
-      ...group,
-      children: (group.children || []).filter((child) => child.fulfillmentMode === 'POINT_TO_POINT'),
-    }))
+  const categoryGroups = useMemo(() => categories
+    .map((group) => ({ ...group, children: (group.children || []).filter((child) => child.fulfillmentMode) }))
     .filter((group) => group.children.length > 0), [categories])
+
+  const selectedCategory = useMemo(() => categoryGroups
+    .flatMap((group) => group.children)
+    .find((category) => String(category.id) === String(form.categoryId)) || null, [categoryGroups, form.categoryId])
+
+  const isOnSite = selectedCategory?.fulfillmentMode === 'ON_SITE'
+  const isPointToPoint = selectedCategory?.fulfillmentMode === 'POINT_TO_POINT'
 
   const updatePoint = useCallback((kind, point) => {
     if (kind === 'origin') setOrigin(point)
@@ -50,9 +55,19 @@ function CreateJobPage() {
     setRouteError('')
   }, [])
 
+  const updateOnSiteLocation = useCallback((point) => {
+    setOrigin(point)
+    setDestination(null)
+    setRouteQuote(null)
+    setModeComparison(null)
+    setRouteError('')
+  }, [])
+
   useEffect(() => {
-    if (!isCompletePoint(origin) || !isCompletePoint(destination)) {
+    if (!isPointToPoint || !isCompletePoint(origin) || !isCompletePoint(destination)) {
       setRouting(false)
+      setRouteQuote(null)
+      setModeComparison(null)
       return undefined
     }
 
@@ -81,10 +96,10 @@ function CreateJobPage() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [destination, origin])
+  }, [destination, isPointToPoint, origin])
 
   useEffect(() => {
-    if (!routeQuote?.id) {
+    if (!isPointToPoint || !routeQuote?.id) {
       setModesLoading(false)
       setModeComparison(null)
       return undefined
@@ -99,34 +114,47 @@ function CreateJobPage() {
       })
       .finally(() => setModesLoading(false))
     return () => controller.abort()
-  }, [routeQuote?.id])
+  }, [isPointToPoint, routeQuote?.id])
 
   function updateField(event) {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
+    if (name === 'categoryId') {
+      setOrigin(null)
+      setDestination(null)
+      setRouteQuote(null)
+      setModeComparison(null)
+      setRouteError('')
+    }
   }
 
   async function submit(event) {
     event.preventDefault()
-    if (!form.categoryId) {
+    if (!selectedCategory) {
       setError('Wybierz konkretną kategorię usługi.')
       return
     }
-    if (!routeQuote?.id) {
+    if (isPointToPoint && !routeQuote?.id) {
       setError('Najpierw wybierz poprawny punkt A i B oraz poczekaj na wyznaczenie trasy.')
+      return
+    }
+    if (isOnSite && !isCompletePoint(origin)) {
+      setError('Wybierz dokładne miejsce wykonania usługi.')
       return
     }
 
     setSubmitting(true)
     setError('')
     try {
-      await createJob({
+      const payload = {
         title: form.title,
         description: form.description,
         price: Number(form.price),
         categoryId: Number(form.categoryId),
-        routeQuoteId: routeQuote.id,
-      })
+      }
+      if (isPointToPoint) payload.routeQuoteId = routeQuote.id
+      if (isOnSite) payload.location = normalizePoint(origin)
+      await createJob(payload)
       navigate('/my-jobs')
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się opublikować zlecenia.')
@@ -142,12 +170,16 @@ function CreateJobPage() {
     available: true,
   }] : [])
 
+  const locationReady = isPointToPoint ? Boolean(routeQuote?.id) : isOnSite ? isCompletePoint(origin) : false
+
   return (
     <main className="create-job-page">
       <header className="page-heading">
         <span className="eyebrow">Nowe zlecenie</span>
-        <h1>Skąd i dokąd?</h1>
-        <p>Wybierz rodzaj usługi oraz punkt A i B. Publicznie pokazujemy tylko obszary; dokładne adresy dostanie przypisany wykonawca dopiero podczas aktywnego zlecenia.</p>
+        <h1>{isOnSite ? 'Gdzie wykonać usługę?' : 'Skąd i dokąd?'}</h1>
+        <p>{isOnSite
+          ? 'Wybierz rodzaj usługi i dokładne miejsce wykonania. Publicznie pokażemy tylko obszar; pełny adres dostanie przypisany wykonawca podczas aktywnego zlecenia.'
+          : 'Wybierz rodzaj usługi oraz punkt A i B. Publicznie pokazujemy tylko obszary; dokładne adresy dostanie przypisany wykonawca dopiero podczas aktywnego zlecenia.'}</p>
       </header>
 
       <form className="panel create-job-form" onSubmit={submit}>
@@ -155,63 +187,86 @@ function CreateJobPage() {
           <span>Kategoria usługi</span>
           <select name="categoryId" value={form.categoryId} onChange={updateField} required disabled={categoriesLoading || submitting}>
             <option value="">{categoriesLoading ? 'Ładowanie kategorii…' : 'Wybierz podkategorię'}</option>
-            {pointToPointGroups.map((group) => (
+            {categoryGroups.map((group) => (
               <optgroup key={group.id} label={group.name}>
                 {group.children.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
+                  <option key={category.id} value={category.id}>
+                    {category.name}{category.fulfillmentMode === 'ON_SITE' ? ' · na miejscu' : ' · transport A→B'}
+                  </option>
                 ))}
               </optgroup>
             ))}
           </select>
-          <small>Na tym etapie formularz obsługuje kategorie wymagające transportu A → B. Usługi wykonywane w jednym miejscu będą miały osobny tryb lokalizacji.</small>
+          <small>Typ lokalizacji jest dobierany automatycznie do wybranej podkategorii.</small>
         </label>
 
-        <div className="create-job-form__wide">
-          <RouteMapPicker
-            origin={origin}
-            destination={destination}
-            routeQuote={routeQuote}
-            onPointChange={updatePoint}
-            disabled={submitting}
-          />
-        </div>
+        {isOnSite && (
+          <div className="create-job-form__wide">
+            <SingleLocationPicker value={origin} onChange={updateOnSiteLocation} disabled={submitting} />
+          </div>
+        )}
 
-        <div className="create-job-form__wide route-summary" aria-live="polite">
-          {routing && <span>Wyznaczanie trasy i czasu dojazdu…</span>}
-          {!routing && routeQuote && (
-            <>
-              <strong>{routeQuote.origin.publicLabel} → {routeQuote.destination.publicLabel}</strong>
-              <div className="route-mode-grid">
-                {modeEstimates.map((estimate) => (
-                  <div className="route-mode-card" key={estimate.mode}>
-                    <span>{modeLabel(estimate.mode)}</span>
-                    {estimate.available ? (
-                      <strong>{formatDuration(estimate.durationSeconds)} · {formatDistance(estimate.distanceMeters)}</strong>
-                    ) : (
-                      <strong>Niedostępna</strong>
-                    )}
-                  </div>
-                ))}
-                {modesLoading && modeEstimates.length === 1 && (
-                  <div className="route-mode-card route-mode-card--loading">Liczenie roweru i pieszo…</div>
+        {isPointToPoint && (
+          <div className="create-job-form__wide">
+            <RouteMapPicker
+              origin={origin}
+              destination={destination}
+              routeQuote={routeQuote}
+              onPointChange={updatePoint}
+              disabled={submitting}
+            />
+          </div>
+        )}
+
+        {!selectedCategory && !categoriesLoading && (
+          <div className="create-job-form__wide route-summary">Wybierz kategorię, aby dopasować sposób podania lokalizacji.</div>
+        )}
+
+        {isPointToPoint && (
+          <div className="create-job-form__wide route-summary" aria-live="polite">
+            {routing && <span>Wyznaczanie trasy i czasu dojazdu…</span>}
+            {!routing && routeQuote && (
+              <>
+                <strong>{routeQuote.origin.publicLabel} → {routeQuote.destination.publicLabel}</strong>
+                <div className="route-mode-grid">
+                  {modeEstimates.map((estimate) => (
+                    <div className="route-mode-card" key={estimate.mode}>
+                      <span>{modeLabel(estimate.mode)}</span>
+                      {estimate.available ? (
+                        <strong>{formatDuration(estimate.durationSeconds)} · {formatDistance(estimate.distanceMeters)}</strong>
+                      ) : (
+                        <strong>Niedostępna</strong>
+                      )}
+                    </div>
+                  ))}
+                  {modesLoading && modeEstimates.length === 1 && (
+                    <div className="route-mode-card route-mode-card--loading">Liczenie roweru i pieszo…</div>
+                  )}
+                </div>
+                {modeComparison?.nonDrivingBetaWarningRequired && (
+                  <small>Trasy piesze i rowerowe Google są w wersji beta i mogą nie uwzględniać wszystkich chodników, ścieżek lub warunków terenowych.</small>
                 )}
-              </div>
-              {modeComparison?.nonDrivingBetaWarningRequired && (
-                <small>Trasy piesze i rowerowe Google są w wersji beta i mogą nie uwzględniać wszystkich chodników, ścieżek lub warunków terenowych.</small>
-              )}
-              {routeQuote.provider === 'DETERMINISTIC_DEV' && <small>Tryb deweloperski — prawdziwe ETA Google pojawi się po konfiguracji Routes API.</small>}
-            </>
-          )}
-          {routeError && <span className="form-message form-message--error">{routeError}</span>}
-        </div>
+                {routeQuote.provider === 'DETERMINISTIC_DEV' && <small>Tryb deweloperski — prawdziwe ETA Google pojawi się po konfiguracji Routes API.</small>}
+              </>
+            )}
+            {routeError && <span className="form-message form-message--error">{routeError}</span>}
+          </div>
+        )}
+
+        {isOnSite && origin && (
+          <div className="create-job-form__wide route-summary" aria-live="polite">
+            <strong>{origin.publicLabel}</strong>
+            <small>Pełny adres jest prywatny i nie pojawi się w publicznym ogłoszeniu.</small>
+          </div>
+        )}
 
         <label className="field create-job-form__wide">
           <span>Tytuł</span>
-          <input name="title" value={form.title} onChange={updateField} minLength={3} maxLength={160} placeholder="np. Odbierz paczkę z punktu A i dowieź do B" required />
+          <input name="title" value={form.title} onChange={updateField} minLength={3} maxLength={160} placeholder={isOnSite ? 'np. Zamontuj półkę w salonie' : 'np. Odbierz paczkę z punktu A i dowieź do B'} required />
         </label>
         <label className="field create-job-form__wide">
           <span>Opis</span>
-          <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder="Opisz co trzeba odebrać, komu przekazać i wszystkie ważne szczegóły." required />
+          <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder={isOnSite ? 'Opisz zakres pracy i wszystkie ważne szczegóły.' : 'Opisz co trzeba odebrać, komu przekazać i wszystkie ważne szczegóły.'} required />
         </label>
         <label className="field">
           <span>Wynagrodzenie</span>
@@ -219,8 +274,8 @@ function CreateJobPage() {
         </label>
 
         <div className="create-job-form__wide create-job-form__actions">
-          <span className="create-job-form__privacy">Dokładne A/B są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.</span>
-          <button className="button button--primary" type="submit" disabled={submitting || routing || !routeQuote?.id || !form.categoryId}>
+          <span className="create-job-form__privacy">Dokładne adresy są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.</span>
+          <button className="button button--primary" type="submit" disabled={submitting || routing || !selectedCategory || !locationReady}>
             {submitting ? 'Publikowanie…' : 'Opublikuj zlecenie'}
           </button>
         </div>
