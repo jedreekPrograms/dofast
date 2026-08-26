@@ -1,0 +1,13 @@
+.job-location-page { display: grid; gap: 22px; max-width: 1100px; }
+.job-location-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 18px; align-items: start; }
+.job-location-card > div { display: grid; gap: 6px; min-width: 0; }
+.job-location-card small { color: #737986; }
+.job-location-card strong { overflow-wrap: anywhere; font-size: 1.05rem; }
+.job-location-card__exact { padding-left: 18px; border-left: 1px solid #e6e7eb; }
+.job-location-map { width: 100%; min-height: 520px; border-radius: 20px; overflow: hidden; background: rgba(127, 127, 127, 0.08); }
+.job-location-map-fallback { line-height: 1.6; }
+@media (max-width: 760px) {
+  .job-location-card { grid-template-columns: 1fr; }
+  .job-location-card__exact { padding-left: 0; padding-top: 14px; border-left: 0; border-top: 1px solid #e6e7eb; }
+  .job-location-map { min-height: 380px; }
+}
