@@ -127,6 +127,8 @@ The jobs page consumes the paginated endpoint and provides:
 
 Authenticated users can save an open job directly from its discovery card. The `/saved-jobs` route is protected by the normal authentication boundary and provides a paginated shortlist using the same privacy-safe `JobResponse` cards. Removing a bookmark is idempotent; after removal the current page is refreshed, and an emptied trailing page automatically steps back so the user is never stranded on a blank page.
 
+For an authenticated discovery page, the web client hydrates bookmark state with one `GET /saved-jobs/status` batch request after loading the public jobs. Each card therefore reflects the persisted state after reload without issuing N+1 status requests. The same card can toggle the bookmark with the idempotent `PUT`/`DELETE` endpoints and updates the page-level saved-id set immediately after a successful mutation. A bookmark-status lookup failure does not hide otherwise public discovery results.
+
 Carlisle is an internal technical milestone name and is intentionally not exposed in customer-facing UI text.
 
 ## Verification
