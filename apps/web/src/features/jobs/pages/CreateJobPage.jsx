@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import RouteMapPicker from '../components/RouteMapPicker.jsx'
-import { createJob, createRouteQuote } from '../api/jobsApi.js'
+import { createJob, createRouteQuote, getJobCategories } from '../api/jobsApi.js'
 import './CreateJobPage.css'
 
-const EMPTY_FORM = { title: '', description: '', price: '' }
+const EMPTY_FORM = { title: '', description: '', price: '', categoryId: '' }
 
 function CreateJobPage() {
   const navigate = useNavigate()
   const [form, setForm] = useState(EMPTY_FORM)
+  const [categories, setCategories] = useState([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
   const [origin, setOrigin] = useState(null)
   const [destination, setDestination] = useState(null)
   const [routeQuote, setRouteQuote] = useState(null)
@@ -16,6 +18,27 @@ function CreateJobPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [routeError, setRouteError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setCategoriesLoading(true)
+    getJobCategories({ signal: controller.signal })
+      .then(setCategories)
+      .catch((requestError) => {
+        if (requestError.name !== 'AbortError') {
+          setError(requestError.message || 'Nie udało się pobrać kategorii usług.')
+        }
+      })
+      .finally(() => setCategoriesLoading(false))
+    return () => controller.abort()
+  }, [])
+
+  const pointToPointGroups = useMemo(() => categories
+    .map((group) => ({
+      ...group,
+      children: (group.children || []).filter((child) => child.fulfillmentMode === 'POINT_TO_POINT'),
+    }))
+    .filter((group) => group.children.length > 0), [categories])
 
   const updatePoint = useCallback((kind, point) => {
     if (kind === 'origin') setOrigin(point)
@@ -63,6 +86,10 @@ function CreateJobPage() {
 
   async function submit(event) {
     event.preventDefault()
+    if (!form.categoryId) {
+      setError('Wybierz konkretną kategorię usługi.')
+      return
+    }
     if (!routeQuote?.id) {
       setError('Najpierw wybierz poprawny punkt A i B oraz poczekaj na wyznaczenie trasy.')
       return
@@ -75,6 +102,7 @@ function CreateJobPage() {
         title: form.title,
         description: form.description,
         price: Number(form.price),
+        categoryId: Number(form.categoryId),
         routeQuoteId: routeQuote.id,
       })
       navigate('/my-jobs')
@@ -90,10 +118,25 @@ function CreateJobPage() {
       <header className="page-heading">
         <span className="eyebrow">Nowe zlecenie</span>
         <h1>Skąd i dokąd?</h1>
-        <p>Wybierz punkt A i B jak w aplikacji transportowej. Publicznie pokazujemy tylko obszary; dokładne adresy dostanie przypisany wykonawca dopiero podczas aktywnego zlecenia.</p>
+        <p>Wybierz rodzaj usługi oraz punkt A i B. Publicznie pokazujemy tylko obszary; dokładne adresy dostanie przypisany wykonawca dopiero podczas aktywnego zlecenia.</p>
       </header>
 
       <form className="panel create-job-form" onSubmit={submit}>
+        <label className="field create-job-form__wide">
+          <span>Kategoria usługi</span>
+          <select name="categoryId" value={form.categoryId} onChange={updateField} required disabled={categoriesLoading || submitting}>
+            <option value="">{categoriesLoading ? 'Ładowanie kategorii…' : 'Wybierz podkategorię'}</option>
+            {pointToPointGroups.map((group) => (
+              <optgroup key={group.id} label={group.name}>
+                {group.children.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <small>Na tym etapie formularz obsługuje kategorie wymagające transportu A → B. Usługi wykonywane w jednym miejscu będą miały osobny tryb lokalizacji.</small>
+        </label>
+
         <div className="create-job-form__wide">
           <RouteMapPicker
             origin={origin}
@@ -131,7 +174,7 @@ function CreateJobPage() {
 
         <div className="create-job-form__wide create-job-form__actions">
           <span className="create-job-form__privacy">Dokładne A/B są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.</span>
-          <button className="button button--primary" type="submit" disabled={submitting || routing || !routeQuote?.id}>
+          <button className="button button--primary" type="submit" disabled={submitting || routing || !routeQuote?.id || !form.categoryId}>
             {submitting ? 'Publikowanie…' : 'Opublikuj zlecenie'}
           </button>
         </div>
