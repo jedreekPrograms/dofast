@@ -78,7 +78,7 @@ function SavedJobsPage() {
           <div className="jobs-grid">
             {jobs.map((job) => (
               <div className="saved-job-card" key={job.id}>
-                <JobCard job={job} />
+                <JobCard job={job} showSaveAction={false} />
                 <button
                   className="button button--secondary saved-job-card__remove"
                   type="button"
