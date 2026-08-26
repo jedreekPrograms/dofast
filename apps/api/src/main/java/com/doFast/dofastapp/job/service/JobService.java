@@ -97,13 +97,32 @@ public class JobService {
     }
 
     public PageResponse<JobResponse> getOpenJobs(String query, BigDecimal minPrice, BigDecimal maxPrice, int page, int size) {
+        return getOpenJobs(query, null, minPrice, maxPrice, page, size);
+    }
+
+    public PageResponse<JobResponse> getOpenJobs(
+            String query,
+            String categorySlug,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            int page,
+            int size
+    ) {
         if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
             throw new BusinessException("Minimalna cena nie może być większa od maksymalnej");
         }
 
         String normalizedQuery = normalizeSearchQuery(query);
+        String normalizedCategory = normalizeCategorySlug(categorySlug);
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
-        Page<Job> result = jobRepository.findOpenJobs(JobStatus.OPEN, normalizedQuery, minPrice, maxPrice, pageable);
+        Page<Job> result = jobRepository.findOpenJobs(
+                JobStatus.OPEN,
+                normalizedQuery,
+                normalizedCategory,
+                minPrice,
+                maxPrice,
+                pageable
+        );
         List<JobResponse> content = result.getContent().stream().map(this::toResponse).toList();
         return PageResponse.from(result, content);
     }
@@ -250,6 +269,11 @@ public class JobService {
     private String normalizeSearchQuery(String value) {
         if (value == null) return "";
         return value.trim();
+    }
+
+    private String normalizeCategorySlug(String value) {
+        if (value == null) return "";
+        return value.trim().toLowerCase();
     }
 
     private JobResponse toResponse(Job job) {
