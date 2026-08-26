@@ -25,6 +25,54 @@
   line-height: 1.55;
 }
 
+.auth-card__federated {
+  display: grid;
+  place-items: center;
+  margin-top: 24px;
+}
+
+.google-sign-in {
+  width: min(400px, 100%);
+  min-height: 44px;
+}
+
+.google-sign-in > div {
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+
+.google-sign-in--disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.google-sign-in small {
+  display: block;
+  margin-top: 8px;
+  color: #a13e3e;
+  text-align: center;
+}
+
+.auth-card__divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: #9298a2;
+  font-size: 0.8rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.auth-card__divider::before,
+.auth-card__divider::after {
+  height: 1px;
+  flex: 1;
+  background: #e5e7eb;
+  content: '';
+}
+
 .auth-card__switch {
   margin: 22px 0 0;
   text-align: center;

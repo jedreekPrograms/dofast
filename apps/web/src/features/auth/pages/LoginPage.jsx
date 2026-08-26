@@ -1,15 +1,19 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import GoogleSignInButton from '../components/GoogleSignInButton.jsx'
 import { useAuth } from '../AuthContext.js'
 import './AuthPage.css'
 
+const GOOGLE_ENABLED = Boolean(import.meta.env.VITE_GOOGLE_AUTH_CLIENT_ID?.trim())
+
 function LoginPage() {
-  const { login } = useAuth()
+  const { login, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const destination = location.state?.from?.pathname || '/my-jobs'
 
   function updateField(event) {
     const { name, value } = event.target
@@ -22,7 +26,6 @@ function LoginPage() {
     setError('')
     try {
       await login(form)
-      const destination = location.state?.from?.pathname || '/my-jobs'
       navigate(destination, { replace: true })
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się zalogować.')
@@ -30,6 +33,19 @@ function LoginPage() {
       setSubmitting(false)
     }
   }
+
+  const handleGoogleCredential = useCallback(async (credential) => {
+    setSubmitting(true)
+    setError('')
+    try {
+      await loginWithGoogle(credential)
+      navigate(destination, { replace: true })
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się zalogować przez Google.')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [destination, loginWithGoogle, navigate])
 
   return (
     <main className="auth-page">
@@ -39,6 +55,16 @@ function LoginPage() {
           <h1>Zaloguj się do doFast</h1>
           <p>Zarządzaj zleceniami, rozmawiaj z wykonawcami i kontroluj rozliczenia z jednego miejsca.</p>
         </div>
+
+        {GOOGLE_ENABLED && (
+          <>
+            <div className="auth-card__federated">
+              <GoogleSignInButton onCredential={handleGoogleCredential} disabled={submitting} />
+            </div>
+            <div className="auth-card__divider"><span>lub</span></div>
+          </>
+        )}
+
         <form className="form-stack" onSubmit={submit}>
           <label className="field">
             <span>Email</span>
@@ -48,7 +74,7 @@ function LoginPage() {
             <span>Hasło</span>
             <input name="password" type="password" value={form.password} onChange={updateField} autoComplete="current-password" required />
           </label>
-          {error && <div className="form-message form-message--error">{error}</div>}
+          {error && <div className="form-message form-message--error" role="alert">{error}</div>}
           <button className="button button--primary" type="submit" disabled={submitting}>
             {submitting ? 'Logowanie…' : 'Zaloguj się'}
           </button>

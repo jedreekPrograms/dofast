@@ -36,6 +36,9 @@ public class User {
     @Column(nullable = false, length = 255)
     private String password;
 
+    @Column(name = "password_login_enabled", nullable = false)
+    private boolean passwordLoginEnabled = true;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role = UserRole.USER;
@@ -72,6 +75,7 @@ public class User {
     public Long getId() { return id; }
     public String getEmail() { return email; }
     public String getPassword() { return password; }
+    public boolean isPasswordLoginEnabled() { return passwordLoginEnabled; }
     public String getNickname() { return nickname; }
     public UserRole getRole() { return role; }
     public UserStatus getStatus() { return status; }
@@ -81,6 +85,7 @@ public class User {
     public void setEmail(String email) { this.email = email; }
     public void setNickname(String nickname) { this.nickname = nickname; }
     public void setPassword(String password) { this.password = password; }
+    public void setPasswordLoginEnabled(boolean passwordLoginEnabled) { this.passwordLoginEnabled = passwordLoginEnabled; }
     public void setRole(UserRole role) { this.role = role; }
     public void setStatus(UserStatus status) { this.status = status; }
 }

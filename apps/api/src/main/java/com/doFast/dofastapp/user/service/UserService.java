@@ -2,44 +2,61 @@ package com.doFast.dofastapp.user.service;
 
 import com.doFast.dofastapp.common.exception.AuthenticationFailedException;
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.util.JwtUtil;
+import com.doFast.dofastapp.user.auth.GoogleIdentity;
+import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
+import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
 import com.doFast.dofastapp.user.dto.LoginRequest;
 import com.doFast.dofastapp.user.dto.UpdateProfileRequest;
 import com.doFast.dofastapp.user.dto.UserRequest;
 import com.doFast.dofastapp.user.dto.UserResponse;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.entity.UserAuthIdentity;
+import com.doFast.dofastapp.user.enums.AuthProvider;
 import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.enums.UserStatus;
+import com.doFast.dofastapp.user.repository.UserAuthIdentityRepository;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Locale;
 
 @Service
 @Transactional(readOnly = true)
 public class UserService {
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final WalletService walletService;
+    private final UserAuthIdentityRepository authIdentityRepository;
+    private final GoogleIdentityVerifier googleIdentityVerifier;
 
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtUtil jwtUtil,
-            WalletService walletService
+            WalletService walletService,
+            UserAuthIdentityRepository authIdentityRepository,
+            GoogleIdentityVerifier googleIdentityVerifier
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.walletService = walletService;
+        this.authIdentityRepository = authIdentityRepository;
+        this.googleIdentityVerifier = googleIdentityVerifier;
     }
 
     @Transactional
@@ -53,6 +70,7 @@ public class UserService {
         user.setEmail(email);
         user.setNickname(request.getNickname().trim());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPasswordLoginEnabled(true);
         user.setRole(UserRole.USER);
         user.setStatus(UserStatus.ACTIVE);
 
@@ -65,15 +83,24 @@ public class UserService {
         User user = userRepository.findByEmailIgnoreCase(normalizeEmail(request.getEmail()))
                 .orElseThrow(() -> new AuthenticationFailedException("Nieprawidłowy email lub hasło"));
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        if (!user.isPasswordLoginEnabled() || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new AuthenticationFailedException("Nieprawidłowy email lub hasło");
         }
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new ForbiddenOperationException("Konto jest obecnie zawieszone");
-        }
+        requireActive(user);
+        return createAuthResponse(user);
+    }
 
-        String token = jwtUtil.generateToken(user.getEmail());
-        return new AuthResponse(token, "Bearer", jwtUtil.getExpirationMs(), toResponse(user));
+    @Transactional
+    public AuthResponse loginWithGoogle(GoogleLoginRequest request) {
+        GoogleIdentity googleIdentity = googleIdentityVerifier.verify(request.credential());
+
+        User user = authIdentityRepository
+                .findByProviderAndProviderSubject(AuthProvider.GOOGLE, googleIdentity.subject())
+                .map(UserAuthIdentity::getUser)
+                .orElseGet(() -> linkOrCreateGoogleUser(googleIdentity));
+
+        requireActive(user);
+        return createAuthResponse(user);
     }
 
     public UserResponse getCurrentUser(User principal) {
@@ -93,6 +120,9 @@ public class UserService {
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
 
+        if (!user.isPasswordLoginEnabled()) {
+            throw new BusinessException("To konto nie ma jeszcze włączonego logowania hasłem");
+        }
         if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
             throw new BusinessException("Aktualne hasło jest nieprawidłowe");
         }
@@ -121,6 +151,7 @@ public class UserService {
                     admin.setEmail(email);
                     admin.setNickname(normalizeAdminNickname(nicknameValue));
                     admin.setPassword(passwordEncoder.encode(passwordValue));
+                    admin.setPasswordLoginEnabled(true);
                     admin.setRole(UserRole.ADMIN);
                     admin.setStatus(UserStatus.ACTIVE);
                     User saved = userRepository.save(admin);
@@ -140,8 +171,83 @@ public class UserService {
         );
     }
 
+    private User linkOrCreateGoogleUser(GoogleIdentity googleIdentity) {
+        String email = normalizeEmail(googleIdentity.email());
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .map(existing -> linkGoogleToExistingUser(existing, googleIdentity))
+                .orElseGet(() -> createGoogleUser(googleIdentity));
+
+        saveGoogleIdentity(user, googleIdentity);
+        return user;
+    }
+
+    private User linkGoogleToExistingUser(User user, GoogleIdentity googleIdentity) {
+        requireActive(user);
+        if (!googleIdentity.authoritativeForEmail()) {
+            throw new ConflictException(
+                    "Konto z tym adresem email już istnieje. Zaloguj się hasłem, aby bezpiecznie połączyć Google."
+            );
+        }
+        if (authIdentityRepository.existsByUser_IdAndProvider(user.getId(), AuthProvider.GOOGLE)) {
+            throw new AuthenticationFailedException("To konto jest już połączone z innym kontem Google");
+        }
+        return user;
+    }
+
+    private User createGoogleUser(GoogleIdentity googleIdentity) {
+        User user = new User();
+        user.setEmail(normalizeEmail(googleIdentity.email()));
+        user.setNickname(normalizeGoogleNickname(googleIdentity));
+        user.setPassword(passwordEncoder.encode(generateUnusablePassword()));
+        user.setPasswordLoginEnabled(false);
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+
+        User saved = userRepository.save(user);
+        walletService.createWalletForUser(saved.getId());
+        return saved;
+    }
+
+    private void saveGoogleIdentity(User user, GoogleIdentity googleIdentity) {
+        UserAuthIdentity identity = new UserAuthIdentity();
+        identity.setUser(user);
+        identity.setProvider(AuthProvider.GOOGLE);
+        identity.setProviderSubject(googleIdentity.subject());
+        identity.setProviderEmail(normalizeEmail(googleIdentity.email()));
+        authIdentityRepository.save(identity);
+    }
+
+    private AuthResponse createAuthResponse(User user) {
+        String token = jwtUtil.generateToken(user.getEmail());
+        return new AuthResponse(token, "Bearer", jwtUtil.getExpirationMs(), toResponse(user));
+    }
+
+    private void requireActive(User user) {
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new ForbiddenOperationException("Konto jest obecnie zawieszone");
+        }
+    }
+
     private String normalizeEmail(String value) {
         return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeGoogleNickname(GoogleIdentity googleIdentity) {
+        String value = googleIdentity.displayName();
+        if (value == null || value.isBlank()) {
+            value = googleIdentity.email().split("@", 2)[0];
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() < 3) {
+            trimmed = "user-" + trimmed;
+        }
+        return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80);
+    }
+
+    private String generateUnusablePassword() {
+        byte[] random = new byte[48];
+        SECURE_RANDOM.nextBytes(random);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(random);
     }
 
     private String normalizeAdminNickname(String value) {

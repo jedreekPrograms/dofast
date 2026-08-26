@@ -36,6 +36,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-dofast-local-password}
       JWT_SECRET: ${JWT_SECRET:-local-only-change-this-jwt-secret-please-32-bytes-minimum}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      GOOGLE_AUTH_CLIENT_ID: ${GOOGLE_AUTH_CLIENT_ID:-}
       ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-}
       ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
       ADMIN_BOOTSTRAP_NICKNAME: ${ADMIN_BOOTSTRAP_NICKNAME:-doFast Admin}
@@ -63,6 +64,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
+        VITE_GOOGLE_AUTH_CLIENT_ID: ${VITE_GOOGLE_AUTH_CLIENT_ID:-}
         VITE_GOOGLE_MAPS_BROWSER_KEY: ${VITE_GOOGLE_MAPS_BROWSER_KEY:-}
         VITE_GOOGLE_MAPS_MAP_ID: ${VITE_GOOGLE_MAPS_MAP_ID:-DEMO_MAP_ID}
     restart: unless-stopped
