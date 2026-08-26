@@ -60,8 +60,9 @@ public class JobController {
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double latitude,
             @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double longitude,
             @RequestParam(defaultValue = "5000") @Min(100) @Max(50000) int radiusMeters,
+            @RequestParam(required = false) @Size(max = 80) @Pattern(regexp = "[a-z0-9-]*") String category,
             @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit
-    ) { return jobService.getNearbyJobs(latitude, longitude, radiusMeters, limit); }
+    ) { return jobService.getNearbyJobs(latitude, longitude, radiusMeters, category, limit); }
 
     @GetMapping("/{id}")
     public JobResponse getJob(@PathVariable Long id) { return jobService.getJob(id); }
