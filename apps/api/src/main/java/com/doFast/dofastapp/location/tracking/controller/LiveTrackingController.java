@@ -3,6 +3,7 @@ package com.doFast.dofastapp.location.tracking.controller;
 import com.doFast.dofastapp.location.tracking.dto.LiveLocationUpdateRequest;
 import com.doFast.dofastapp.location.tracking.dto.LiveTrackingResponse;
 import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
+import com.doFast.dofastapp.location.tracking.service.TrackingSampleFreshnessValidator;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,9 +20,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class LiveTrackingController {
 
     private final LiveTrackingService liveTrackingService;
+    private final TrackingSampleFreshnessValidator sampleFreshnessValidator;
 
-    public LiveTrackingController(LiveTrackingService liveTrackingService) {
+    public LiveTrackingController(
+            LiveTrackingService liveTrackingService,
+            TrackingSampleFreshnessValidator sampleFreshnessValidator
+    ) {
         this.liveTrackingService = liveTrackingService;
+        this.sampleFreshnessValidator = sampleFreshnessValidator;
     }
 
     @GetMapping
@@ -38,6 +44,7 @@ public class LiveTrackingController {
             @RequestBody @Valid LiveLocationUpdateRequest request,
             @AuthenticationPrincipal User user
     ) {
+        sampleFreshnessValidator.validate(request.capturedAt());
         return liveTrackingService.updateLocation(jobId, request, user);
     }
 
