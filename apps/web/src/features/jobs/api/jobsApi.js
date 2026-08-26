@@ -29,6 +29,23 @@ export function getMyJobs(options = {}) {
   return apiRequest('/jobs/my', options)
 }
 
+export function getSavedJobs(page = 0, size = 12, options = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  return apiRequest(`/saved-jobs?${params.toString()}`, options)
+}
+
+export function getSavedJobStatus(id, options = {}) {
+  return apiRequest(`/saved-jobs/${id}/status`, options)
+}
+
+export function saveJob(id) {
+  return apiRequest(`/saved-jobs/${id}`, { method: 'PUT' })
+}
+
+export function removeSavedJob(id) {
+  return apiRequest(`/saved-jobs/${id}`, { method: 'DELETE' })
+}
+
 export function createRouteQuote(payload) {
   return apiRequest('/routing/quotes', { method: 'POST', body: JSON.stringify(payload) })
 }
