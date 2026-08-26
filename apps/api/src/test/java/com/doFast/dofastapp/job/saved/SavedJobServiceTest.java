@@ -3,6 +3,7 @@ package com.doFast.dofastapp.job.saved;
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
@@ -81,6 +82,15 @@ class SavedJobServiceTest {
     }
 
     @Test
+    void saveRejectsOwnJob() {
+        job.setCreatedBy(user);
+        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+
+        assertThrows(ForbiddenOperationException.class, () -> service.save(11L, user));
+        verify(savedJobRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void statusesUseOneBatchedLookupAndDeduplicateRequestedIds() {
         when(savedJobRepository.findSavedJobIds(7L, List.of(11L, 12L, 13L)))
                 .thenReturn(List.of(13L, 11L));
@@ -92,7 +102,7 @@ class SavedJobServiceTest {
     }
 
     @Test
-    void listReturnsOnlyRepositoryFilteredOpenJobsWithPagination() {
+    void listRemovesUnavailableBookmarksBeforeReturningOpenJobs() {
         SavedJob savedJob = new SavedJob(user, job);
         PageRequest request = PageRequest.of(0, 20);
         when(savedJobRepository.findByUserAndJobStatus(7L, JobStatus.OPEN, request))
@@ -102,6 +112,7 @@ class SavedJobServiceTest {
 
         PageResponse<JobResponse> result = service.list(user, 0, 20);
 
+        verify(savedJobRepository).deleteByUserAndJobStatusNot(7L, JobStatus.OPEN);
         assertEquals(List.of(response), result.content());
         assertEquals(1, result.totalElements());
         assertEquals(0, result.page());
