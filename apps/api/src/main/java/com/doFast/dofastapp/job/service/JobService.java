@@ -6,6 +6,7 @@ import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
+import com.doFast.dofastapp.job.category.FulfillmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.dto.JobRequest;
@@ -16,8 +17,10 @@ import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.dto.LocationResponse;
+import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
+import com.doFast.dofastapp.location.service.GeoPointFactory;
 import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
@@ -69,31 +72,53 @@ public class JobService {
             throw new BusinessException("Wybierz konkretną podkategorię usługi");
         }
 
-        RouteQuote quote = routeQuoteService.consume(request.getRouteQuoteId(), user);
-
         Job job = new Job();
         job.setTitle(request.getTitle().trim());
         job.setDescription(request.getDescription().trim());
         job.setPrice(request.getPrice());
         job.setStatus(JobStatus.OPEN);
         job.setCategory(category);
-        job.setLocation(quote.getOrigin());
-        job.setLocationLabel(quote.getOriginPublicLabel());
-        job.setLocationPrivateLabel(quote.getOriginPrivateLabel());
-        job.setDestinationLocation(quote.getDestination());
-        job.setDestinationLabel(quote.getDestinationPublicLabel());
-        job.setDestinationPrivateLabel(quote.getDestinationPrivateLabel());
-        job.setRouteDistanceMeters(quote.getDistanceMeters());
-        job.setRouteDurationSeconds(quote.getDurationSeconds());
-        job.setRouteEncodedPolyline(quote.getEncodedPolyline());
-        job.setRouteProvider(quote.getProvider());
-        job.setRouteComputedAt(quote.getCreatedAt());
-        job.setRouteQuote(quote);
+        applyLocation(job, request, category, user);
         job.setCreatedBy(user);
 
         Job saved = jobRepository.save(job);
         transactionService.holdMoney(saved);
         return toResponse(saved);
+    }
+
+    private void applyLocation(Job job, JobRequest request, JobCategory category, User user) {
+        if (category.getFulfillmentMode() == FulfillmentMode.POINT_TO_POINT) {
+            if (request.getRouteQuoteId() == null || request.getLocation() != null) {
+                throw new BusinessException("Ta usługa wymaga poprawnej trasy od punktu A do punktu B");
+            }
+            RouteQuote quote = routeQuoteService.consume(request.getRouteQuoteId(), user);
+            job.setLocation(quote.getOrigin());
+            job.setLocationLabel(quote.getOriginPublicLabel());
+            job.setLocationPrivateLabel(quote.getOriginPrivateLabel());
+            job.setDestinationLocation(quote.getDestination());
+            job.setDestinationLabel(quote.getDestinationPublicLabel());
+            job.setDestinationPrivateLabel(quote.getDestinationPrivateLabel());
+            job.setRouteDistanceMeters(quote.getDistanceMeters());
+            job.setRouteDurationSeconds(quote.getDurationSeconds());
+            job.setRouteEncodedPolyline(quote.getEncodedPolyline());
+            job.setRouteProvider(quote.getProvider());
+            job.setRouteComputedAt(quote.getCreatedAt());
+            job.setRouteQuote(quote);
+            return;
+        }
+
+        if (category.getFulfillmentMode() == FulfillmentMode.ON_SITE) {
+            if (request.getLocation() == null || request.getRouteQuoteId() != null) {
+                throw new BusinessException("Ta usługa wymaga jednego miejsca wykonania, bez trasy A → B");
+            }
+            RoutePointRequest location = request.getLocation();
+            job.setLocation(GeoPointFactory.from(location.latitude(), location.longitude()));
+            job.setLocationLabel(location.publicLabel().trim());
+            job.setLocationPrivateLabel(normalizeOptional(location.privateLabel()));
+            return;
+        }
+
+        throw new BusinessException("Nieobsługiwany sposób realizacji wybranej kategorii");
     }
 
     public PageResponse<JobResponse> getOpenJobs(String query, BigDecimal minPrice, BigDecimal maxPrice, int page, int size) {
@@ -250,6 +275,12 @@ public class JobService {
     private String normalizeSearchQuery(String value) {
         if (value == null) return "";
         return value.trim();
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private JobResponse toResponse(Job job) {
