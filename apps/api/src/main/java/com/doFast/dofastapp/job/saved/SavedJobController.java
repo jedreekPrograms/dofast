@@ -5,6 +5,8 @@ import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -16,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/saved-jobs")
@@ -35,6 +39,14 @@ public class SavedJobController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
     ) {
         return savedJobService.list(user, page, size);
+    }
+
+    @GetMapping("/status")
+    public SavedJobBatchStatusResponse statuses(
+            @RequestParam @Size(min = 1, max = 50) List<@Positive Long> jobIds,
+            @AuthenticationPrincipal User user
+    ) {
+        return savedJobService.statuses(jobIds, user);
     }
 
     @GetMapping("/{jobId}/status")

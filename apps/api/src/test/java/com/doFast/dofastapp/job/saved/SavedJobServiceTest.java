@@ -20,6 +20,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -77,6 +78,17 @@ class SavedJobServiceTest {
         when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
 
         assertThrows(ConflictException.class, () -> service.save(11L, user));
+    }
+
+    @Test
+    void statusesUseOneBatchedLookupAndDeduplicateRequestedIds() {
+        when(savedJobRepository.findSavedJobIds(7L, List.of(11L, 12L, 13L)))
+                .thenReturn(List.of(13L, 11L));
+
+        SavedJobBatchStatusResponse response = service.statuses(List.of(11L, 12L, 11L, 13L), user);
+
+        assertEquals(Set.of(11L, 13L), response.savedJobIds());
+        verify(savedJobRepository).findSavedJobIds(7L, List.of(11L, 12L, 13L));
     }
 
     @Test

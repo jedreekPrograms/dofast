@@ -14,6 +14,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
+import java.util.List;
+
 @Service
 @Transactional(readOnly = true)
 public class SavedJobService {
@@ -51,6 +54,12 @@ public class SavedJobService {
 
     public SavedJobStatusResponse status(Long jobId, User user) {
         return new SavedJobStatusResponse(savedJobRepository.existsByUser_IdAndJob_Id(user.getId(), jobId));
+    }
+
+    public SavedJobBatchStatusResponse statuses(List<Long> jobIds, User user) {
+        List<Long> uniqueIds = jobIds.stream().distinct().toList();
+        List<Long> savedIds = savedJobRepository.findSavedJobIds(user.getId(), uniqueIds);
+        return new SavedJobBatchStatusResponse(new LinkedHashSet<>(savedIds));
     }
 
     public PageResponse<JobResponse> list(User user, int page, int size) {

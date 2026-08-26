@@ -42,10 +42,13 @@ Authenticated users can keep a private shortlist of currently available jobs:
 
 - `PUT /saved-jobs/{jobId}` saves an `OPEN` job and is idempotent;
 - `DELETE /saved-jobs/{jobId}` removes the bookmark and is idempotent;
-- `GET /saved-jobs/{jobId}/status` returns whether the current user has saved the job;
+- `GET /saved-jobs/{jobId}/status` returns whether the current user has saved one job;
+- `GET /saved-jobs/status?jobIds=1,2,3` returns the subset of up to 50 requested job ids saved by the current user in one query, avoiding per-card N+1 status requests;
 - `GET /saved-jobs?page=0&size=20` returns a stable paginated list of the user's saved jobs.
 
 Bookmarks are private to the authenticated user and are protected by a database uniqueness constraint on `(user_id, job_id)`. The list endpoint deliberately excludes jobs that are no longer `OPEN`, so stale accepted/completed/cancelled offers do not remain actionable in the shortlist. Foreign keys cascade bookmark cleanup when a user or job is deleted.
+
+The batch status endpoint accepts only positive ids, requires at least one id and caps the request at 50 ids. Duplicate requested ids are collapsed before the repository lookup. It returns only saved ids, so the web client can initialize bookmark state for an entire discovery page with one authenticated request.
 
 ## Response envelope
 
@@ -104,6 +107,7 @@ The API rejects:
 - overlong text/category queries;
 - malformed category slugs;
 - invalid latitude/longitude, radius or nearby limit;
+- empty, oversized or non-positive saved-job batch ids;
 - malformed request-parameter types.
 
 Validation errors use the shared API error contract and return HTTP 400.
@@ -130,7 +134,7 @@ Carlisle is an internal technical milestone name and is intentionally not expose
 CI verifies:
 
 - Maven unit tests, including paginated and nearby category-filter routing and normalization;
-- saved-job idempotency, open-job eligibility and pagination behavior;
+- saved-job idempotency, open-job eligibility, batched status lookup and pagination behavior;
 - frontend lint/build and production dependency audit;
 - PostGIS and `pg_trgm` availability;
 - Flyway migrations;

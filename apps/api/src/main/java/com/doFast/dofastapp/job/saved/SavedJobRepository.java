@@ -8,12 +8,26 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
+
 public interface SavedJobRepository extends JpaRepository<SavedJob, Long> {
 
     boolean existsByUser_IdAndJob_Id(Long userId, Long jobId);
 
     @Modifying
     long deleteByUser_IdAndJob_Id(Long userId, Long jobId);
+
+    @Query("""
+            select saved.job.id
+            from SavedJob saved
+            where saved.user.id = :userId
+              and saved.job.id in :jobIds
+            """)
+    List<Long> findSavedJobIds(
+            @Param("userId") Long userId,
+            @Param("jobIds") Collection<Long> jobIds
+    );
 
     @Query(
             value = """
