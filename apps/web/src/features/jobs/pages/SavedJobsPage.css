@@ -1,0 +1,17 @@
+.saved-jobs-page .jobs-hero {
+  margin-bottom: 1.5rem;
+}
+
+.saved-job-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.saved-job-card .job-card {
+  flex: 1;
+}
+
+.saved-job-card__remove {
+  align-self: flex-start;
+}

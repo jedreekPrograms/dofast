@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
-import { acceptJob } from '../api/jobsApi.js'
+import { acceptJob, saveJob } from '../api/jobsApi.js'
 
 const priceFormatter = new Intl.NumberFormat('pl-PL', {
   style: 'currency',
@@ -13,12 +13,15 @@ const dateFormatter = new Intl.DateTimeFormat('pl-PL', {
   timeStyle: 'short',
 })
 
-function JobCard({ job }) {
+function JobCard({ job, showSaveAction = true }) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [accepting, setAccepting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const canAccept = user && job.createdById !== user.id && job.status === 'OPEN'
+  const canSave = showSaveAction && user && job.createdById !== user.id && job.status === 'OPEN'
 
   async function handleAccept() {
     setAccepting(true)
@@ -30,6 +33,19 @@ function JobCard({ job }) {
       setError(requestError.message || 'Nie udało się przyjąć zlecenia.')
     } finally {
       setAccepting(false)
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    try {
+      await saveJob(job.id)
+      setSaved(true)
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się zapisać zlecenia.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -58,6 +74,11 @@ function JobCard({ job }) {
 
       <div className="job-card__actions">
         {user && <Link className="button button--secondary" to={`/jobs/${job.id}`}>Szczegóły</Link>}
+        {canSave && (
+          <button className="button button--secondary" type="button" disabled={saving || saved} onClick={handleSave}>
+            {saving ? 'Zapisywanie…' : saved ? 'Zapisano' : 'Zapisz'}
+          </button>
+        )}
         {canAccept && (
           <button className="button button--primary" type="button" disabled={accepting} onClick={handleAccept}>
             {accepting ? 'Przyjmowanie…' : 'Przyjmij zlecenie'}
