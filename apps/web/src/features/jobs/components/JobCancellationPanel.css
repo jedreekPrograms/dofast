@@ -1,0 +1,125 @@
+.job-cancellation-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border, #dfe3e8);
+  border-radius: 18px;
+  padding: 24px;
+  background: var(--surface, #fff);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.job-cancellation-panel__header,
+.job-cancellation-panel__form-footer,
+.job-cancellation-panel__request-meta,
+.job-cancellation-panel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.job-cancellation-panel__header h2 {
+  margin: 4px 0 0;
+}
+
+.job-cancellation-panel__badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(22, 163, 74, 0.1);
+  color: #166534;
+}
+
+.job-cancellation-panel__intro,
+.job-cancellation-panel__muted,
+.job-cancellation-panel__decision p,
+.job-cancellation-panel__empty p {
+  color: var(--text-muted, #5d6673);
+  line-height: 1.6;
+}
+
+.job-cancellation-panel__form,
+.job-cancellation-panel__request,
+.job-cancellation-panel__empty {
+  margin-top: 20px;
+  border-radius: 14px;
+  padding: 18px;
+  background: var(--surface-subtle, #f7f8fa);
+}
+
+.job-cancellation-panel__form {
+  display: grid;
+  gap: 10px;
+}
+
+.job-cancellation-panel__form label {
+  font-weight: 700;
+}
+
+.job-cancellation-panel__form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid var(--border, #dfe3e8);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+
+.job-cancellation-panel__form textarea:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  border-color: #2563eb;
+}
+
+.job-cancellation-panel__form-footer > span,
+.job-cancellation-panel__request-meta span {
+  color: var(--text-muted, #687180);
+  font-size: 0.85rem;
+}
+
+.job-cancellation-panel__request-meta {
+  align-items: flex-start;
+}
+
+.job-cancellation-panel__request blockquote {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--border-strong, #aeb7c2);
+  background: var(--surface, #fff);
+  border-radius: 0 10px 10px 0;
+  white-space: pre-wrap;
+}
+
+.job-cancellation-panel__decision {
+  border-top: 1px solid var(--border, #dfe3e8);
+  padding-top: 16px;
+}
+
+.job-cancellation-panel__actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .job-cancellation-panel {
+    padding: 18px;
+  }
+
+  .job-cancellation-panel__header,
+  .job-cancellation-panel__form-footer,
+  .job-cancellation-panel__request-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .job-cancellation-panel__actions {
+    width: 100%;
+  }
+
+  .job-cancellation-panel__actions .button {
+    flex: 1 1 100%;
+  }
+}
