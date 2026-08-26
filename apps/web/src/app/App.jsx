@@ -10,7 +10,7 @@ import ChatPage from '../features/chat/pages/ChatPage.jsx'
 import DisputesPage from '../features/disputes/pages/DisputesPage.jsx'
 import CreateJobPage from '../features/jobs/pages/CreateJobPage.jsx'
 import JobDetailsPage from '../features/jobs/pages/JobDetailsPage.jsx'
-import JobRoutePage from '../features/jobs/pages/JobRoutePage.jsx'
+import JobExecutionPage from '../features/jobs/pages/JobExecutionPage.jsx'
 import JobsPage from '../features/jobs/pages/JobsPage.jsx'
 import MyJobsPage from '../features/jobs/pages/MyJobsPage.jsx'
 import NotificationsPage from '../features/notifications/pages/NotificationsPage.jsx'
@@ -34,7 +34,7 @@ function App() {
             <Route path="/my-jobs" element={<MyJobsPage />} />
             <Route path="/jobs/new" element={<CreateJobPage />} />
             <Route path="/jobs/:jobId" element={<JobDetailsPage />} />
-            <Route path="/jobs/:jobId/route" element={<JobRoutePage />} />
+            <Route path="/jobs/:jobId/route" element={<JobExecutionPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/disputes" element={<DisputesPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
