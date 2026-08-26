@@ -106,4 +106,39 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             @Param("radiusMeters") int radiusMeters,
             @Param("limit") int limit
     );
+
+    @Query(value = """
+            WITH origin AS (
+                SELECT CAST(ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326) AS geography) AS point
+            )
+            SELECT
+                j.id AS "id",
+                j.title AS "title",
+                j.description AS "description",
+                j.price AS "price",
+                j.status AS "status",
+                j.location_label AS "locationLabel",
+                j.destination_label AS "destinationLabel",
+                j.route_distance_meters AS "routeDistanceMeters",
+                j.route_duration_seconds AS "routeDurationSeconds",
+                ST_Distance(j.location, origin.point) AS "distanceMeters",
+                j.created_at AS "createdAt"
+            FROM jobs j
+            JOIN job_categories category ON category.id = j.category_id
+            LEFT JOIN job_categories parent_category ON parent_category.id = category.parent_id
+            CROSS JOIN origin
+            WHERE j.status = 'OPEN'
+              AND j.location IS NOT NULL
+              AND (lower(category.slug) = lower(:categorySlug) OR lower(parent_category.slug) = lower(:categorySlug))
+              AND ST_DWithin(j.location, origin.point, :radiusMeters)
+            ORDER BY j.location <-> origin.point, j.created_at DESC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<NearbyJobProjection> findNearbyOpenJobsByCategory(
+            @Param("latitude") double latitude,
+            @Param("longitude") double longitude,
+            @Param("radiusMeters") int radiusMeters,
+            @Param("categorySlug") String categorySlug,
+            @Param("limit") int limit
+    );
 }
