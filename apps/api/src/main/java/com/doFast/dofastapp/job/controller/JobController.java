@@ -6,6 +6,7 @@ import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.service.JobService;
+import com.doFast.dofastapp.job.service.NearbyJobDiscoveryService;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
@@ -36,8 +37,12 @@ import java.util.List;
 public class JobController {
 
     private final JobService jobService;
+    private final NearbyJobDiscoveryService nearbyJobDiscoveryService;
 
-    public JobController(JobService jobService) { this.jobService = jobService; }
+    public JobController(JobService jobService, NearbyJobDiscoveryService nearbyJobDiscoveryService) {
+        this.jobService = jobService;
+        this.nearbyJobDiscoveryService = nearbyJobDiscoveryService;
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -60,8 +65,11 @@ public class JobController {
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double latitude,
             @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double longitude,
             @RequestParam(defaultValue = "5000") @Min(100) @Max(50000) int radiusMeters,
+            @RequestParam(required = false) @Size(max = 80) @Pattern(regexp = "[a-z0-9-]*") String category,
             @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit
-    ) { return jobService.getNearbyJobs(latitude, longitude, radiusMeters, limit); }
+    ) {
+        return nearbyJobDiscoveryService.getNearbyJobs(latitude, longitude, radiusMeters, category, limit);
+    }
 
     @GetMapping("/{id}")
     public JobResponse getJob(@PathVariable Long id) { return jobService.getJob(id); }
