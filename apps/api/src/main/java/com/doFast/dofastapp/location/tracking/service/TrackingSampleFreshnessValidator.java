@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.location.tracking.service;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ public class TrackingSampleFreshnessValidator {
     private final Duration futureTolerance;
     private final Clock clock;
 
+    @Autowired
     public TrackingSampleFreshnessValidator(
             @Value("${dofast.tracking.max-sample-age-seconds:120}") long maxSampleAgeSeconds,
             @Value("${dofast.tracking.future-tolerance-seconds:30}") long futureToleranceSeconds
