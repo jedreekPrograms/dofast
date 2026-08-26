@@ -117,15 +117,15 @@ curl --fail --silent --show-error --output /tmp/multistop-gps.json \
   "$api/jobs/$JOB_ID/tracking/location"
 
 STOP_ONE=$(curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/tracking/pickup")
+  -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/tracking/checkpoint")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["phase"]=="TO_STOP"; assert d["nextStopSequence"]==0; assert d["remainingDistanceMeters"]>0' <<< "$STOP_ONE"
 
 STOP_TWO=$(curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/tracking/pickup")
+  -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/tracking/checkpoint")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["phase"]=="TO_STOP"; assert d["nextStopSequence"]==1; assert d["remainingDistanceMeters"]>0' <<< "$STOP_TWO"
 
 DESTINATION=$(curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/tracking/pickup")
+  -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/tracking/checkpoint")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["phase"]=="TO_DESTINATION"; assert d["nextStopSequence"] is None; assert d["remainingDistanceMeters"]>0' <<< "$DESTINATION"
 
 DB_STATE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
