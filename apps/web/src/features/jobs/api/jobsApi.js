@@ -62,3 +62,26 @@ export function confirmJobCompletion(id) {
 export function cancelJob(id) {
   return apiRequest(`/jobs/${id}/cancel`, { method: 'POST' })
 }
+
+export function getPendingJobCancellation(id, options = {}) {
+  return apiRequest(`/jobs/${id}/cancellation`, options)
+}
+
+export function requestJobCancellation(id, reason) {
+  return apiRequest(`/jobs/${id}/cancellation`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export function approveJobCancellation(id) {
+  return apiRequest(`/jobs/${id}/cancellation/approve`, { method: 'POST' })
+}
+
+export function declineJobCancellation(id) {
+  return apiRequest(`/jobs/${id}/cancellation/decline`, { method: 'POST' })
+}
+
+export function withdrawJobCancellation(id) {
+  return apiRequest(`/jobs/${id}/cancellation/withdraw`, { method: 'POST' })
+}
