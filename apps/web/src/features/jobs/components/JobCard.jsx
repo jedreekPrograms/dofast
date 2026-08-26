@@ -13,7 +13,7 @@ const dateFormatter = new Intl.DateTimeFormat('pl-PL', {
   timeStyle: 'short',
 })
 
-function JobCard({ job }) {
+function JobCard({ job, showSaveAction = true }) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [accepting, setAccepting] = useState(false)
@@ -21,7 +21,7 @@ function JobCard({ job }) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const canAccept = user && job.createdById !== user.id && job.status === 'OPEN'
-  const canSave = user && job.createdById !== user.id && job.status === 'OPEN'
+  const canSave = showSaveAction && user && job.createdById !== user.id && job.status === 'OPEN'
 
   async function handleAccept() {
     setAccepting(true)
