@@ -9,7 +9,11 @@ CREATE TABLE job_cancellation_requests (
     requested_at TIMESTAMP NOT NULL,
     resolved_at TIMESTAMP,
     CONSTRAINT ck_job_cancellation_status CHECK (status IN ('PENDING', 'APPROVED', 'DECLINED', 'WITHDRAWN')),
-    CONSTRAINT ck_job_cancellation_reason_not_blank CHECK (length(trim(reason)) > 0)
+    CONSTRAINT ck_job_cancellation_reason_not_blank CHECK (length(trim(reason)) > 0),
+    CONSTRAINT ck_job_cancellation_resolution_shape CHECK (
+        (status = 'PENDING' AND resolved_by_id IS NULL AND resolved_at IS NULL)
+        OR (status IN ('APPROVED', 'DECLINED', 'WITHDRAWN') AND resolved_by_id IS NOT NULL AND resolved_at IS NOT NULL)
+    )
 );
 
 CREATE INDEX idx_job_cancellation_job_requested
@@ -17,6 +21,9 @@ CREATE INDEX idx_job_cancellation_job_requested
 
 CREATE INDEX idx_job_cancellation_requested_by
     ON job_cancellation_requests(requested_by_id, requested_at DESC);
+
+CREATE INDEX idx_job_cancellation_status_requested
+    ON job_cancellation_requests(status, requested_at DESC);
 
 CREATE UNIQUE INDEX uk_job_cancellation_one_pending_per_job
     ON job_cancellation_requests(job_id)
