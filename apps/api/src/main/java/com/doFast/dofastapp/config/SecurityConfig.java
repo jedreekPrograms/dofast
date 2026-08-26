@@ -44,7 +44,7 @@ public class SecurityConfig {
                                 "/users/login/apple",
                                 "/users/login/apple/challenge"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby", "/job-categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/*/profile", "/reviews/users/*").permitAll()
                         .requestMatchers("/ws", "/ws/**", "/ws-sockjs/**").permitAll()
                         .requestMatchers("/webhooks/stripe").permitAll()
