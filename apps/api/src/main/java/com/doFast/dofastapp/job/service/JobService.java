@@ -15,6 +15,7 @@ import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.job.repository.NearbyJobProjection;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
@@ -136,15 +137,27 @@ public class JobService {
     }
 
     public List<NearbyJobResponse> getNearbyJobs(double latitude, double longitude, int radiusMeters, int limit) {
-        return jobRepository.findNearbyOpenJobs(latitude, longitude, radiusMeters, limit)
-                .stream()
-                .map(match -> new NearbyJobResponse(
-                        match.getId(), match.getTitle(), match.getDescription(), match.getPrice(),
-                        JobStatus.valueOf(match.getStatus()), match.getLocationLabel(), match.getDestinationLabel(),
-                        match.getRouteDistanceMeters(), match.getRouteDurationSeconds(),
-                        Math.round(match.getDistanceMeters()), match.getCreatedAt()
-                ))
-                .toList();
+        return mapNearby(jobRepository.findNearbyOpenJobs(latitude, longitude, radiusMeters, limit));
+    }
+
+    public List<NearbyJobResponse> getNearbyJobs(
+            double latitude,
+            double longitude,
+            int radiusMeters,
+            String categorySlug,
+            int limit
+    ) {
+        String normalizedCategory = normalizeCategorySlug(categorySlug);
+        if (normalizedCategory.isEmpty()) {
+            return getNearbyJobs(latitude, longitude, radiusMeters, limit);
+        }
+        return mapNearby(jobRepository.findNearbyOpenJobsByCategory(
+                latitude,
+                longitude,
+                radiusMeters,
+                normalizedCategory,
+                limit
+        ));
     }
 
     public JobResponse getJob(Long jobId) { return toResponse(getJobForRead(jobId)); }
@@ -291,6 +304,17 @@ public class JobService {
     private PageResponse<JobResponse> toPageResponse(Page<Job> result) {
         List<JobResponse> content = result.getContent().stream().map(this::toResponse).toList();
         return PageResponse.from(result, content);
+    }
+
+    private List<NearbyJobResponse> mapNearby(List<NearbyJobProjection> matches) {
+        return matches.stream()
+                .map(match -> new NearbyJobResponse(
+                        match.getId(), match.getTitle(), match.getDescription(), match.getPrice(),
+                        JobStatus.valueOf(match.getStatus()), match.getLocationLabel(), match.getDestinationLabel(),
+                        match.getRouteDistanceMeters(), match.getRouteDurationSeconds(),
+                        Math.round(match.getDistanceMeters()), match.getCreatedAt()
+                ))
+                .toList();
     }
 
     private JobResponse toResponse(Job job) {
