@@ -97,7 +97,14 @@ public class JobService {
     }
 
     public PageResponse<JobResponse> getOpenJobs(String query, BigDecimal minPrice, BigDecimal maxPrice, int page, int size) {
-        return getOpenJobs(query, null, minPrice, maxPrice, page, size);
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new BusinessException("Minimalna cena nie może być większa od maksymalnej");
+        }
+
+        String normalizedQuery = normalizeSearchQuery(query);
+        PageRequest pageable = discoveryPage(page, size);
+        Page<Job> result = jobRepository.findOpenJobs(JobStatus.OPEN, normalizedQuery, minPrice, maxPrice, pageable);
+        return toPageResponse(result);
     }
 
     public PageResponse<JobResponse> getOpenJobs(
@@ -108,23 +115,24 @@ public class JobService {
             int page,
             int size
     ) {
+        String normalizedCategory = normalizeCategorySlug(categorySlug);
+        if (normalizedCategory.isEmpty()) {
+            return getOpenJobs(query, minPrice, maxPrice, page, size);
+        }
         if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
             throw new BusinessException("Minimalna cena nie może być większa od maksymalnej");
         }
 
         String normalizedQuery = normalizeSearchQuery(query);
-        String normalizedCategory = normalizeCategorySlug(categorySlug);
-        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
-        Page<Job> result = jobRepository.findOpenJobs(
+        Page<Job> result = jobRepository.findOpenJobsByCategory(
                 JobStatus.OPEN,
                 normalizedQuery,
                 normalizedCategory,
                 minPrice,
                 maxPrice,
-                pageable
+                discoveryPage(page, size)
         );
-        List<JobResponse> content = result.getContent().stream().map(this::toResponse).toList();
-        return PageResponse.from(result, content);
+        return toPageResponse(result);
     }
 
     public List<NearbyJobResponse> getNearbyJobs(double latitude, double longitude, int radiusMeters, int limit) {
@@ -274,6 +282,15 @@ public class JobService {
     private String normalizeCategorySlug(String value) {
         if (value == null) return "";
         return value.trim().toLowerCase();
+    }
+
+    private PageRequest discoveryPage(int page, int size) {
+        return PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+    }
+
+    private PageResponse<JobResponse> toPageResponse(Page<Job> result) {
+        List<JobResponse> content = result.getContent().stream().map(this::toResponse).toList();
+        return PageResponse.from(result, content);
     }
 
     private JobResponse toResponse(Job job) {
