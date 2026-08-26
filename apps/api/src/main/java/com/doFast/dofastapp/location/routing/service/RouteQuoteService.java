@@ -3,14 +3,18 @@ package com.doFast.dofastapp.location.routing.service;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
+import com.doFast.dofastapp.location.routing.dto.RouteModeComparisonResponse;
+import com.doFast.dofastapp.location.routing.dto.RouteModeEstimateResponse;
 import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
 import com.doFast.dofastapp.location.routing.dto.RoutePointResponse;
 import com.doFast.dofastapp.location.routing.dto.RouteQuoteRequest;
 import com.doFast.dofastapp.location.routing.dto.RouteQuoteResponse;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
+import com.doFast.dofastapp.location.routing.exception.RoutingProviderException;
 import com.doFast.dofastapp.location.routing.provider.RouteCoordinate;
 import com.doFast.dofastapp.location.routing.provider.RouteProvider;
 import com.doFast.dofastapp.location.routing.provider.RouteProviderResult;
+import com.doFast.dofastapp.location.routing.provider.RouteTravelMode;
 import com.doFast.dofastapp.location.routing.repository.RouteQuoteRepository;
 import com.doFast.dofastapp.location.service.GeoPointFactory;
 import com.doFast.dofastapp.user.entity.User;
@@ -20,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -76,10 +82,30 @@ public class RouteQuoteService {
 
     @Transactional(readOnly = true)
     public RouteQuoteResponse getQuote(UUID quoteId, User user) {
-        RouteQuote quote = routeQuoteRepository.findById(quoteId)
-                .orElseThrow(() -> new ResourceNotFoundException("Wycena trasy nie istnieje"));
-        assertOwner(quote, user);
+        RouteQuote quote = findOwnedQuote(quoteId, user);
         return toResponse(quote);
+    }
+
+    @Transactional(readOnly = true)
+    public RouteModeComparisonResponse getModeComparison(UUID quoteId, User user) {
+        RouteQuote quote = findOwnedQuote(quoteId, user);
+        if (!quote.getExpiresAt().isAfter(LocalDateTime.now())) {
+            throw new ConflictException("Wycena trasy wygasła. Wyznacz trasę ponownie.");
+        }
+
+        RouteCoordinate origin = new RouteCoordinate(quote.getOrigin().getY(), quote.getOrigin().getX());
+        RouteCoordinate destination = new RouteCoordinate(quote.getDestination().getY(), quote.getDestination().getX());
+        List<RouteModeEstimateResponse> estimates = new ArrayList<>();
+        estimates.add(new RouteModeEstimateResponse(
+                RouteTravelMode.DRIVE,
+                quote.getDistanceMeters(),
+                quote.getDurationSeconds(),
+                true
+        ));
+        estimates.add(estimateMode(origin, destination, RouteTravelMode.BICYCLE));
+        estimates.add(estimateMode(origin, destination, RouteTravelMode.WALK));
+
+        return new RouteModeComparisonResponse(quote.getId(), List.copyOf(estimates), true);
     }
 
     @Transactional
@@ -98,6 +124,26 @@ public class RouteQuoteService {
 
         quote.markConsumed(now);
         return routeQuoteRepository.save(quote);
+    }
+
+    private RouteModeEstimateResponse estimateMode(
+            RouteCoordinate origin,
+            RouteCoordinate destination,
+            RouteTravelMode mode
+    ) {
+        try {
+            RouteProviderResult result = routeProvider.estimate(origin, destination, mode);
+            return new RouteModeEstimateResponse(mode, result.distanceMeters(), result.durationSeconds(), true);
+        } catch (RoutingProviderException ex) {
+            return new RouteModeEstimateResponse(mode, null, null, false);
+        }
+    }
+
+    private RouteQuote findOwnedQuote(UUID quoteId, User user) {
+        RouteQuote quote = routeQuoteRepository.findById(quoteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Wycena trasy nie istnieje"));
+        assertOwner(quote, user);
+        return quote;
     }
 
     private void assertOwner(RouteQuote quote, User user) {
