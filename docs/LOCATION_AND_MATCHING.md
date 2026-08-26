@@ -101,6 +101,12 @@ The provider call happens outside the transaction that stores GPS. Its result is
 
 A position older than `TRACKING_STALE_AFTER_SECONDS` (default 20 s) is labelled stale in the UI.
 
+## Position sanity guard
+
+Before replacing the current courier point, the API compares it with the previous accepted device sample. It calculates great-circle distance, subtracts the uncertainty reported by both GPS samples, then divides the effective distance by elapsed capture time. Updates above `TRACKING_MAX_IMPLIED_SPEED_METERS_PER_SECOND` (default 80 m/s, about 288 km/h) are rejected with a conflict response instead of corrupting the map or triggering a misleading ETA refresh.
+
+This is deliberately a coarse integrity guard rather than fraud detection. It tolerates ordinary urban GPS drift through the accuracy allowance, does not retain historical positions, and remains configurable for future transport modes.
+
 ## Privacy and retention invariants
 
 1. No public endpoint exposes current courier coordinates.
@@ -110,6 +116,7 @@ A position older than `TRACKING_STALE_AFTER_SECONDS` (default 20 s) is labelled 
 5. A PostgreSQL trigger clears precise tracking fields whenever a job enters `DISPUTED`, `DONE` or `CANCELLED`, even if application code forgets a cleanup call.
 6. Resuming a disputed job never resurrects the old coordinate; a new worker GPS update is required.
 7. Out-of-order device updates are rejected so an old coordinate cannot move the courier backwards in time.
+8. Obviously implausible position jumps are rejected after accounting for GPS accuracy, protecting map/ETA integrity without building a location history.
 
 ## Browser and native-app limitation
 
@@ -131,3 +138,5 @@ The Docker runtime smoke covers the real PostgreSQL/PostGIS stack and verifies:
 - a second GPS remains in `TO_DESTINATION`;
 - opening a dispute clears exact live GPS in PostgreSQL;
 - escrow/chat/dispute/refund behaviour still works on the same routed job.
+
+Unit coverage additionally verifies first-sample acceptance, plausible movement, GPS-accuracy allowance and rejection of impossible jumps.
