@@ -96,6 +96,10 @@ public class JobCancellationService {
         cancellationRepository.save(request);
         jobRepository.save(job);
 
+        // V12 clears tracking through a DB trigger when a job becomes CANCELLED and increments
+        // the tracking optimistic-lock version. Flush that transition before the application-side
+        // clear so LiveTrackingService reloads the current version and can publish the stopped state.
+        jobRepository.flush();
         liveTrackingService.stopAndClear(jobId);
         transactionService.refundMoney(job);
 
