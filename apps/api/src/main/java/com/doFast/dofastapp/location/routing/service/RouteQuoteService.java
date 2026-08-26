@@ -10,6 +10,7 @@ import com.doFast.dofastapp.location.routing.dto.RoutePointResponse;
 import com.doFast.dofastapp.location.routing.dto.RouteQuoteRequest;
 import com.doFast.dofastapp.location.routing.dto.RouteQuoteResponse;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
+import com.doFast.dofastapp.location.routing.entity.RouteQuoteStop;
 import com.doFast.dofastapp.location.routing.exception.RoutingProviderException;
 import com.doFast.dofastapp.location.routing.provider.RouteCoordinate;
 import com.doFast.dofastapp.location.routing.provider.RouteProvider;
@@ -18,6 +19,7 @@ import com.doFast.dofastapp.location.routing.provider.RouteTravelMode;
 import com.doFast.dofastapp.location.routing.repository.RouteQuoteRepository;
 import com.doFast.dofastapp.location.service.GeoPointFactory;
 import com.doFast.dofastapp.user.entity.User;
+import org.locationtech.jts.geom.Point;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,15 +50,15 @@ public class RouteQuoteService {
     @Transactional
     public RouteQuoteResponse createQuote(RouteQuoteRequest request, User user) {
         RoutePointRequest origin = request.origin();
+        List<RoutePointRequest> stops = request.stops();
         RoutePointRequest destination = request.destination();
-
-        if (sameCoordinates(origin, destination)) {
-            throw new ConflictException("Punkt A i punkt B muszą być różne");
-        }
+        validateRouteSequence(origin, stops, destination);
 
         RouteProviderResult estimate = routeProvider.estimate(
-                new RouteCoordinate(origin.latitude().doubleValue(), origin.longitude().doubleValue()),
-                new RouteCoordinate(destination.latitude().doubleValue(), destination.longitude().doubleValue())
+                coordinate(origin),
+                stops.stream().map(this::coordinate).toList(),
+                coordinate(destination),
+                RouteTravelMode.DRIVE
         );
 
         LocalDateTime now = LocalDateTime.now();
@@ -76,6 +78,14 @@ public class RouteQuoteService {
                 now,
                 now.plusMinutes(quoteTtlMinutes)
         );
+        for (RoutePointRequest stop : stops) {
+            quote.addStop(
+                    GeoPointFactory.from(stop.latitude(), stop.longitude()),
+                    stop.publicLabel().trim(),
+                    normalizeOptional(stop.privateLabel()),
+                    normalizeOptional(stop.placeId())
+            );
+        }
 
         return toResponse(routeQuoteRepository.save(quote));
     }
@@ -93,8 +103,12 @@ public class RouteQuoteService {
             throw new ConflictException("Wycena trasy wygasła. Wyznacz trasę ponownie.");
         }
 
-        RouteCoordinate origin = new RouteCoordinate(quote.getOrigin().getY(), quote.getOrigin().getX());
-        RouteCoordinate destination = new RouteCoordinate(quote.getDestination().getY(), quote.getDestination().getX());
+        RouteCoordinate origin = coordinate(quote.getOrigin());
+        List<RouteCoordinate> intermediates = quote.getStops().stream()
+                .map(RouteQuoteStop::getLocation)
+                .map(this::coordinate)
+                .toList();
+        RouteCoordinate destination = coordinate(quote.getDestination());
         List<RouteModeEstimateResponse> estimates = new ArrayList<>();
         estimates.add(new RouteModeEstimateResponse(
                 RouteTravelMode.DRIVE,
@@ -102,8 +116,8 @@ public class RouteQuoteService {
                 quote.getDurationSeconds(),
                 true
         ));
-        estimates.add(estimateMode(origin, destination, RouteTravelMode.BICYCLE));
-        estimates.add(estimateMode(origin, destination, RouteTravelMode.WALK));
+        estimates.add(estimateMode(origin, intermediates, destination, RouteTravelMode.BICYCLE));
+        estimates.add(estimateMode(origin, intermediates, destination, RouteTravelMode.WALK));
 
         return new RouteModeComparisonResponse(quote.getId(), List.copyOf(estimates), true);
     }
@@ -128,11 +142,12 @@ public class RouteQuoteService {
 
     private RouteModeEstimateResponse estimateMode(
             RouteCoordinate origin,
+            List<RouteCoordinate> intermediates,
             RouteCoordinate destination,
             RouteTravelMode mode
     ) {
         try {
-            RouteProviderResult result = routeProvider.estimate(origin, destination, mode);
+            RouteProviderResult result = routeProvider.estimate(origin, intermediates, destination, mode);
             return new RouteModeEstimateResponse(mode, result.distanceMeters(), result.durationSeconds(), true);
         } catch (RoutingProviderException ex) {
             return new RouteModeEstimateResponse(mode, null, null, false);
@@ -152,9 +167,33 @@ public class RouteQuoteService {
         }
     }
 
+    private void validateRouteSequence(
+            RoutePointRequest origin,
+            List<RoutePointRequest> stops,
+            RoutePointRequest destination
+    ) {
+        List<RoutePointRequest> points = new ArrayList<>(stops.size() + 2);
+        points.add(origin);
+        points.addAll(stops);
+        points.add(destination);
+        for (int index = 1; index < points.size(); index++) {
+            if (sameCoordinates(points.get(index - 1), points.get(index))) {
+                throw new ConflictException("Kolejne punkty trasy muszą być różne");
+            }
+        }
+    }
+
     private boolean sameCoordinates(RoutePointRequest first, RoutePointRequest second) {
         return first.latitude().compareTo(second.latitude()) == 0
                 && first.longitude().compareTo(second.longitude()) == 0;
+    }
+
+    private RouteCoordinate coordinate(RoutePointRequest point) {
+        return new RouteCoordinate(point.latitude().doubleValue(), point.longitude().doubleValue());
+    }
+
+    private RouteCoordinate coordinate(Point point) {
+        return new RouteCoordinate(point.getY(), point.getX());
     }
 
     private String normalizeOptional(String value) {
@@ -168,16 +207,22 @@ public class RouteQuoteService {
     private RouteQuoteResponse toResponse(RouteQuote quote) {
         return new RouteQuoteResponse(
                 quote.getId(),
-                new RoutePointResponse(
-                        BigDecimal.valueOf(quote.getOrigin().getY()),
-                        BigDecimal.valueOf(quote.getOrigin().getX()),
+                pointResponse(
+                        quote.getOrigin(),
                         quote.getOriginPublicLabel(),
                         quote.getOriginPrivateLabel(),
                         quote.getOriginPlaceId()
                 ),
-                new RoutePointResponse(
-                        BigDecimal.valueOf(quote.getDestination().getY()),
-                        BigDecimal.valueOf(quote.getDestination().getX()),
+                quote.getStops().stream()
+                        .map(stop -> pointResponse(
+                                stop.getLocation(),
+                                stop.getPublicLabel(),
+                                stop.getPrivateLabel(),
+                                stop.getPlaceId()
+                        ))
+                        .toList(),
+                pointResponse(
+                        quote.getDestination(),
                         quote.getDestinationPublicLabel(),
                         quote.getDestinationPrivateLabel(),
                         quote.getDestinationPlaceId()
@@ -188,6 +233,21 @@ public class RouteQuoteService {
                 quote.getProvider(),
                 quote.getCreatedAt(),
                 quote.getExpiresAt()
+        );
+    }
+
+    private RoutePointResponse pointResponse(
+            Point point,
+            String publicLabel,
+            String privateLabel,
+            String placeId
+    ) {
+        return new RoutePointResponse(
+                BigDecimal.valueOf(point.getY()),
+                BigDecimal.valueOf(point.getX()),
+                publicLabel,
+                privateLabel,
+                placeId
         );
     }
 }

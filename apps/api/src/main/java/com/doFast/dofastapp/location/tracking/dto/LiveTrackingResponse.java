@@ -8,6 +8,7 @@ public record LiveTrackingResponse(
         Long jobId,
         Long workerId,
         TrackingPhase phase,
+        Integer nextStopSequence,
         boolean sharingActive,
         LiveTrackingPointResponse location,
         Integer remainingDistanceMeters,

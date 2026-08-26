@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import { useRealtime } from '../../../shared/realtime/RealtimeContext.js'
 import {
-  confirmJobPickup,
+  confirmRouteCheckpoint,
   getJob,
   getJobRoute,
   getLiveTracking,
@@ -36,7 +36,7 @@ function JobRoutePage() {
   const [mapError, setMapError] = useState('')
   const [trackingError, setTrackingError] = useState('')
   const [locationPermission, setLocationPermission] = useState('idle')
-  const [pickupSubmitting, setPickupSubmitting] = useState(false)
+  const [checkpointSubmitting, setCheckpointSubmitting] = useState(false)
 
   const trackingActive = job ? ACTIVE_TRACKING_STATUSES.has(job.status) : false
   const isWorker = Boolean(user && job && job.takenById === user.id)
@@ -126,13 +126,31 @@ function JobRoutePage() {
           mapTypeControl: false,
         })
         mapRef.current = map
-        markers.push(
-          new AdvancedMarkerElement({ map, position: point(route.origin), content: new PinElement({ glyphText: 'A' }), title: route.origin.label }),
-          new AdvancedMarkerElement({ map, position: point(route.destination), content: new PinElement({ glyphText: 'B' }), title: route.destination.label }),
-        )
+        markers.push(new AdvancedMarkerElement({
+          map,
+          position: point(route.origin),
+          content: new PinElement({ glyphText: 'A' }),
+          title: route.origin.label,
+        }))
+        const routeStops = route.stops || []
+        routeStops.forEach((stop, index) => {
+          markers.push(new AdvancedMarkerElement({
+            map,
+            position: point(stop),
+            content: new PinElement({ glyphText: String(index + 1) }),
+            title: stop.label,
+          }))
+        })
+        markers.push(new AdvancedMarkerElement({
+          map,
+          position: point(route.destination),
+          content: new PinElement({ glyphText: 'B' }),
+          title: route.destination.label,
+        }))
 
         const decoded = decodeGooglePolyline(route.encodedPolyline)
-        const path = decoded.length >= 2 ? decoded : [point(route.origin), point(route.destination)]
+        const fallback = [route.origin, ...routeStops, route.destination].map(point)
+        const path = decoded.length >= 2 ? decoded : fallback
         routeLine = new window.google.maps.Polyline({ path, map, strokeOpacity: 0.35, strokeWeight: 5 })
         const bounds = new window.google.maps.LatLngBounds()
         path.forEach((item) => bounds.extend(item))
@@ -157,6 +175,10 @@ function JobRoutePage() {
   }, [route])
 
   useEffect(() => {
+    firstCourierPositionRef.current = true
+  }, [tracking?.nextStopSequence, tracking?.phase])
+
+  useEffect(() => {
     if (!mapRef.current || !route || !hasGoogleMapsKey()) return undefined
     let cancelled = false
 
@@ -173,7 +195,7 @@ function JobRoutePage() {
       const { AdvancedMarkerElement, PinElement } = await window.google.maps.importLibrary('marker')
       if (cancelled || !mapRef.current) return
       const courierPoint = point(tracking.location)
-      const targetPoint = tracking.phase === 'TO_ORIGIN' ? point(route.origin) : point(route.destination)
+      const targetPoint = point(trackingTarget(route, tracking))
 
       if (!courierMarkerRef.current) {
         courierMarkerRef.current = new AdvancedMarkerElement({
@@ -269,21 +291,20 @@ function JobRoutePage() {
     }
   }, [isWorker, jobId, trackingActive])
 
-  async function handlePickup() {
-    setPickupSubmitting(true)
+  async function handleCheckpoint() {
+    setCheckpointSubmitting(true)
     setTrackingError('')
     try {
-      setTracking(await confirmJobPickup(jobId))
+      setTracking(await confirmRouteCheckpoint(jobId))
     } catch (requestError) {
-      setTrackingError(requestError.message || 'Nie udało się potwierdzić odbioru.')
+      setTrackingError(requestError.message || 'Nie udało się potwierdzić punktu trasy.')
     } finally {
-      setPickupSubmitting(false)
+      setCheckpointSubmitting(false)
     }
   }
 
-  const phaseLabel = tracking?.phase === 'TO_DESTINATION'
-    ? 'Kurier jedzie do punktu B'
-    : 'Kurier jedzie do punktu A'
+  const currentPhaseLabel = trackingPhaseLabel(tracking)
+  const checkpointLabel = trackingCheckpointLabel(tracking)
 
   return (
     <main className="job-route-page">
@@ -291,7 +312,7 @@ function JobRoutePage() {
         <div>
           <span className="eyebrow">Trasa i tracking live</span>
           <h1>Zlecenie #{jobId}</h1>
-          <p>Dokładna trasa i bieżąca pozycja wykonawcy są dostępne wyłącznie dla stron aktywnego zlecenia.</p>
+          <p>Dokładna trasa, przystanki i bieżąca pozycja wykonawcy są dostępne wyłącznie dla stron aktywnego zlecenia.</p>
         </div>
         <Link className="button button--secondary" to="/my-jobs">Wróć do zleceń</Link>
       </header>
@@ -302,11 +323,17 @@ function JobRoutePage() {
       {!loading && route && (
         <>
           <section className="panel job-route-summary">
-            <div><span className="job-route-summary__badge">A</span><div><small>Punkt odbioru</small><strong>{route.origin.label}</strong></div></div>
-            <div><span className="job-route-summary__badge">B</span><div><small>Punkt docelowy</small><strong>{route.destination.label}</strong></div></div>
+            <div className="job-route-summary__points">
+              <RoutePointSummary badge="A" caption="Punkt początkowy" label={route.origin.label} />
+              {(route.stops || []).map((stop, index) => (
+                <RoutePointSummary key={`${index}-${stop.latitude}-${stop.longitude}`} badge={String(index + 1)} caption={`Przystanek ${index + 1}`} label={stop.label} />
+              ))}
+              <RoutePointSummary badge="B" caption="Punkt docelowy" label={route.destination.label} />
+            </div>
             <div className="job-route-summary__metrics">
               <strong>{formatDistance(route.distanceMeters)}</strong>
               <span>około {formatDuration(route.durationSeconds)}</span>
+              {(route.stops || []).length > 0 && <small>{route.stops.length} {route.stops.length === 1 ? 'przystanek' : 'przystanków'} po drodze</small>}
             </div>
           </section>
 
@@ -315,14 +342,14 @@ function JobRoutePage() {
               <div className="live-tracking-card__heading">
                 <div>
                   <span className="eyebrow">Na żywo</span>
-                  <h2>{phaseLabel}</h2>
+                  <h2>{currentPhaseLabel}</h2>
                 </div>
                 <span className={`realtime-status realtime-status--${realtimeStatus}`}>Realtime: {realtimeStatus}</span>
               </div>
 
               <div className="live-tracking-metrics">
-                <div><small>Pozostało</small><strong>{tracking?.remainingDistanceMeters ? formatDistance(tracking.remainingDistanceMeters) : '—'}</strong></div>
-                <div><small>ETA</small><strong>{tracking?.remainingDurationSeconds ? formatDuration(tracking.remainingDurationSeconds) : '—'}</strong></div>
+                <div><small>Do następnego punktu</small><strong>{tracking?.remainingDistanceMeters ? formatDistance(tracking.remainingDistanceMeters) : '—'}</strong></div>
+                <div><small>ETA do punktu</small><strong>{tracking?.remainingDurationSeconds ? formatDuration(tracking.remainingDurationSeconds) : '—'}</strong></div>
                 <div><small>Ostatni GPS</small><strong>{tracking?.receivedAt ? formatLastUpdate(tracking.receivedAt) : 'oczekiwanie'}</strong></div>
               </div>
 
@@ -330,29 +357,61 @@ function JobRoutePage() {
               {tracking?.stale && <div className="form-message form-message--error">Pozycja wykonawcy jest nieaktualna. Ostatnia aktualizacja mogła zostać wstrzymana przez telefon lub sieć.</div>}
 
               {isWorker && tracking?.phase !== 'TO_DESTINATION' && (
-                <button className="button button--primary" type="button" disabled={pickupSubmitting} onClick={handlePickup}>
-                  {pickupSubmitting ? 'Zapisywanie…' : 'Potwierdź odbiór w punkcie A'}
+                <button className="button button--primary" type="button" disabled={checkpointSubmitting} onClick={handleCheckpoint}>
+                  {checkpointSubmitting ? 'Zapisywanie…' : checkpointLabel}
                 </button>
               )}
 
               {isWorker && (
                 <div className="live-tracking-worker-status">
                   <strong>{locationPermissionLabel(locationPermission)}</strong>
-                  <span>Podczas realizacji nie zamykaj tego ekranu. W docelowej aplikacji mobilnej tracking będzie działał również w tle.</span>
+                  <span>Po wykonaniu czynności w A lub na przystanku potwierdź punkt, aby ETA przeszło do kolejnego miejsca. Podczas realizacji nie zamykaj tego ekranu.</span>
                 </div>
               )}
               {trackingError && <div className="form-message form-message--error">{trackingError}</div>}
             </section>
           )}
 
-          {hasGoogleMapsKey() ? <div ref={mapElementRef} className="job-route-map" aria-label="Dokładna mapa trasy i lokalizacja kuriera" /> : (
-            <div className="panel job-route-map-fallback">Mapa pojawi się po skonfigurowaniu Google Maps browser key. Dokładne A/B, bieżący GPS i ETA nadal pochodzą z backendu.</div>
+          {hasGoogleMapsKey() ? <div ref={mapElementRef} className="job-route-map" aria-label="Dokładna mapa trasy, przystanki i lokalizacja kuriera" /> : (
+            <div className="panel job-route-map-fallback">Mapa pojawi się po skonfigurowaniu Google Maps browser key. Dokładne A, przystanki, B, bieżący GPS i ETA nadal pochodzą z backendu.</div>
           )}
           {mapError && <div className="form-message form-message--error">{mapError}</div>}
         </>
       )}
     </main>
   )
+}
+
+function RoutePointSummary({ badge, caption, label }) {
+  return (
+    <div className="job-route-summary__point">
+      <span className="job-route-summary__badge">{badge}</span>
+      <div><small>{caption}</small><strong>{label}</strong></div>
+    </div>
+  )
+}
+
+function trackingTarget(route, tracking) {
+  if (tracking?.phase === 'TO_ORIGIN') return route.origin
+  if (tracking?.phase === 'TO_STOP' && Number.isInteger(tracking.nextStopSequence)) {
+    return route.stops?.[tracking.nextStopSequence] || route.destination
+  }
+  return route.destination
+}
+
+function trackingPhaseLabel(tracking) {
+  if (tracking?.phase === 'TO_DESTINATION') return 'Kurier jedzie do punktu B'
+  if (tracking?.phase === 'TO_STOP' && Number.isInteger(tracking.nextStopSequence)) {
+    return `Kurier jedzie do przystanku ${tracking.nextStopSequence + 1}`
+  }
+  return 'Kurier jedzie do punktu A'
+}
+
+function trackingCheckpointLabel(tracking) {
+  if (tracking?.phase === 'TO_STOP' && Number.isInteger(tracking.nextStopSequence)) {
+    return `Potwierdź przystanek ${tracking.nextStopSequence + 1} i jedź dalej`
+  }
+  return 'Potwierdź punkt A i jedź dalej'
 }
 
 function point(value) {

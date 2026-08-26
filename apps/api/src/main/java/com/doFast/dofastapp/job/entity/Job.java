@@ -4,6 +4,7 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.user.entity.User;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -15,6 +16,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -25,6 +28,9 @@ import org.locationtech.jts.geom.Point;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 @Entity
 @Table(
@@ -83,6 +89,10 @@ public class Job {
 
     @Column(name = "destination_private_label", length = 200)
     private String destinationPrivateLabel;
+
+    @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sequenceNo ASC")
+    private List<JobRouteStop> routeStops = new ArrayList<>();
 
     @Column(name = "route_distance_meters")
     private Integer routeDistanceMeters;
@@ -175,6 +185,10 @@ public class Job {
         this.status = JobStatus.CANCELLED;
     }
 
+    public void addRouteStop(Point location, String publicLabel, String privateLabel, String placeId) {
+        routeStops.add(new JobRouteStop(this, routeStops.size(), location, publicLabel, privateLabel, placeId));
+    }
+
     public Long getId() { return id; }
     public String getTitle() { return title; }
     public String getDescription() { return description; }
@@ -187,6 +201,7 @@ public class Job {
     public Point getDestinationLocation() { return destinationLocation; }
     public String getDestinationLabel() { return destinationLabel; }
     public String getDestinationPrivateLabel() { return destinationPrivateLabel; }
+    public List<JobRouteStop> getRouteStops() { return Collections.unmodifiableList(routeStops); }
     public Integer getRouteDistanceMeters() { return routeDistanceMeters; }
     public Integer getRouteDurationSeconds() { return routeDurationSeconds; }
     public String getRouteEncodedPolyline() { return routeEncodedPolyline; }

@@ -48,6 +48,14 @@ public class LiveTrackingController {
         return liveTrackingService.updateLocation(jobId, request, user);
     }
 
+    @PostMapping("/checkpoint")
+    public LiveTrackingResponse confirmCheckpoint(
+            @PathVariable Long jobId,
+            @AuthenticationPrincipal User user
+    ) {
+        return liveTrackingService.confirmCheckpoint(jobId, user);
+    }
+
     @PostMapping("/pickup")
     public LiveTrackingResponse confirmPickup(
             @PathVariable Long jobId,

@@ -5,6 +5,7 @@ import { createJob, createRouteQuote, getJobCategories, getRouteModeEstimates } 
 import './CreateJobPage.css'
 
 const EMPTY_FORM = { title: '', description: '', price: '', categoryId: '' }
+const MAX_STOPS = 10
 
 function CreateJobPage() {
   const navigate = useNavigate()
@@ -12,6 +13,7 @@ function CreateJobPage() {
   const [categories, setCategories] = useState([])
   const [categoriesLoading, setCategoriesLoading] = useState(true)
   const [origin, setOrigin] = useState(null)
+  const [stops, setStops] = useState([])
   const [destination, setDestination] = useState(null)
   const [routeQuote, setRouteQuote] = useState(null)
   const [modeComparison, setModeComparison] = useState(null)
@@ -42,16 +44,40 @@ function CreateJobPage() {
     }))
     .filter((group) => group.children.length > 0), [categories])
 
-  const updatePoint = useCallback((kind, point) => {
-    if (kind === 'origin') setOrigin(point)
-    else setDestination(point)
+  const invalidateRoute = useCallback(() => {
     setRouteQuote(null)
     setModeComparison(null)
     setRouteError('')
   }, [])
 
+  const updatePoint = useCallback((kind, point) => {
+    if (kind === 'origin') {
+      setOrigin(point)
+    } else if (kind === 'destination') {
+      setDestination(point)
+    } else {
+      const index = stopKindIndex(kind)
+      if (index !== null) {
+        setStops((current) => current.map((value, currentIndex) => (currentIndex === index ? point : value)))
+      }
+    }
+    invalidateRoute()
+  }, [invalidateRoute])
+
+  const addStop = useCallback(() => {
+    setStops((current) => (current.length >= MAX_STOPS ? current : [...current, null]))
+    invalidateRoute()
+  }, [invalidateRoute])
+
+  const removeStop = useCallback((index) => {
+    setStops((current) => current.filter((_, currentIndex) => currentIndex !== index))
+    invalidateRoute()
+  }, [invalidateRoute])
+
   useEffect(() => {
-    if (!isCompletePoint(origin) || !isCompletePoint(destination)) {
+    if (!isCompletePoint(origin)
+      || !isCompletePoint(destination)
+      || !stops.every(isCompletePoint)) {
       setRouting(false)
       return undefined
     }
@@ -64,6 +90,7 @@ function CreateJobPage() {
       try {
         const quote = await createRouteQuote({
           origin: normalizePoint(origin),
+          stops: stops.map(normalizePoint),
           destination: normalizePoint(destination),
         })
         if (!cancelled) setRouteQuote(quote)
@@ -81,7 +108,7 @@ function CreateJobPage() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [destination, origin])
+  }, [destination, origin, stops])
 
   useEffect(() => {
     if (!routeQuote?.id) {
@@ -113,7 +140,7 @@ function CreateJobPage() {
       return
     }
     if (!routeQuote?.id) {
-      setError('Najpierw wybierz poprawny punkt A i B oraz poczekaj na wyznaczenie trasy.')
+      setError('Najpierw uzupełnij całą trasę i poczekaj na jej wyznaczenie.')
       return
     }
 
@@ -147,7 +174,7 @@ function CreateJobPage() {
       <header className="page-heading">
         <span className="eyebrow">Nowe zlecenie</span>
         <h1>Skąd i dokąd?</h1>
-        <p>Wybierz rodzaj usługi oraz punkt A i B. Publicznie pokazujemy tylko obszary; dokładne adresy dostanie przypisany wykonawca dopiero podczas aktywnego zlecenia.</p>
+        <p>Wybierz punkt A i B, a jeśli zadanie wymaga kilku odbiorów lub czynności po drodze, dodaj do 10 przystanków. Dokładne adresy są widoczne wyłącznie dla stron zlecenia.</p>
       </header>
 
       <form className="panel create-job-form" onSubmit={submit}>
@@ -163,24 +190,27 @@ function CreateJobPage() {
               </optgroup>
             ))}
           </select>
-          <small>Na tym etapie formularz obsługuje kategorie wymagające transportu A → B. Usługi wykonywane w jednym miejscu będą miały osobny tryb lokalizacji.</small>
+          <small>Przystanki sprawdzą się np. przy odbiorze rzeczy z kilku miejsc, zakupach w kilku punktach albo trasie wymagającej dodatkowej wizyty po drodze.</small>
         </label>
 
         <div className="create-job-form__wide">
           <RouteMapPicker
             origin={origin}
+            stops={stops}
             destination={destination}
             routeQuote={routeQuote}
             onPointChange={updatePoint}
+            onAddStop={addStop}
+            onRemoveStop={removeStop}
             disabled={submitting}
           />
         </div>
 
         <div className="create-job-form__wide route-summary" aria-live="polite">
-          {routing && <span>Wyznaczanie trasy i czasu dojazdu…</span>}
+          {routing && <span>Wyznaczanie całej trasy i czasu dojazdu…</span>}
           {!routing && routeQuote && (
             <>
-              <strong>{routeQuote.origin.publicLabel} → {routeQuote.destination.publicLabel}</strong>
+              <strong>{routeLabel(routeQuote)}</strong>
               <div className="route-mode-grid">
                 {modeEstimates.map((estimate) => (
                   <div className="route-mode-card" key={estimate.mode}>
@@ -196,6 +226,7 @@ function CreateJobPage() {
                   <div className="route-mode-card route-mode-card--loading">Liczenie roweru i pieszo…</div>
                 )}
               </div>
+              {routeQuote.stops?.length > 0 && <small>Trasa obejmuje {routeQuote.stops.length} {routeQuote.stops.length === 1 ? 'przystanek' : 'przystanki/przystanków'} w podanej kolejności.</small>}
               {modeComparison?.nonDrivingBetaWarningRequired && (
                 <small>Trasy piesze i rowerowe Google są w wersji beta i mogą nie uwzględniać wszystkich chodników, ścieżek lub warunków terenowych.</small>
               )}
@@ -207,11 +238,11 @@ function CreateJobPage() {
 
         <label className="field create-job-form__wide">
           <span>Tytuł</span>
-          <input name="title" value={form.title} onChange={updateField} minLength={3} maxLength={160} placeholder="np. Odbierz paczkę z punktu A i dowieź do B" required />
+          <input name="title" value={form.title} onChange={updateField} minLength={3} maxLength={160} placeholder="np. Odbierz dwie paczki po drodze i dowieź do B" required />
         </label>
         <label className="field create-job-form__wide">
           <span>Opis</span>
-          <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder="Opisz co trzeba odebrać, komu przekazać i wszystkie ważne szczegóły." required />
+          <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder="Opisz co trzeba odebrać lub zrobić w każdym punkcie i wszystkie ważne szczegóły." required />
         </label>
         <label className="field">
           <span>Wynagrodzenie</span>
@@ -219,7 +250,7 @@ function CreateJobPage() {
         </label>
 
         <div className="create-job-form__wide create-job-form__actions">
-          <span className="create-job-form__privacy">Dokładne A/B są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.</span>
+          <span className="create-job-form__privacy">Dokładne A, przystanki i B są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.</span>
           <button className="button button--primary" type="submit" disabled={submitting || routing || !routeQuote?.id || !form.categoryId}>
             {submitting ? 'Publikowanie…' : 'Opublikuj zlecenie'}
           </button>
@@ -250,6 +281,18 @@ function normalizePoint(point) {
     privateLabel: point.privateLabel.trim(),
     placeId: point.placeId || null,
   }
+}
+
+function stopKindIndex(kind) {
+  if (!kind?.startsWith('stop-')) return null
+  const index = Number(kind.slice(5))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function routeLabel(routeQuote) {
+  return [routeQuote.origin, ...(routeQuote.stops || []), routeQuote.destination]
+    .map((point) => point.publicLabel)
+    .join(' → ')
 }
 
 function modeLabel(mode) {

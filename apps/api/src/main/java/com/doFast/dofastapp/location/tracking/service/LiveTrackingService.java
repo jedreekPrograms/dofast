@@ -4,6 +4,7 @@ import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.entity.JobRouteStop;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.routing.provider.RouteCoordinate;
 import com.doFast.dofastapp.location.routing.provider.RouteProvider;
@@ -110,6 +111,10 @@ public class LiveTrackingService {
     }
 
     public LiveTrackingResponse confirmPickup(Long jobId, User currentUser) {
+        return confirmCheckpoint(jobId, currentUser);
+    }
+
+    public LiveTrackingResponse confirmCheckpoint(Long jobId, User currentUser) {
         Instant now = Instant.now();
         PersistedPosition persisted = transactionTemplate.execute(status -> {
             Job job = jobRepository.findByIdForUpdate(jobId)
@@ -120,7 +125,7 @@ public class LiveTrackingService {
             if (tracking.getPhase() == TrackingPhase.TO_DESTINATION) {
                 return context(job, tracking, false, now);
             }
-            tracking.switchToDestination(now);
+            advanceTarget(job, tracking, now);
             trackingRepository.save(tracking);
             return context(job, tracking, tracking.getCurrentLocation() != null, now);
         });
@@ -202,6 +207,7 @@ public class LiveTrackingService {
                 return toResponse(trackingRepository.save(tracking), Instant.now());
             }
             if (tracking.getPhase() != persisted.phase()
+                    || !Objects.equals(tracking.getNextStopSequence(), persisted.nextStopSequence())
                     || tracking.getCapturedAt() == null
                     || !tracking.getCapturedAt().equals(persisted.capturedAt())) {
                 return toResponse(tracking, Instant.now());
@@ -219,21 +225,61 @@ public class LiveTrackingService {
 
     private PersistedPosition context(Job job, JobLiveTracking tracking, boolean refreshEstimate, Instant now) {
         Point currentPoint = tracking.getCurrentLocation();
-        Point targetPoint = tracking.getPhase() == TrackingPhase.TO_ORIGIN
-                ? job.getLocation()
-                : job.getDestinationLocation();
+        Point targetPoint = switch (tracking.getPhase()) {
+            case TO_ORIGIN -> job.getLocation();
+            case TO_STOP -> routeStop(job, requiredStopSequence(tracking)).getLocation();
+            case TO_DESTINATION -> job.getDestinationLocation();
+        };
         RouteCoordinate current = currentPoint == null ? null : coordinate(currentPoint);
         RouteCoordinate target = targetPoint == null ? null : coordinate(targetPoint);
         boolean canRefresh = refreshEstimate && current != null && target != null && tracking.getCapturedAt() != null;
         return new PersistedPosition(
                 job.getId(),
                 tracking.getPhase(),
+                tracking.getNextStopSequence(),
                 tracking.getCapturedAt(),
                 current,
                 target,
                 canRefresh,
                 toResponse(tracking, now)
         );
+    }
+
+    private void advanceTarget(Job job, JobLiveTracking tracking, Instant now) {
+        if (tracking.getPhase() == TrackingPhase.TO_ORIGIN) {
+            if (job.getRouteStops().isEmpty()) {
+                tracking.switchToDestination(now);
+            } else {
+                tracking.switchToStop(job.getRouteStops().getFirst().getSequenceNo());
+            }
+            return;
+        }
+        if (tracking.getPhase() == TrackingPhase.TO_STOP) {
+            int currentSequence = requiredStopSequence(tracking);
+            JobRouteStop nextStop = job.getRouteStops().stream()
+                    .filter(stop -> stop.getSequenceNo() > currentSequence)
+                    .findFirst()
+                    .orElse(null);
+            if (nextStop == null) {
+                tracking.switchToDestination(now);
+            } else {
+                tracking.switchToStop(nextStop.getSequenceNo());
+            }
+        }
+    }
+
+    private int requiredStopSequence(JobLiveTracking tracking) {
+        if (tracking.getNextStopSequence() == null) {
+            throw new ConflictException("Stan śledzenia przystanków jest nieprawidłowy");
+        }
+        return tracking.getNextStopSequence();
+    }
+
+    private JobRouteStop routeStop(Job job, int sequenceNo) {
+        return job.getRouteStops().stream()
+                .filter(stop -> stop.getSequenceNo() == sequenceNo)
+                .findFirst()
+                .orElseThrow(() -> new ConflictException("Przystanek trasy nie istnieje"));
     }
 
     private boolean shouldRefreshEstimate(JobLiveTracking tracking, Point current, Instant now) {
@@ -280,6 +326,7 @@ public class LiveTrackingService {
                 tracking.getJobId(),
                 tracking.getWorker().getId(),
                 tracking.getPhase(),
+                tracking.getNextStopSequence(),
                 active,
                 point,
                 tracking.getRemainingDistanceMeters(),
@@ -331,6 +378,7 @@ public class LiveTrackingService {
     private record PersistedPosition(
             Long jobId,
             TrackingPhase phase,
+            Integer nextStopSequence,
             Instant capturedAt,
             RouteCoordinate current,
             RouteCoordinate target,
