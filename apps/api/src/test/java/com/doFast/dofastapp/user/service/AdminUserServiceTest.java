@@ -1,0 +1,78 @@
+package com.doFast.dofastapp.user.service;
+
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.user.dto.AdminUserResponse;
+import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserRole;
+import com.doFast.dofastapp.user.enums.UserStatus;
+import com.doFast.dofastapp.user.repository.UserRepository;
+import org.junit.jupiter.api.Test;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class AdminUserServiceTest {
+
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final AdminUserService service = new AdminUserService(userRepository);
+
+    @Test
+    void genericStatusEndpointCannotSuspendUser() {
+        User target = mock(User.class);
+        User admin = mock(User.class);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(target));
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.updateStatus(7L, UserStatus.SUSPENDED, admin)
+        );
+
+        verify(target, never()).setStatus(UserStatus.SUSPENDED);
+        verify(userRepository, never()).save(target);
+    }
+
+    @Test
+    void suspendedUserCanBeReactivated() {
+        User target = mock(User.class);
+        User admin = mock(User.class);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 8, 27, 12, 0);
+
+        when(userRepository.findById(8L)).thenReturn(Optional.of(target));
+        when(target.getId()).thenReturn(8L);
+        when(target.getEmail()).thenReturn("user@example.com");
+        when(target.getNickname()).thenReturn("user");
+        when(target.getRole()).thenReturn(UserRole.USER);
+        when(target.getStatus()).thenReturn(UserStatus.SUSPENDED, UserStatus.ACTIVE);
+        when(target.getCreatedAt()).thenReturn(createdAt);
+        when(userRepository.save(target)).thenAnswer(invocation -> target);
+
+        AdminUserResponse response = service.updateStatus(8L, UserStatus.ACTIVE, admin);
+
+        verify(target).setStatus(UserStatus.ACTIVE);
+        verify(userRepository).save(target);
+        assertEquals(UserStatus.ACTIVE, response.status());
+    }
+
+    @Test
+    void activeUserCannotUseReactivationEndpointAsNoOp() {
+        User target = mock(User.class);
+        User admin = mock(User.class);
+        when(userRepository.findById(9L)).thenReturn(Optional.of(target));
+        when(target.getRole()).thenReturn(UserRole.USER);
+        when(target.getStatus()).thenReturn(UserStatus.ACTIVE);
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.updateStatus(9L, UserStatus.ACTIVE, admin)
+        );
+
+        verify(userRepository, never()).save(target);
+    }
+}
