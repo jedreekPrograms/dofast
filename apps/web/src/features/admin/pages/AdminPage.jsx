@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   getAdminJobReports,
   getAdminOverview,
+  getAdminUserReactivationAudits,
   getAdminUsers,
   getAdminVerifications,
   getFinanceReconciliation,
@@ -15,6 +16,11 @@ const moneyFormatter = new Intl.NumberFormat('pl-PL', {
   currency: 'PLN',
 })
 
+const dateTimeFormatter = new Intl.DateTimeFormat('pl-PL', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
 function AdminPage() {
   const [overview, setOverview] = useState(null)
   const [finance, setFinance] = useState(null)
@@ -24,6 +30,9 @@ function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
+  const [expandedAuditUserId, setExpandedAuditUserId] = useState(null)
+  const [auditLoadingId, setAuditLoadingId] = useState(null)
+  const [auditsByUserId, setAuditsByUserId] = useState({})
 
   useEffect(() => {
     let active = true
@@ -51,6 +60,30 @@ function AdminPage() {
     return () => { active = false }
   }, [])
 
+  async function loadReactivationAudits(userId, { force = false } = {}) {
+    if (!force && Object.prototype.hasOwnProperty.call(auditsByUserId, userId)) return
+
+    setAuditLoadingId(userId)
+    setError('')
+    try {
+      const audits = await getAdminUserReactivationAudits(userId)
+      setAuditsByUserId((current) => ({ ...current, [userId]: audits }))
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się pobrać historii reaktywacji.')
+    } finally {
+      setAuditLoadingId(null)
+    }
+  }
+
+  async function toggleReactivationAudits(userId) {
+    if (expandedAuditUserId === userId) {
+      setExpandedAuditUserId(null)
+      return
+    }
+    setExpandedAuditUserId(userId)
+    await loadReactivationAudits(userId)
+  }
+
   async function reactivateUser(user) {
     setBusyId(user.id)
     setError('')
@@ -62,6 +95,8 @@ function AdminPage() {
         activeUsers: current.activeUsers + 1,
         suspendedUsers: current.suspendedUsers - 1,
       } : current)
+      setExpandedAuditUserId(user.id)
+      await loadReactivationAudits(user.id, { force: true })
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się ponownie aktywować konta.')
     } finally {
@@ -126,27 +161,70 @@ function AdminPage() {
           <div className="admin-users__heading">
             <div>
               <h2>Konta użytkowników</h2>
-              <p>Zawieszenia wykonuj z kolejki potwierdzonych zgłoszeń, aby zachować audyt i zabezpieczenia aktywnych zleceń.</p>
+              <p>Zawieszenia wykonuj z kolejki potwierdzonych zgłoszeń. Reaktywacje są audytowane i ich historię można sprawdzić poniżej.</p>
             </div>
           </div>
           <div className="admin-users__list">
-            {users.map((user) => (
-              <div className="admin-user" key={user.id}>
-                <div>
-                  <strong>{user.nickname}</strong>
-                  <span>{user.email}</span>
+            {users.map((user) => {
+              const audits = auditsByUserId[user.id] || []
+              const isExpanded = expandedAuditUserId === user.id
+              return (
+                <div className="admin-user-entry" key={user.id}>
+                  <div className="admin-user">
+                    <div>
+                      <strong>{user.nickname}</strong>
+                      <span>{user.email}</span>
+                    </div>
+                    <span className="admin-user__role">{user.role}</span>
+                    <span className={`status-pill ${user.status === 'SUSPENDED' ? 'status-pill--cancelled' : 'status-pill--done'}`}>{user.status}</span>
+                    <div className="admin-user__actions">
+                      {user.status === 'SUSPENDED' && user.role !== 'ADMIN' ? (
+                        <button className="button button--secondary" type="button" disabled={busyId === user.id} onClick={() => reactivateUser(user)}>
+                          {busyId === user.id ? 'Aktywowanie…' : 'Aktywuj'}
+                        </button>
+                      ) : (
+                        <span className="admin-user__role">{user.role === 'ADMIN' ? 'Chronione konto' : 'Sankcja przez zgłoszenie'}</span>
+                      )}
+                      {user.role !== 'ADMIN' && (
+                        <button className="button button--ghost" type="button" disabled={auditLoadingId === user.id} onClick={() => toggleReactivationAudits(user.id)}>
+                          {auditLoadingId === user.id ? 'Pobieranie…' : isExpanded ? 'Ukryj historię' : 'Historia reaktywacji'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isExpanded && user.role !== 'ADMIN' && (
+                    <div className="admin-user-audits">
+                      <div className="admin-user-audits__heading">
+                        <strong>Audyt reaktywacji</strong>
+                        <span>Najnowsze zdarzenia są pokazane jako pierwsze.</span>
+                      </div>
+                      {auditLoadingId === user.id ? (
+                        <div className="page-state">Pobieranie historii…</div>
+                      ) : audits.length === 0 ? (
+                        <p className="admin-user-audits__empty">To konto nie było jeszcze reaktywowane przez administratora.</p>
+                      ) : (
+                        <div className="admin-user-audits__list">
+                          {audits.map((audit) => (
+                            <div className="admin-user-audit" key={audit.id}>
+                              <div>
+                                <strong>{audit.previousStatus} → {audit.newStatus}</strong>
+                                <span>{dateTimeFormatter.format(new Date(audit.createdAt))}</span>
+                              </div>
+                              <div>
+                                <span>Administrator</span>
+                                <strong>{audit.adminNickname || audit.adminEmail}</strong>
+                                <small>{audit.adminEmail}</small>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <span className="admin-user__role">{user.role}</span>
-                <span className={`status-pill ${user.status === 'SUSPENDED' ? 'status-pill--cancelled' : 'status-pill--done'}`}>{user.status}</span>
-                {user.status === 'SUSPENDED' && user.role !== 'ADMIN' ? (
-                  <button className="button button--secondary" type="button" disabled={busyId === user.id} onClick={() => reactivateUser(user)}>
-                    {busyId === user.id ? 'Aktywowanie…' : 'Aktywuj'}
-                  </button>
-                ) : (
-                  <span className="admin-user__role">{user.role === 'ADMIN' ? 'Chronione konto' : 'Sankcja przez zgłoszenie'}</span>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       )}

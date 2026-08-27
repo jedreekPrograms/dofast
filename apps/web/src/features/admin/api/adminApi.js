@@ -8,6 +8,10 @@ export function getAdminUsers() {
   return apiRequest('/admin/users')
 }
 
+export function getAdminUserReactivationAudits(userId) {
+  return apiRequest(`/admin/users/${userId}/reactivation-audits`)
+}
+
 export function getFinanceReconciliation() {
   return apiRequest('/admin/finance/reconciliation')
 }
