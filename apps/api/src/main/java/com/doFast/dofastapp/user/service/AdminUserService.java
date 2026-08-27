@@ -3,6 +3,7 @@ package com.doFast.dofastapp.user.service;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.user.dto.AdminOverviewResponse;
+import com.doFast.dofastapp.user.dto.AdminUserReactivationAuditResponse;
 import com.doFast.dofastapp.user.dto.AdminUserResponse;
 import com.doFast.dofastapp.user.entity.AdminUserReactivationAudit;
 import com.doFast.dofastapp.user.entity.User;
@@ -46,6 +47,16 @@ public class AdminUserService {
                 .toList();
     }
 
+    public List<AdminUserReactivationAuditResponse> getReactivationHistory(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResourceNotFoundException("Użytkownik nie istnieje");
+        }
+        return reactivationAuditRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(userId)
+                .stream()
+                .map(this::toReactivationResponse)
+                .toList();
+    }
+
     @Transactional
     public AdminUserResponse updateStatus(Long userId, UserStatus status, User currentAdmin) {
         User target = userRepository.findById(userId)
@@ -77,6 +88,20 @@ public class AdminUserService {
                 user.getRole(),
                 user.getStatus(),
                 user.getCreatedAt()
+        );
+    }
+
+    private AdminUserReactivationAuditResponse toReactivationResponse(AdminUserReactivationAudit audit) {
+        User admin = audit.getAdmin();
+        return new AdminUserReactivationAuditResponse(
+                audit.getId(),
+                audit.getUser().getId(),
+                admin.getId(),
+                admin.getEmail(),
+                admin.getNickname(),
+                audit.getPreviousStatus(),
+                audit.getNewStatus(),
+                audit.getCreatedAt()
         );
     }
 }
