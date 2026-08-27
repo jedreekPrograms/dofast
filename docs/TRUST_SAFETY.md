@@ -12,6 +12,8 @@ The web discovery cards expose a `Zgłoś ofertę` action only to authenticated 
 
 The authenticated `/my-reports` page uses only `GET /job-reports/mine` and shows the reporter's own reason, optional note, submission time and coarse moderation status. It does not expose moderator identities, internal moderation notes, enforcement audits or another reporter's data. The page also keeps reports separate from payment/escrow disputes and directs transaction problems to the dedicated dispute workflow.
 
+When moderation reaches a terminal decision, the reporter receives a durable `JOB_REPORT_REVIEWED` or `JOB_REPORT_DISMISSED` notification linked to the reported job. The notification only communicates the coarse outcome. It never contains the moderator identity, internal moderation note, enforcement reason or whether a later job/account sanction was executed.
+
 ## Admin moderation
 
 Endpoints under `/admin/job-reports` are protected by the existing `ROLE_ADMIN` security boundary. `GET /admin/job-reports` returns a paginated oldest-first moderation queue and can be filtered by report status. The response contains moderation-relevant report metadata but no job location, route geometry or live-tracking data.
