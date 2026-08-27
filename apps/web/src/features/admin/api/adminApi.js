@@ -64,3 +64,16 @@ export function decideAdminVerification(verificationId, decision, reason = '') {
     body: JSON.stringify({ decision, reason: reason || null }),
   })
 }
+
+export function getAdminJobReports({ status = '', page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (status) params.set('status', status)
+  return apiRequest(`/admin/job-reports?${params.toString()}`)
+}
+
+export function moderateAdminJobReport(reportId, status, note = '') {
+  return apiRequest(`/admin/job-reports/${reportId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, note: note.trim() || null }),
+  })
+}

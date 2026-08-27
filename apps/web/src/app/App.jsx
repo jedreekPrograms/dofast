@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AdminDisputesPage from '../features/admin/pages/AdminDisputesPage.jsx'
+import AdminJobReportsPage from '../features/admin/pages/AdminJobReportsPage.jsx'
 import AdminPage from '../features/admin/pages/AdminPage.jsx'
 import AdminVerificationsPage from '../features/admin/pages/AdminVerificationsPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
@@ -49,6 +50,7 @@ function App() {
             <Route element={<RequireAdmin />}>
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin/disputes" element={<AdminDisputesPage />} />
+              <Route path="/admin/job-reports" element={<AdminJobReportsPage />} />
               <Route path="/admin/verifications" element={<AdminVerificationsPage />} />
             </Route>
           </Route>
