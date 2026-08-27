@@ -1,0 +1,119 @@
+.report-job-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(15 23 42 / 58%);
+  backdrop-filter: blur(4px);
+}
+
+.report-job-dialog {
+  width: min(100%, 34rem);
+  max-height: min(90vh, 48rem);
+  overflow-y: auto;
+  border: 1px solid var(--border, #dbe2ea);
+  border-radius: 1.25rem;
+  background: var(--surface, #fff);
+  padding: 1.5rem;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 24%);
+}
+
+.report-job-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.report-job-dialog__header h2 {
+  margin: 0.25rem 0 0;
+}
+
+.report-job-dialog__close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.report-job-dialog__close:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.report-job-dialog__intro {
+  margin: 1rem 0;
+  color: var(--text-muted, #52606d);
+  line-height: 1.55;
+}
+
+.report-job-dialog__form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.report-job-dialog__form label {
+  margin-top: 0.35rem;
+  font-weight: 700;
+}
+
+.report-job-dialog__form label span {
+  font-weight: 500;
+  color: var(--text-muted, #697586);
+}
+
+.report-job-dialog__form select,
+.report-job-dialog__form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 0.75rem;
+  background: var(--surface, #fff);
+  color: inherit;
+  padding: 0.8rem 0.9rem;
+  font: inherit;
+}
+
+.report-job-dialog__form textarea {
+  resize: vertical;
+}
+
+.report-job-dialog__form select:focus,
+.report-job-dialog__form textarea:focus {
+  outline: 2px solid color-mix(in srgb, currentColor 18%, transparent);
+  outline-offset: 2px;
+}
+
+.report-job-dialog__counter {
+  justify-self: end;
+  color: var(--text-muted, #697586);
+  font-size: 0.82rem;
+}
+
+.report-job-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+}
+
+@media (max-width: 520px) {
+  .report-job-dialog {
+    padding: 1.1rem;
+    border-radius: 1rem;
+  }
+
+  .report-job-dialog__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .report-job-dialog__actions .button {
+    width: 100%;
+  }
+}
