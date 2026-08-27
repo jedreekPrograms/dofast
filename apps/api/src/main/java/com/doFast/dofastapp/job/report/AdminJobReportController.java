@@ -44,6 +44,13 @@ public class AdminJobReportController {
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
+    @GetMapping("/{id}/account-enforcement")
+    public ResponseEntity<JobReportAccountEnforcementResponse> accountEnforcement(@PathVariable Long id) {
+        return service.accountEnforcement(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
     @PatchMapping("/{id}")
     public AdminJobReportResponse moderate(
             @PathVariable Long id,
@@ -60,5 +67,14 @@ public class AdminJobReportController {
             @AuthenticationPrincipal User admin
     ) {
         return service.enforce(id, request, admin);
+    }
+
+    @PostMapping("/{id}/account-enforcement")
+    public JobReportAccountEnforcementResponse enforceAccount(
+            @PathVariable Long id,
+            @RequestBody @Valid EnforceJobReportAccountRequest request,
+            @AuthenticationPrincipal User admin
+    ) {
+        return service.enforceAccount(id, request, admin);
     }
 }

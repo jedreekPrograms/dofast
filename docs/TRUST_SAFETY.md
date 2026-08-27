@@ -16,7 +16,7 @@ Endpoints under `/admin/job-reports` are protected by the existing `ROLE_ADMIN` 
 
 The web admin panel exposes this workflow at `/admin/job-reports`. It defaults to pending reports, supports status filtering and pagination, shows only the moderation-safe response fields, and lets an administrator record one terminal decision with an optional internal note. The main admin dashboard also surfaces the current pending-report count.
 
-## Explicit enforcement
+## Explicit job enforcement
 
 A moderation decision does not itself delete a job, suspend a user or modify escrow. Enforcement is an explicit, separately audited admin operation.
 
@@ -26,4 +26,14 @@ A moderation decision does not itself delete a job, suspend a user or modify esc
 
 The moderation panel presents enforcement only after a report is confirmed. It clearly separates the irreversible `CANCEL_OPEN_JOB` control from the review decision, warns that active jobs are protected, accepts an optional internal reason, and replaces the control with the persisted enforcement audit once the action succeeds.
 
-Every enforcement writes an immutable audit record containing the report, affected job, moderator, action, optional reason and timestamp. Active (`IN_PROGRESS` or later) jobs are deliberately rejected by this endpoint because sanctions that can affect participant funds or an active service require a separate, stronger workflow.
+Every job enforcement writes an immutable audit record containing the report, affected job, moderator, action, optional reason and timestamp. Active (`IN_PROGRESS` or later) jobs are deliberately rejected by this endpoint because sanctions that can affect participant funds or an active service require a separate, stronger workflow.
+
+## Explicit account enforcement
+
+`POST /admin/job-reports/{id}/account-enforcement` supports the separately audited `SUSPEND_JOB_OWNER` action for a confirmed `REVIEWED` report. The target is derived from the reported job on the server; the client cannot choose an arbitrary user id. The action cannot suspend the acting moderator or an administrator account, and a second account sanction for the same report is rejected.
+
+Before suspension, the service checks whether the target participates as requester or contractor in any `IN_PROGRESS`, `COMPLETION_REQUESTED` or `DISPUTED` job. If so, suspension is rejected so an account cannot be locked out while escrow, completion confirmation, dispute handling or live tracking still requires that participant.
+
+When suspension is safe, all remaining `OPEN` jobs created by that account are cancelled through the normal job state transition and the user status changes to `SUSPENDED`. Existing authentication enforcement already refuses new password/Google/Apple logins for suspended accounts and the JWT filter stops authenticating previously issued tokens on subsequent requests, so the sanction takes effect without relying on token expiry.
+
+`GET /admin/job-reports/{id}/account-enforcement` returns the immutable account-enforcement audit or `204 No Content` when none exists. The audit stores the report, target user, moderator, action, optional internal reason and timestamp and remains behind the admin-only boundary. It does not expose location, route or tracking data.

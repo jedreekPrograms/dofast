@@ -14,12 +14,25 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface JobRepository extends JpaRepository<Job, Long> {
 
     List<Job> findByCreatedByOrTakenByOrderByCreatedAtDesc(User createdBy, User takenBy);
+    List<Job> findAllByStatusAndCreatedBy(JobStatus status, User createdBy);
     long countByStatusAndCreatedBy(JobStatus status, User createdBy);
     long countByStatusAndTakenBy(JobStatus status, User takenBy);
+
+    @Query("""
+            select count(j) > 0
+            from Job j
+            where j.status in :statuses
+              and (j.createdBy = :user or j.takenBy = :user)
+            """)
+    boolean existsParticipantJobWithStatusIn(
+            @Param("user") User user,
+            @Param("statuses") Set<JobStatus> statuses
+    );
 
     @Query("""
             select j

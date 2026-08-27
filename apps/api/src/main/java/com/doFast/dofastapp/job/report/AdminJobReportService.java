@@ -5,7 +5,10 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserRole;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -13,19 +16,32 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class AdminJobReportService {
 
+    private static final Set<JobStatus> ACCOUNT_SUSPENSION_BLOCKING_STATUSES = Set.of(
+            JobStatus.IN_PROGRESS,
+            JobStatus.COMPLETION_REQUESTED,
+            JobStatus.DISPUTED
+    );
+
     private final JobReportRepository repository;
     private final JobReportEnforcementRepository enforcementRepository;
+    private final JobReportAccountEnforcementRepository accountEnforcementRepository;
+    private final JobRepository jobRepository;
 
     public AdminJobReportService(
             JobReportRepository repository,
-            JobReportEnforcementRepository enforcementRepository
+            JobReportEnforcementRepository enforcementRepository,
+            JobReportAccountEnforcementRepository accountEnforcementRepository,
+            JobRepository jobRepository
     ) {
         this.repository = repository;
         this.enforcementRepository = enforcementRepository;
+        this.accountEnforcementRepository = accountEnforcementRepository;
+        this.jobRepository = jobRepository;
     }
 
     @Transactional(readOnly = true)
@@ -41,6 +57,12 @@ public class AdminJobReportService {
     public Optional<JobReportEnforcementResponse> enforcement(Long reportId) {
         return enforcementRepository.findByReport_Id(reportId)
                 .map(JobReportEnforcementResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<JobReportAccountEnforcementResponse> accountEnforcement(Long reportId) {
+        return accountEnforcementRepository.findByReport_Id(reportId)
+                .map(JobReportAccountEnforcementResponse::from);
     }
 
     @Transactional
@@ -62,12 +84,8 @@ public class AdminJobReportService {
 
     @Transactional
     public JobReportEnforcementResponse enforce(Long id, EnforceJobReportRequest request, User moderator) {
-        JobReport report = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Zgłoszenie nie istnieje"));
+        JobReport report = reviewedReport(id);
 
-        if (report.getStatus() != JobReportStatus.REVIEWED) {
-            throw new ConflictException("Akcję egzekucyjną można wykonać tylko dla potwierdzonego zgłoszenia");
-        }
         if (enforcementRepository.existsByReport_Id(id)) {
             throw new ConflictException("Dla tego zgłoszenia wykonano już akcję egzekucyjną");
         }
@@ -90,6 +108,61 @@ public class AdminJobReportService {
         );
         enforcementRepository.save(enforcement);
         return JobReportEnforcementResponse.from(enforcement);
+    }
+
+    @Transactional
+    public JobReportAccountEnforcementResponse enforceAccount(
+            Long id,
+            EnforceJobReportAccountRequest request,
+            User moderator
+    ) {
+        JobReport report = reviewedReport(id);
+        if (accountEnforcementRepository.existsByReport_Id(id)) {
+            throw new ConflictException("Dla tego zgłoszenia wykonano już sankcję na koncie");
+        }
+        if (request.action() != JobReportAccountEnforcementAction.SUSPEND_JOB_OWNER) {
+            throw new ConflictException("Nieobsługiwana sankcja na koncie");
+        }
+
+        User target = report.getJob().getCreatedBy();
+        if (target.getId().equals(moderator.getId())) {
+            throw new ConflictException("Moderator nie może zawiesić własnego konta");
+        }
+        if (target.getRole() == UserRole.ADMIN) {
+            throw new ConflictException("Ta ścieżka moderacyjna nie może zawieszać kont administratorów");
+        }
+        if (target.getStatus() != UserStatus.ACTIVE) {
+            throw new ConflictException("Konto użytkownika jest już zawieszone");
+        }
+        if (jobRepository.existsParticipantJobWithStatusIn(target, ACCOUNT_SUSPENSION_BLOCKING_STATUSES)) {
+            throw new ConflictException(
+                    "Nie można zawiesić konta uczestniczącego w aktywnym zleceniu, sporze lub rozliczeniu"
+            );
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        jobRepository.findAllByStatusAndCreatedBy(JobStatus.OPEN, target)
+                .forEach(job -> job.cancel(now));
+        target.setStatus(UserStatus.SUSPENDED);
+
+        JobReportAccountEnforcement enforcement = new JobReportAccountEnforcement(
+                report,
+                target,
+                moderator,
+                request.action(),
+                normalize(request.reason())
+        );
+        accountEnforcementRepository.save(enforcement);
+        return JobReportAccountEnforcementResponse.from(enforcement);
+    }
+
+    private JobReport reviewedReport(Long id) {
+        JobReport report = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Zgłoszenie nie istnieje"));
+        if (report.getStatus() != JobReportStatus.REVIEWED) {
+            throw new ConflictException("Akcję egzekucyjną można wykonać tylko dla potwierdzonego zgłoszenia");
+        }
+        return report;
     }
 
     private String normalize(String value) {

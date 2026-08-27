@@ -3,7 +3,9 @@ package com.doFast.dofastapp.job.report;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,17 +29,25 @@ class AdminJobReportServiceTest {
 
     @Mock private JobReportRepository repository;
     @Mock private JobReportEnforcementRepository enforcementRepository;
+    @Mock private JobReportAccountEnforcementRepository accountEnforcementRepository;
+    @Mock private JobRepository jobRepository;
 
     private AdminJobReportService service;
     private JobReport report;
     private User admin;
+    private User owner;
     private Job job;
 
     @BeforeEach
     void setUp() {
-        service = new AdminJobReportService(repository, enforcementRepository);
+        service = new AdminJobReportService(
+                repository,
+                enforcementRepository,
+                accountEnforcementRepository,
+                jobRepository
+        );
         User reporter = new User("reporter@example.com", "Reporter");
-        User owner = new User("owner@example.com", "Owner");
+        owner = new User("owner@example.com", "Owner");
         admin = new User("admin@example.com", "Admin");
         ReflectionTestUtils.setField(reporter, "id", 7L);
         ReflectionTestUtils.setField(owner, "id", 8L);
@@ -103,6 +114,56 @@ class AdminJobReportServiceTest {
         assertEquals(JobReportEnforcementAction.CANCEL_OPEN_JOB, response.action());
         assertEquals("prohibited listing", response.reason());
         verify(enforcementRepository).save(any(JobReportEnforcement.class));
+    }
+
+    @Test
+    void suspendsReviewedJobOwnerAndCancelsTheirOpenListings() {
+        report.moderate(JobReportStatus.REVIEWED, admin, "confirmed");
+        Job secondOpenJob = new Job();
+        secondOpenJob.setCreatedBy(owner);
+        secondOpenJob.setStatus(JobStatus.OPEN);
+        when(repository.findById(15L)).thenReturn(Optional.of(report));
+        when(accountEnforcementRepository.existsByReport_Id(15L)).thenReturn(false);
+        when(jobRepository.existsParticipantJobWithStatusIn(any(), any())).thenReturn(false);
+        when(jobRepository.findAllByStatusAndCreatedBy(JobStatus.OPEN, owner))
+                .thenReturn(List.of(job, secondOpenJob));
+
+        JobReportAccountEnforcementResponse response = service.enforceAccount(
+                15L,
+                new EnforceJobReportAccountRequest(
+                        JobReportAccountEnforcementAction.SUSPEND_JOB_OWNER,
+                        "  repeated fraud  "
+                ),
+                admin
+        );
+
+        assertEquals(UserStatus.SUSPENDED, owner.getStatus());
+        assertEquals(JobStatus.CANCELLED, job.getStatus());
+        assertEquals(JobStatus.CANCELLED, secondOpenJob.getStatus());
+        assertEquals(8L, response.targetUserId());
+        assertEquals("repeated fraud", response.reason());
+        verify(accountEnforcementRepository).save(any(JobReportAccountEnforcement.class));
+    }
+
+    @Test
+    void rejectsAccountSuspensionWhileTargetHasActiveLifecycleJob() {
+        report.moderate(JobReportStatus.REVIEWED, admin, "confirmed");
+        when(repository.findById(15L)).thenReturn(Optional.of(report));
+        when(accountEnforcementRepository.existsByReport_Id(15L)).thenReturn(false);
+        when(jobRepository.existsParticipantJobWithStatusIn(any(), any())).thenReturn(true);
+
+        assertThrows(
+                ConflictException.class,
+                () -> service.enforceAccount(
+                        15L,
+                        new EnforceJobReportAccountRequest(
+                                JobReportAccountEnforcementAction.SUSPEND_JOB_OWNER,
+                                null
+                        ),
+                        admin
+                )
+        );
+        assertEquals(UserStatus.ACTIVE, owner.getStatus());
     }
 
     @Test
