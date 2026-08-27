@@ -52,6 +52,28 @@ export function removeSavedJob(id) {
   return apiRequest(`/saved-jobs/${id}`, { method: 'DELETE' })
 }
 
+export function getSavedSearches(options = {}) {
+  return apiRequest('/saved-searches', options)
+}
+
+export function createSavedSearch(payload) {
+  return apiRequest('/saved-searches', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateSavedSearch(id, payload) {
+  return apiRequest(`/saved-searches/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteSavedSearch(id) {
+  return apiRequest(`/saved-searches/${id}`, { method: 'DELETE' })
+}
+
 export function createRouteQuote(payload) {
   return apiRequest('/routing/quotes', { method: 'POST', body: JSON.stringify(payload) })
 }

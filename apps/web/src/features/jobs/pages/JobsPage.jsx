@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import JobCard from '../components/JobCard.jsx'
-import { getJobCategories, getJobs, getSavedJobStatuses } from '../api/jobsApi.js'
+import {
+  createSavedSearch,
+  getJobCategories,
+  getJobs,
+  getSavedJobStatuses,
+} from '../api/jobsApi.js'
 import './JobsPage.css'
 
 const DEFAULT_FILTERS = {
@@ -13,16 +19,41 @@ const DEFAULT_FILTERS = {
   size: 12,
 }
 
+function filtersFromSearchParams(searchParams) {
+  return {
+    ...DEFAULT_FILTERS,
+    query: searchParams.get('query') ?? '',
+    category: searchParams.get('category') ?? '',
+    minPrice: searchParams.get('minPrice') ?? '',
+    maxPrice: searchParams.get('maxPrice') ?? '',
+  }
+}
+
+function filtersToSearchParams(filters) {
+  const params = new URLSearchParams()
+  if (filters.query?.trim()) params.set('query', filters.query.trim())
+  if (filters.category) params.set('category', filters.category)
+  if (filters.minPrice !== '') params.set('minPrice', filters.minPrice)
+  if (filters.maxPrice !== '') params.set('maxPrice', filters.maxPrice)
+  return params
+}
+
 function JobsPage() {
   const { user } = useAuth()
   const userId = user?.id ?? null
-  const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS)
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialFilters = filtersFromSearchParams(searchParams)
+  const [draftFilters, setDraftFilters] = useState(initialFilters)
+  const [filters, setFilters] = useState(initialFilters)
   const [categories, setCategories] = useState([])
   const [result, setResult] = useState(null)
   const [savedJobIds, setSavedJobIds] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [savedSearchName, setSavedSearchName] = useState('')
+  const [savingSearch, setSavingSearch] = useState(false)
+  const [savedSearchMessage, setSavedSearchMessage] = useState('')
+  const [savedSearchError, setSavedSearchError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -83,12 +114,19 @@ function JobsPage() {
 
   function applyFilters(event) {
     event.preventDefault()
-    setFilters({ ...draftFilters, page: 0 })
+    const nextFilters = { ...draftFilters, page: 0 }
+    setFilters(nextFilters)
+    setSearchParams(filtersToSearchParams(nextFilters))
+    setSavedSearchMessage('')
+    setSavedSearchError('')
   }
 
   function clearFilters() {
     setDraftFilters(DEFAULT_FILTERS)
     setFilters(DEFAULT_FILTERS)
+    setSearchParams({})
+    setSavedSearchMessage('')
+    setSavedSearchError('')
   }
 
   function changePage(nextPage) {
@@ -104,7 +142,36 @@ function JobsPage() {
     })
   }
 
+  async function saveCurrentSearch(event) {
+    event.preventDefault()
+    setSavingSearch(true)
+    setSavedSearchMessage('')
+    setSavedSearchError('')
+
+    try {
+      await createSavedSearch({
+        name: savedSearchName,
+        query: filters.query?.trim() || null,
+        categorySlug: filters.category || null,
+        minPrice: filters.minPrice === '' ? null : Number(filters.minPrice),
+        maxPrice: filters.maxPrice === '' ? null : Number(filters.maxPrice),
+      })
+      setSavedSearchName('')
+      setSavedSearchMessage('Wyszukiwanie zapisane. Znajdziesz je w „Wyszukiwaniach”.')
+    } catch (requestError) {
+      setSavedSearchError(requestError.message || 'Nie udało się zapisać wyszukiwania.')
+    } finally {
+      setSavingSearch(false)
+    }
+  }
+
   const jobs = result?.content ?? []
+  const hasActiveFilters = Boolean(
+    filters.query?.trim()
+      || filters.category
+      || filters.minPrice !== ''
+      || filters.maxPrice !== '',
+  )
 
   return (
     <main className="jobs-page">
@@ -175,6 +242,46 @@ function JobsPage() {
           <button type="button" className="button button--secondary" onClick={clearFilters}>Wyczyść</button>
         </div>
       </form>
+
+      {user && (
+        <section className="saved-search-create" aria-labelledby="saved-search-create-title">
+          <div>
+            <span className="jobs-hero__badge">Preset</span>
+            <h2 id="saved-search-create-title">Zapisz obecne filtry</h2>
+            <p>
+              Zachowaj tę kombinację filtrów do ponownego użycia. Nie zapisujemy dokładnej lokalizacji ani prywatnych adresów.
+            </p>
+          </div>
+          <form className="saved-search-create__form" onSubmit={saveCurrentSearch}>
+            <label>
+              <span>Nazwa wyszukiwania</span>
+              <input
+                type="text"
+                value={savedSearchName}
+                onChange={(event) => setSavedSearchName(event.target.value)}
+                maxLength={80}
+                placeholder="np. Przeprowadzki 100–500 zł"
+                required
+              />
+            </label>
+            <button
+              className="button button--primary"
+              type="submit"
+              disabled={savingSearch || !hasActiveFilters}
+            >
+              {savingSearch ? 'Zapisywanie…' : 'Zapisz wyszukiwanie'}
+            </button>
+            <Link className="button button--secondary saved-search-create__link" to="/saved-searches">
+              Moje wyszukiwania
+            </Link>
+          </form>
+          {!hasActiveFilters && (
+            <p className="saved-search-create__hint">Ustaw i zastosuj co najmniej jeden filtr, aby zapisać wyszukiwanie.</p>
+          )}
+          {savedSearchMessage && <p className="saved-search-create__success">{savedSearchMessage}</p>}
+          {savedSearchError && <p className="saved-search-create__error" role="alert">{savedSearchError}</p>}
+        </section>
+      )}
 
       <section className="jobs-results" aria-live="polite">
         <div className="jobs-results__heading">

@@ -50,6 +50,21 @@ Bookmarks are private to the authenticated user and are protected by a database 
 
 The batch status endpoint accepts only positive ids, requires at least one id and caps the request at 50 ids. Duplicate requested ids are collapsed before the repository lookup. It returns only saved ids, so the web client can initialize bookmark state for an entire discovery page with one authenticated request.
 
+## Saved searches
+
+Authenticated users can persist reusable public discovery filters:
+
+- `GET /saved-searches` returns the current user's presets ordered by most recently updated;
+- `POST /saved-searches` creates a preset;
+- `PUT /saved-searches/{id}` replaces one owned preset;
+- `DELETE /saved-searches/{id}` removes one owned preset.
+
+A preset stores a user-visible name plus the same public filters already supported by `GET /jobs`: optional text query, optional active category slug and optional minimum/maximum reward. At least one discovery filter is required, price ranges are validated server-side and each account is limited to 20 presets. Names are unique per user case-insensitively, which prevents visually duplicated entries such as `Paczki` and `paczki`.
+
+Saved searches never store exact coordinates, private address labels, route geometry or participant-only data. Category values are persisted as foreign keys to the existing catalog and returned as stable public slugs/names. Deleting a user cascades their presets; deleting a category clears only the optional category filter instead of deleting the user's entire preset.
+
+`V21__saved_searches.sql` adds the persistence table, non-negative/range checks, a case-insensitive per-user name uniqueness index and an index for deterministic user-list ordering. Automatic notifications for newly published matching jobs are intentionally a separate follow-up slice so publication is not coupled to an unbounded synchronous user scan; the persisted preset model is the stable input for that delivery pipeline.
+
 ## Response envelope
 
 The paginated API deliberately returns an application-owned pagination DTO instead of serializing Spring Data's `Page` implementation directly.
@@ -109,6 +124,9 @@ The API rejects:
 - invalid latitude/longitude, radius or nearby limit;
 - empty, oversized or non-positive saved-job batch ids;
 - attempts to bookmark the caller's own job;
+- saved-search presets with no discovery criteria;
+- duplicate saved-search names for one user, case-insensitively;
+- more than 20 saved-search presets per user;
 - malformed request-parameter types.
 
 Validation errors use the shared API error contract. Input validation returns HTTP 400, while forbidden ownership operations use the shared forbidden-operation response.
@@ -130,6 +148,8 @@ Authenticated users can save an open job directly from its discovery card. The `
 
 For an authenticated discovery page, the web client hydrates bookmark state with one `GET /saved-jobs/status` batch request after loading the public jobs. Each card therefore reflects the persisted state after reload without issuing N+1 status requests. The same card can toggle the bookmark with the idempotent `PUT`/`DELETE` endpoints and updates the page-level saved-id set immediately after a successful mutation. A bookmark-status lookup failure does not hide otherwise public discovery results.
 
+Applied discovery filters are mirrored into readable URL query parameters. Authenticated users can save the currently applied public filters under a custom name and manage them at the protected `/saved-searches` route. Selecting `Pokaż wyniki` rebuilds the normal public discovery URL, so presets remain compatible with reloads, browser navigation and link sharing without exposing private location data.
+
 Carlisle is an internal technical milestone name and is intentionally not exposed in customer-facing UI text.
 
 ## Verification
@@ -138,6 +158,7 @@ CI verifies:
 
 - Maven unit tests, including paginated and nearby category-filter routing and normalization;
 - saved-job idempotency, open-job eligibility, own-job rejection, batched status lookup, stale-bookmark cleanup and pagination behavior;
+- saved-search normalization, required criteria, price-range validation, duplicate-name rejection, per-user limits and updates;
 - frontend lint/build and production dependency audit;
 - PostGIS and `pg_trgm` availability;
 - Flyway migrations;
