@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.job.search.alert;
 
+import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.search.SavedSearch;
@@ -12,6 +13,7 @@ public class SavedSearchMatcher {
 
     public boolean matches(SavedSearch savedSearch, Job job) {
         if (!savedSearch.isAlertsEnabled()) return false;
+        if (job.getStatus() != JobStatus.OPEN) return false;
         if (savedSearch.getUser().getId().equals(job.getCreatedBy().getId())) return false;
 
         if (savedSearch.getMinPrice() != null && job.getPrice().compareTo(savedSearch.getMinPrice()) < 0) return false;
