@@ -6,6 +6,10 @@ import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.user.entity.User;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.PrecisionModel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +21,7 @@ import java.util.List;
 public class SavedSearchService {
 
     static final int MAX_SAVED_SEARCHES_PER_USER = 20;
+    private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory(new PrecisionModel(), 4326);
 
     private final SavedSearchRepository savedSearchRepository;
     private final JobCategoryRepository jobCategoryRepository;
@@ -82,7 +87,11 @@ public class SavedSearchService {
         if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
             throw new BusinessException("Minimalna cena nie może być większa od maksymalnej");
         }
-        if (query == null && categorySlug == null && minPrice == null && maxPrice == null) {
+
+        Point center = resolveCenter(request.latitude(), request.longitude(), request.radiusKm());
+        Integer radiusMeters = request.radiusKm() == null ? null : request.radiusKm() * 1000;
+
+        if (query == null && categorySlug == null && minPrice == null && maxPrice == null && center == null) {
             throw new BusinessException("Zapisane wyszukiwanie musi zawierać co najmniej jeden filtr");
         }
 
@@ -96,11 +105,33 @@ public class SavedSearchService {
         savedSearch.setCategory(category);
         savedSearch.setMinPrice(minPrice);
         savedSearch.setMaxPrice(maxPrice);
+        savedSearch.setCenterLocation(center);
+        savedSearch.setRadiusMeters(radiusMeters);
         savedSearch.setAlertsEnabled(request.alertsEnabled());
+    }
+
+    private Point resolveCenter(Double latitude, Double longitude, Integer radiusKm) {
+        boolean any = latitude != null || longitude != null || radiusKm != null;
+        boolean all = latitude != null && longitude != null && radiusKm != null;
+        if (any && !all) {
+            throw new BusinessException("Lokalizacja zapisanego wyszukiwania wymaga szerokości, długości i promienia");
+        }
+        if (!all) return null;
+        if (!Double.isFinite(latitude) || latitude < -90 || latitude > 90) {
+            throw new BusinessException("Szerokość geograficzna musi być w zakresie -90..90");
+        }
+        if (!Double.isFinite(longitude) || longitude < -180 || longitude > 180) {
+            throw new BusinessException("Długość geograficzna musi być w zakresie -180..180");
+        }
+        if (radiusKm < 1 || radiusKm > 100) {
+            throw new BusinessException("Promień musi być w zakresie 1..100 km");
+        }
+        return GEOMETRY_FACTORY.createPoint(new Coordinate(longitude, latitude));
     }
 
     private SavedSearchResponse toResponse(SavedSearch savedSearch) {
         JobCategory category = savedSearch.getCategory();
+        Point center = savedSearch.getCenterLocation();
         return new SavedSearchResponse(
                 savedSearch.getId(),
                 savedSearch.getName(),
@@ -109,6 +140,9 @@ public class SavedSearchService {
                 category != null ? category.getName() : null,
                 savedSearch.getMinPrice(),
                 savedSearch.getMaxPrice(),
+                center != null ? center.getY() : null,
+                center != null ? center.getX() : null,
+                savedSearch.getRadiusMeters() != null ? savedSearch.getRadiusMeters() / 1000 : null,
                 savedSearch.isAlertsEnabled(),
                 savedSearch.getCreatedAt(),
                 savedSearch.getUpdatedAt()
