@@ -44,14 +44,19 @@ public class AdminUserService {
         User target = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
 
-        if (target.getId().equals(currentAdmin.getId()) && status != UserStatus.ACTIVE) {
-            throw new ForbiddenOperationException("Nie możesz zawiesić własnego konta administratora");
+        if (status == UserStatus.SUSPENDED) {
+            throw new ForbiddenOperationException(
+                    "Zawieszenie konta wymaga audytowalnej akcji egzekucyjnej z potwierdzonego zgłoszenia"
+            );
         }
         if (target.getRole() == UserRole.ADMIN && !target.getId().equals(currentAdmin.getId())) {
             throw new ForbiddenOperationException("Status innego administratora nie może być zmieniony z tego panelu");
         }
+        if (target.getStatus() != UserStatus.SUSPENDED) {
+            throw new ForbiddenOperationException("Tylko zawieszone konto może zostać ponownie aktywowane");
+        }
 
-        target.setStatus(status);
+        target.setStatus(UserStatus.ACTIVE);
         return toResponse(userRepository.save(target));
     }
 
