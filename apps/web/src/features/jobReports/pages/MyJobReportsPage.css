@@ -67,7 +67,8 @@
   color: #17633a;
 }
 
-.my-report-status--dismissed {
+.my-report-status--dismissed,
+.my-report-status--withdrawn {
   background: #eef1f6;
   color: #4b5565;
 }
@@ -114,6 +115,18 @@
   overflow-wrap: anywhere;
 }
 
+.my-report-card__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.my-report-card__actions span {
+  color: #667085;
+  font-size: 0.88rem;
+}
+
 .my-reports-empty {
   text-align: center;
 }
@@ -134,5 +147,10 @@
 
   .my-report-card__meta {
     grid-template-columns: 1fr;
+  }
+
+  .my-report-card__actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
