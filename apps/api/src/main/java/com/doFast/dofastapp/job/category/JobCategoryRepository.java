@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface JobCategoryRepository extends JpaRepository<JobCategory, Long> {
     List<JobCategory> findByActiveTrueOrderBySortOrderAscNameAsc();
     Optional<JobCategory> findByIdAndActiveTrue(Long id);
+    Optional<JobCategory> findBySlugIgnoreCaseAndActiveTrue(String slug);
 }
