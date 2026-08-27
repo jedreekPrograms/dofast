@@ -6,6 +6,9 @@ import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.search.SavedSearch;
 import com.doFast.dofastapp.user.entity.User;
 import org.junit.jupiter.api.Test;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.PrecisionModel;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -15,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SavedSearchMatcherTest {
 
+    private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory(new PrecisionModel(), 4326);
     private final SavedSearchMatcher matcher = new SavedSearchMatcher();
 
     @Test
@@ -28,6 +32,34 @@ class SavedSearchMatcherTest {
         SavedSearch savedSearch = savedSearch(subscriber, parent, "kanap", "200.00", "300.00", true);
 
         assertTrue(matcher.matches(savedSearch, job));
+    }
+
+    @Test
+    void matchesOnlyJobsInsideConfiguredRadius() {
+        User owner = user(1L);
+        User subscriber = user(2L);
+        Job job = job(owner, null, "Zakupy", "Odbiór", "50.00");
+        job.setLocation(point(17.0500, 51.1100));
+
+        SavedSearch nearby = savedSearch(subscriber, null, null, null, null, true);
+        nearby.setCenterLocation(point(17.0385, 51.1079));
+        nearby.setRadiusMeters(2000);
+        assertTrue(matcher.matches(nearby, job));
+
+        nearby.setRadiusMeters(300);
+        assertFalse(matcher.matches(nearby, job));
+    }
+
+    @Test
+    void radiusFilterRejectsJobWithoutLocation() {
+        User owner = user(1L);
+        User subscriber = user(2L);
+        Job job = job(owner, null, "Zakupy", "Odbiór", "50.00");
+        SavedSearch nearby = savedSearch(subscriber, null, null, null, null, true);
+        nearby.setCenterLocation(point(17.0385, 51.1079));
+        nearby.setRadiusMeters(5000);
+
+        assertFalse(matcher.matches(nearby, job));
     }
 
     @Test
@@ -84,6 +116,10 @@ class SavedSearchMatcherTest {
         job.setPrice(new BigDecimal(price));
         job.setStatus(JobStatus.OPEN);
         return job;
+    }
+
+    private org.locationtech.jts.geom.Point point(double longitude, double latitude) {
+        return GEOMETRY_FACTORY.createPoint(new Coordinate(longitude, latitude));
     }
 
     private User user(Long id) {
