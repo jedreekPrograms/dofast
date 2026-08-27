@@ -71,9 +71,23 @@ export function getAdminJobReports({ status = '', page = 0, size = 20 } = {}) {
   return apiRequest(`/admin/job-reports?${params.toString()}`)
 }
 
+export function getAdminJobReportEnforcement(reportId) {
+  return apiRequest(`/admin/job-reports/${reportId}/enforcement`)
+}
+
 export function moderateAdminJobReport(reportId, status, note = '') {
   return apiRequest(`/admin/job-reports/${reportId}`, {
     method: 'PATCH',
     body: JSON.stringify({ status, note: note.trim() || null }),
+  })
+}
+
+export function enforceAdminJobReport(reportId, reason = '') {
+  return apiRequest(`/admin/job-reports/${reportId}/enforcement`, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'CANCEL_OPEN_JOB',
+      reason: reason.trim() || null,
+    }),
   })
 }
