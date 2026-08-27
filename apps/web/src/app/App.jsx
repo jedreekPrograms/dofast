@@ -9,6 +9,7 @@ import RequireAdmin from '../features/auth/components/RequireAdmin.jsx'
 import RequireAuth from '../features/auth/components/RequireAuth.jsx'
 import ChatPage from '../features/chat/pages/ChatPage.jsx'
 import DisputesPage from '../features/disputes/pages/DisputesPage.jsx'
+import MyJobReportsPage from '../features/jobReports/pages/MyJobReportsPage.jsx'
 import CreateJobPage from '../features/jobs/pages/CreateJobPage.jsx'
 import JobDetailsPage from '../features/jobs/pages/JobDetailsPage.jsx'
 import JobExecutionPage from '../features/jobs/pages/JobExecutionPage.jsx'
@@ -37,6 +38,7 @@ function App() {
             <Route path="/my-jobs" element={<MyJobsPage />} />
             <Route path="/saved-jobs" element={<SavedJobsPage />} />
             <Route path="/saved-searches" element={<SavedSearchesPage />} />
+            <Route path="/my-reports" element={<MyJobReportsPage />} />
             <Route path="/jobs/new" element={<CreateJobPage />} />
             <Route path="/jobs/:jobId" element={<JobDetailsPage />} />
             <Route path="/jobs/:jobId/route" element={<JobExecutionPage />} />
