@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.job.search.alert;
 
+import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.search.SavedSearch;
@@ -30,13 +31,17 @@ class SavedSearchMatcherTest {
     }
 
     @Test
-    void neverAlertsJobOwnerOrDisabledPreset() {
+    void neverAlertsJobOwnerDisabledPresetOrClosedJob() {
         User owner = user(1L);
+        User subscriber = user(2L);
         JobCategory leaf = category(11L, category(10L, null));
         Job job = job(owner, leaf, "Zakupy", "Odbiór ze sklepu", "40.00");
 
         assertFalse(matcher.matches(savedSearch(owner, null, "zakupy", null, null, true), job));
-        assertFalse(matcher.matches(savedSearch(user(2L), null, "zakupy", null, null, false), job));
+        assertFalse(matcher.matches(savedSearch(subscriber, null, "zakupy", null, null, false), job));
+
+        job.setStatus(JobStatus.IN_PROGRESS);
+        assertFalse(matcher.matches(savedSearch(subscriber, null, "zakupy", null, null, true), job));
     }
 
     @Test
@@ -77,6 +82,7 @@ class SavedSearchMatcherTest {
         job.setTitle(title);
         job.setDescription(description);
         job.setPrice(new BigDecimal(price));
+        job.setStatus(JobStatus.OPEN);
         return job;
     }
 
