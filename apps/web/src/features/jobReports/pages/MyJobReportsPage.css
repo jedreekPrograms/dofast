@@ -1,0 +1,138 @@
+.my-reports-page {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 40px 0 72px;
+}
+
+.my-reports-page__notice {
+  display: grid;
+  gap: 6px;
+  margin: 24px 0;
+  padding: 18px 20px;
+  border: 1px solid var(--border-color, #d9dee8);
+  border-radius: 14px;
+  background: var(--surface-muted, #f7f8fb);
+}
+
+.my-reports-page__notice a {
+  width: fit-content;
+  font-weight: 700;
+}
+
+.my-reports-list {
+  display: grid;
+  gap: 16px;
+}
+
+.my-report-card {
+  display: grid;
+  gap: 18px;
+}
+
+.my-report-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.my-report-card__header h2 {
+  margin: 4px 0 0;
+  font-size: 1.15rem;
+}
+
+.my-report-card__header h2 a {
+  color: inherit;
+}
+
+.my-report-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+  background: #eef1f6;
+}
+
+.my-report-status--submitted {
+  background: #fff4cc;
+  color: #725300;
+}
+
+.my-report-status--reviewed {
+  background: #e3f6ea;
+  color: #17633a;
+}
+
+.my-report-status--dismissed {
+  background: #eef1f6;
+  color: #4b5565;
+}
+
+.my-report-card__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.my-report-card__meta div {
+  display: grid;
+  gap: 4px;
+}
+
+.my-report-card__meta dt {
+  color: #667085;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.my-report-card__meta dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.my-report-card__details {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f7f8fb;
+}
+
+.my-report-card__details p,
+.my-report-card__status-description,
+.my-reports-empty p {
+  margin: 6px 0 0;
+  color: #5c6678;
+  line-height: 1.55;
+}
+
+.my-report-card__details p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.my-reports-empty {
+  text-align: center;
+}
+
+.my-reports-empty .button {
+  margin-top: 16px;
+}
+
+@media (max-width: 700px) {
+  .my-reports-page {
+    width: min(100% - 20px, 1120px);
+    padding-top: 28px;
+  }
+
+  .my-report-card__header {
+    flex-direction: column;
+  }
+
+  .my-report-card__meta {
+    grid-template-columns: 1fr;
+  }
+}
