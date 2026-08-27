@@ -18,8 +18,10 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,7 +44,7 @@ class SavedSearchServiceTest {
     }
 
     @Test
-    void createNormalizesPublicDiscoveryFilters() {
+    void createNormalizesPublicDiscoveryFiltersAndAlertPreference() {
         JobCategory category = new JobCategory();
         ReflectionTestUtils.setField(category, "id", 12L);
         ReflectionTestUtils.setField(category, "slug", "przeprowadzki");
@@ -67,7 +69,8 @@ class SavedSearchServiceTest {
                         "  kanapa  ",
                         "  przeprowadzki  ",
                         new BigDecimal("100.00"),
-                        new BigDecimal("500.00")
+                        new BigDecimal("500.00"),
+                        true
                 ),
                 user
         );
@@ -79,6 +82,8 @@ class SavedSearchServiceTest {
         assertEquals("kanapa", saved.getQuery());
         assertEquals(category, saved.getCategory());
         assertEquals(new BigDecimal("100.00"), saved.getMinPrice());
+        assertTrue(saved.isAlertsEnabled());
+        assertTrue(response.alertsEnabled());
         assertEquals("przeprowadzki", response.categorySlug());
     }
 
@@ -89,7 +94,7 @@ class SavedSearchServiceTest {
 
         assertThrows(
                 BusinessException.class,
-                () -> service.create(new SavedSearchRequest("Wszystko", " ", " ", null, null), user)
+                () -> service.create(new SavedSearchRequest("Wszystko", " ", " ", null, null, false), user)
         );
         verify(savedSearchRepository, never()).save(any());
     }
@@ -107,7 +112,8 @@ class SavedSearchServiceTest {
                                 null,
                                 null,
                                 new BigDecimal("500.00"),
-                                new BigDecimal("100.00")
+                                new BigDecimal("100.00"),
+                                false
                         ),
                         user
                 )
@@ -121,7 +127,7 @@ class SavedSearchServiceTest {
 
         assertThrows(
                 ConflictException.class,
-                () -> service.create(new SavedSearchRequest("Paczki", "paczka", null, null, null), user)
+                () -> service.create(new SavedSearchRequest("Paczki", "paczka", null, null, null, false), user)
         );
         verify(savedSearchRepository, never()).save(any());
     }
@@ -132,14 +138,15 @@ class SavedSearchServiceTest {
 
         assertThrows(
                 ConflictException.class,
-                () -> service.create(new SavedSearchRequest("Jeszcze jedno", "zakupy", null, null, null), user)
+                () -> service.create(new SavedSearchRequest("Jeszcze jedno", "zakupy", null, null, null, false), user)
         );
         verify(savedSearchRepository, never()).save(any());
     }
 
     @Test
-    void updateCanClearOptionalCategoryAndPrice() {
+    void updateCanClearOptionalCategoryAndPriceAndDisableAlert() {
         SavedSearch existing = new SavedSearch(user);
+        existing.setAlertsEnabled(true);
         ReflectionTestUtils.setField(existing, "id", 9L);
         ReflectionTestUtils.setField(existing, "createdAt", LocalDateTime.of(2026, 8, 26, 22, 0));
         ReflectionTestUtils.setField(existing, "updatedAt", LocalDateTime.of(2026, 8, 26, 22, 0));
@@ -147,11 +154,12 @@ class SavedSearchServiceTest {
         when(savedSearchRepository.existsByUserAndNameIgnoreCaseAndIdNot(user, "Zakupy", 9L)).thenReturn(false);
         when(savedSearchRepository.save(existing)).thenReturn(existing);
 
-        service.update(9L, new SavedSearchRequest("Zakupy", "market", null, null, null), user);
+        service.update(9L, new SavedSearchRequest("Zakupy", "market", null, null, null, false), user);
 
         assertEquals("market", existing.getQuery());
         assertNull(existing.getCategory());
         assertNull(existing.getMinPrice());
         assertNull(existing.getMaxPrice());
+        assertFalse(existing.isAlertsEnabled());
     }
 }
