@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { deleteSavedSearch, getSavedSearches } from '../api/jobsApi.js'
+import { deleteSavedSearch, getSavedSearches, updateSavedSearch } from '../api/jobsApi.js'
 import './JobsPage.css'
 import './SavedSearchesPage.css'
 
@@ -19,11 +19,23 @@ function formatPrice(value) {
   return `${Number(value).toLocaleString('pl-PL', { maximumFractionDigits: 2 })} zł`
 }
 
+function toUpdatePayload(savedSearch, alertsEnabled) {
+  return {
+    name: savedSearch.name,
+    query: savedSearch.query,
+    categorySlug: savedSearch.categorySlug,
+    minPrice: savedSearch.minPrice,
+    maxPrice: savedSearch.maxPrice,
+    alertsEnabled,
+  }
+}
+
 function SavedSearchesPage() {
   const [savedSearches, setSavedSearches] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
+  const [alertUpdatingId, setAlertUpdatingId] = useState(null)
 
   const loadSavedSearches = useCallback(async (signal) => {
     setLoading(true)
@@ -58,13 +70,29 @@ function SavedSearchesPage() {
     }
   }
 
+  async function handleAlertToggle(savedSearch) {
+    setAlertUpdatingId(savedSearch.id)
+    setError('')
+    try {
+      const updated = await updateSavedSearch(
+        savedSearch.id,
+        toUpdatePayload(savedSearch, !savedSearch.alertsEnabled),
+      )
+      setSavedSearches((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się zmienić ustawienia alertu.')
+    } finally {
+      setAlertUpdatingId(null)
+    }
+  }
+
   return (
     <main className="jobs-page saved-searches-page">
       <header className="jobs-hero">
         <span className="jobs-hero__badge">Twoje filtry</span>
         <h1>Zapisane wyszukiwania</h1>
         <p>
-          Wracaj jednym kliknięciem do najczęściej używanych kombinacji kategorii, frazy i zakresu ceny.
+          Wracaj jednym kliknięciem do filtrów i włącz alert, aby dostać powiadomienie o nowym pasującym zleceniu.
         </p>
       </header>
 
@@ -122,12 +150,28 @@ function SavedSearchesPage() {
                         </dd>
                       </div>
                     )}
+                    <div>
+                      <dt>Alert o nowych zleceniach</dt>
+                      <dd>{savedSearch.alertsEnabled ? 'Włączony' : 'Wyłączony'}</dd>
+                    </div>
                   </dl>
 
                   <div className="saved-search-card__actions">
                     <Link className="button button--primary" to={buildSearchUrl(savedSearch)}>
                       Pokaż wyniki
                     </Link>
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      disabled={alertUpdatingId === savedSearch.id}
+                      onClick={() => handleAlertToggle(savedSearch)}
+                    >
+                      {alertUpdatingId === savedSearch.id
+                        ? 'Zapisywanie…'
+                        : savedSearch.alertsEnabled
+                          ? 'Wyłącz alert'
+                          : 'Włącz alert'}
+                    </button>
                     <button
                       className="button button--secondary"
                       type="button"
