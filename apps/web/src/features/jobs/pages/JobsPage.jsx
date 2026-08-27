@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import JobCard from '../components/JobCard.jsx'
+import LocationMapPicker from '../components/LocationMapPicker.jsx'
 import {
   createSavedSearch,
   getJobCategories,
@@ -54,6 +55,9 @@ function JobsPage() {
   const [savingSearch, setSavingSearch] = useState(false)
   const [savedSearchMessage, setSavedSearchMessage] = useState('')
   const [savedSearchError, setSavedSearchError] = useState('')
+  const [limitSavedSearchByLocation, setLimitSavedSearchByLocation] = useState(false)
+  const [savedSearchLocation, setSavedSearchLocation] = useState(null)
+  const [savedSearchRadiusKm, setSavedSearchRadiusKm] = useState('10')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -148,6 +152,13 @@ function JobsPage() {
     setSavedSearchMessage('')
     setSavedSearchError('')
 
+    const radiusKm = Number(savedSearchRadiusKm)
+    if (limitSavedSearchByLocation && !hasValidSavedSearchLocation(savedSearchLocation, radiusKm)) {
+      setSavingSearch(false)
+      setSavedSearchError('Wybierz punkt na mapie i promień od 1 do 100 km.')
+      return
+    }
+
     try {
       await createSavedSearch({
         name: savedSearchName,
@@ -155,6 +166,9 @@ function JobsPage() {
         categorySlug: filters.category || null,
         minPrice: filters.minPrice === '' ? null : Number(filters.minPrice),
         maxPrice: filters.maxPrice === '' ? null : Number(filters.maxPrice),
+        latitude: limitSavedSearchByLocation ? Number(savedSearchLocation.latitude) : null,
+        longitude: limitSavedSearchByLocation ? Number(savedSearchLocation.longitude) : null,
+        radiusKm: limitSavedSearchByLocation ? radiusKm : null,
       })
       setSavedSearchName('')
       setSavedSearchMessage('Wyszukiwanie zapisane. Znajdziesz je w „Wyszukiwaniach”.')
@@ -166,12 +180,16 @@ function JobsPage() {
   }
 
   const jobs = result?.content ?? []
-  const hasActiveFilters = Boolean(
+  const hasPublicFilters = Boolean(
     filters.query?.trim()
       || filters.category
       || filters.minPrice !== ''
       || filters.maxPrice !== '',
   )
+  const savedSearchRadius = Number(savedSearchRadiusKm)
+  const hasValidLocationCriterion = limitSavedSearchByLocation
+    && hasValidSavedSearchLocation(savedSearchLocation, savedSearchRadius)
+  const canSaveSearch = hasPublicFilters || hasValidLocationCriterion
 
   return (
     <main className="jobs-page">
@@ -249,7 +267,7 @@ function JobsPage() {
             <span className="jobs-hero__badge">Preset</span>
             <h2 id="saved-search-create-title">Zapisz obecne filtry</h2>
             <p>
-              Zachowaj tę kombinację filtrów do ponownego użycia. Nie zapisujemy dokładnej lokalizacji ani prywatnych adresów.
+              Zachowaj filtry do ponownego użycia i opcjonalnie ogranicz alerty do prywatnego obszaru wokół wybranego punktu.
             </p>
           </div>
           <form className="saved-search-create__form" onSubmit={saveCurrentSearch}>
@@ -264,10 +282,50 @@ function JobsPage() {
                 required
               />
             </label>
+
+            <label className="saved-search-create__location-toggle">
+              <input
+                type="checkbox"
+                checked={limitSavedSearchByLocation}
+                onChange={(event) => setLimitSavedSearchByLocation(event.target.checked)}
+              />
+              <span>Ogranicz alerty do wybranej okolicy</span>
+            </label>
+
+            {limitSavedSearchByLocation && (
+              <div className="saved-search-create__location">
+                <LocationMapPicker
+                  location={savedSearchLocation}
+                  onLocationChange={setSavedSearchLocation}
+                  disabled={savingSearch}
+                />
+                <label>
+                  <span>Promień alertu</span>
+                  <select
+                    value={savedSearchRadiusKm}
+                    onChange={(event) => setSavedSearchRadiusKm(event.target.value)}
+                    disabled={savingSearch}
+                  >
+                    <option value="1">1 km</option>
+                    <option value="2">2 km</option>
+                    <option value="5">5 km</option>
+                    <option value="10">10 km</option>
+                    <option value="20">20 km</option>
+                    <option value="30">30 km</option>
+                    <option value="50">50 km</option>
+                    <option value="100">100 km</option>
+                  </select>
+                </label>
+                <p className="saved-search-create__hint">
+                  Do presetu wysyłamy tylko współrzędne punktu i promień. Dokładny adres użyty przez picker nie trafia do saved search ani do treści powiadomień.
+                </p>
+              </div>
+            )}
+
             <button
               className="button button--primary"
               type="submit"
-              disabled={savingSearch || !hasActiveFilters}
+              disabled={savingSearch || !canSaveSearch}
             >
               {savingSearch ? 'Zapisywanie…' : 'Zapisz wyszukiwanie'}
             </button>
@@ -275,8 +333,10 @@ function JobsPage() {
               Moje wyszukiwania
             </Link>
           </form>
-          {!hasActiveFilters && (
-            <p className="saved-search-create__hint">Ustaw i zastosuj co najmniej jeden filtr, aby zapisać wyszukiwanie.</p>
+          {!canSaveSearch && (
+            <p className="saved-search-create__hint">
+              Ustaw i zastosuj co najmniej jeden filtr albo wybierz prawidłowy obszar alertu.
+            </p>
           )}
           {savedSearchMessage && <p className="saved-search-create__success">{savedSearchMessage}</p>}
           {savedSearchError && <p className="saved-search-create__error" role="alert">{savedSearchError}</p>}
@@ -334,6 +394,21 @@ function JobsPage() {
       </section>
     </main>
   )
+}
+
+function hasValidSavedSearchLocation(location, radiusKm) {
+  if (!location) return false
+  const latitude = Number(location.latitude)
+  const longitude = Number(location.longitude)
+  return Number.isFinite(latitude)
+    && latitude >= -90
+    && latitude <= 90
+    && Number.isFinite(longitude)
+    && longitude >= -180
+    && longitude <= 180
+    && Number.isInteger(radiusKm)
+    && radiusKm >= 1
+    && radiusKm <= 100
 }
 
 export default JobsPage
