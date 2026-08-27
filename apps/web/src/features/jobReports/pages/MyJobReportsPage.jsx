@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getMyJobReports } from '../api/jobReportsApi.js'
+import { getMyJobReports, withdrawJobReport } from '../api/jobReportsApi.js'
 import './MyJobReportsPage.css'
 
 const REASONS = {
@@ -24,12 +24,17 @@ const STATUSES = {
     label: 'Zamknięte bez potwierdzenia',
     description: 'Moderator zakończył sprawę bez potwierdzenia zgłoszenia.',
   },
+  WITHDRAWN: {
+    label: 'Wycofane',
+    description: 'Wycofałeś zgłoszenie przed rozpoczęciem moderacji. Rekord pozostaje w Twojej historii.',
+  },
 }
 
 function MyJobReportsPage() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [withdrawingId, setWithdrawingId] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -47,6 +52,21 @@ function MyJobReportsPage() {
 
     return () => { active = false }
   }, [])
+
+  async function handleWithdraw(reportId) {
+    setError('')
+    setWithdrawingId(reportId)
+    try {
+      const updated = await withdrawJobReport(reportId)
+      setReports((current) => current.map((report) => (
+        report.id === reportId ? updated : report
+      )))
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się wycofać zgłoszenia.')
+    } finally {
+      setWithdrawingId(null)
+    }
+  }
 
   return (
     <main className="my-reports-page">
@@ -108,6 +128,12 @@ function MyJobReportsPage() {
                       <dd>{new Date(report.reviewedAt).toLocaleString('pl-PL')}</dd>
                     </div>
                   )}
+                  {report.withdrawnAt && (
+                    <div>
+                      <dt>Wycofano</dt>
+                      <dd>{new Date(report.withdrawnAt).toLocaleString('pl-PL')}</dd>
+                    </div>
+                  )}
                 </dl>
 
                 {report.details && (
@@ -118,6 +144,20 @@ function MyJobReportsPage() {
                 )}
 
                 <p className="my-report-card__status-description">{status.description}</p>
+
+                {report.status === 'SUBMITTED' && (
+                  <div className="my-report-card__actions">
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      disabled={withdrawingId === report.id}
+                      onClick={() => handleWithdraw(report.id)}
+                    >
+                      {withdrawingId === report.id ? 'Wycofywanie…' : 'Wycofaj zgłoszenie'}
+                    </button>
+                    <span>Możesz wycofać zgłoszenie tylko zanim moderator je rozpatrzy.</span>
+                  </div>
+                )}
               </article>
             )
           })}
