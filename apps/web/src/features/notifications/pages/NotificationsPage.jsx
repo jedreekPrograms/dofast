@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNotifications } from '../NotificationContext.js'
 import {
+  getNotificationPreferences,
   getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  updateNotificationPreferences,
 } from '../api/notificationsApi.js'
 import './NotificationsPage.css'
 
@@ -18,6 +20,17 @@ const TYPE_LABELS = {
   DISPUTE_RESOLVED: 'Spór',
   CHAT_MESSAGE: 'Czat',
   REVIEW_RECEIVED: 'Opinia',
+}
+
+const REALTIME_PREFERENCE_COPY = {
+  CHAT_MESSAGE: {
+    title: 'Nowe wiadomości na czacie',
+    description: 'Pokazuj nowe wiadomości od uczestników zlecenia od razu w czasie rzeczywistym.',
+  },
+  REVIEW_RECEIVED: {
+    title: 'Nowe opinie',
+    description: 'Pokazuj informację o nowej opinii od razu po jej wystawieniu.',
+  },
 }
 
 function notificationTarget(notification) {
@@ -36,6 +49,10 @@ function NotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [mutableRealtimeTypes, setMutableRealtimeTypes] = useState([])
+  const [mutedRealtimeTypes, setMutedRealtimeTypes] = useState([])
+  const [preferencesLoading, setPreferencesLoading] = useState(true)
+  const [preferencesBusy, setPreferencesBusy] = useState(false)
 
   const loadNotifications = useCallback(async () => {
     setLoading(true)
@@ -55,6 +72,27 @@ function NotificationsPage() {
   }, [loadNotifications])
 
   useEffect(() => {
+    let active = true
+    async function loadPreferences() {
+      setPreferencesLoading(true)
+      try {
+        const response = await getNotificationPreferences()
+        if (!active) return
+        setMutableRealtimeTypes(response.mutableTypes ?? [])
+        setMutedRealtimeTypes(response.mutedTypes ?? [])
+      } catch (requestError) {
+        if (active) setError(requestError.message || 'Nie udało się pobrać ustawień powiadomień.')
+      } finally {
+        if (active) setPreferencesLoading(false)
+      }
+    }
+    loadPreferences()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
     if (!lastNotification) return
     setNotifications((current) => {
       if (unreadOnly && lastNotification.read) return current
@@ -67,6 +105,26 @@ function NotificationsPage() {
     () => notifications.filter((notification) => !notification.read).length,
     [notifications],
   )
+
+  async function toggleRealtimePreference(type) {
+    if (preferencesBusy) return
+    const currentlyMuted = mutedRealtimeTypes.includes(type)
+    const nextMuted = currentlyMuted
+      ? mutedRealtimeTypes.filter((item) => item !== type)
+      : [...mutedRealtimeTypes, type]
+
+    setPreferencesBusy(true)
+    setError('')
+    try {
+      const response = await updateNotificationPreferences(nextMuted)
+      setMutableRealtimeTypes(response.mutableTypes ?? [])
+      setMutedRealtimeTypes(response.mutedTypes ?? [])
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się zapisać ustawień powiadomień.')
+    } finally {
+      setPreferencesBusy(false)
+    }
+  }
 
   async function markRead(notification) {
     if (notification.read) return
@@ -115,6 +173,40 @@ function NotificationsPage() {
           Oznacz wszystkie jako przeczytane
         </button>
       </header>
+
+      <section className="notification-preferences" aria-labelledby="notification-preferences-title">
+        <div>
+          <span className="eyebrow">Ustawienia czasu rzeczywistego</span>
+          <h2 id="notification-preferences-title">Powiadomienia natychmiastowe</h2>
+          <p>
+            Możesz wyciszyć mniej krytyczne wyskakujące powiadomienia. Wszystkie zdarzenia nadal pozostają w centrum powiadomień,
+            a komunikaty dotyczące lifecycle zlecenia, sporów i bezpieczeństwa zawsze są dostarczane.
+          </p>
+        </div>
+        {preferencesLoading && <div className="page-state">Pobieranie ustawień…</div>}
+        {!preferencesLoading && (
+          <div className="notification-preferences__options">
+            {mutableRealtimeTypes.map((type) => {
+              const copy = REALTIME_PREFERENCE_COPY[type] ?? { title: type, description: '' }
+              const enabled = !mutedRealtimeTypes.includes(type)
+              return (
+                <label className="notification-preference" key={type}>
+                  <span>
+                    <strong>{copy.title}</strong>
+                    <small>{copy.description}</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    disabled={preferencesBusy}
+                    onChange={() => toggleRealtimePreference(type)}
+                  />
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="segmented-control" role="tablist" aria-label="Filtr powiadomień">
         <button className={!unreadOnly ? 'is-active' : ''} type="button" onClick={() => setUnreadOnly(false)}>Wszystkie</button>
