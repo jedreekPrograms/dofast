@@ -1,0 +1,85 @@
+package com.doFast.dofastapp.job.report;
+
+import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.user.entity.User;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class JobReportServiceTest {
+
+    @Mock private JobReportRepository reportRepository;
+    @Mock private JobRepository jobRepository;
+
+    private JobReportService service;
+    private User reporter;
+    private User owner;
+    private Job job;
+
+    @BeforeEach
+    void setUp() {
+        service = new JobReportService(reportRepository, jobRepository);
+        reporter = new User("reporter@example.com", "Reporter");
+        owner = new User("owner@example.com", "Owner");
+        ReflectionTestUtils.setField(reporter, "id", 7L);
+        ReflectionTestUtils.setField(owner, "id", 8L);
+        job = new Job();
+        ReflectionTestUtils.setField(job, "id", 11L);
+        job.setCreatedBy(owner);
+    }
+
+    @Test
+    void createsReportAndNormalizesBlankDetails() {
+        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(reportRepository.existsByReporter_IdAndJob_Id(7L, 11L)).thenReturn(false);
+        when(reportRepository.save(org.mockito.ArgumentMatchers.any(JobReport.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.report(11L, new JobReportRequest(JobReportReason.FRAUD, "   "), reporter);
+
+        ArgumentCaptor<JobReport> captor = ArgumentCaptor.forClass(JobReport.class);
+        verify(reportRepository).save(captor.capture());
+        assertEquals(JobReportReason.FRAUD, captor.getValue().getReason());
+        assertEquals(null, captor.getValue().getDetails());
+    }
+
+    @Test
+    void rejectsOwnJob() {
+        job.setCreatedBy(reporter);
+        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.report(11L, new JobReportRequest(JobReportReason.SPAM, null), reporter)
+        );
+        verify(reportRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void rejectsDuplicateReport() {
+        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(reportRepository.existsByReporter_IdAndJob_Id(7L, 11L)).thenReturn(true);
+
+        assertThrows(
+                ConflictException.class,
+                () -> service.report(11L, new JobReportRequest(JobReportReason.OTHER, "duplicate"), reporter)
+        );
+        verify(reportRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+}
