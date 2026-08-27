@@ -8,4 +8,10 @@ Reports are private moderation data. They are never exposed through public disco
 
 `GET /job-reports/mine` returns only reports created by the authenticated user so the client can show submission history/status without exposing other reporters or moderation activity.
 
-Initial statuses are `SUBMITTED`; `REVIEWED` and `DISMISSED` are reserved for a later admin moderation workflow. This slice intentionally does not auto-hide jobs or penalize users based on a single report.
+## Admin moderation
+
+Endpoints under `/admin/job-reports` are protected by the existing `ROLE_ADMIN` security boundary. `GET /admin/job-reports` returns a paginated oldest-first moderation queue and can be filtered by report status. The response contains moderation-relevant report metadata but no job location, route geometry or live-tracking data.
+
+`PATCH /admin/job-reports/{id}` accepts a terminal `REVIEWED` or `DISMISSED` decision plus an optional moderation note. Every decision records the moderator and review timestamp. Reports cannot be moved back to `SUBMITTED` or resolved twice; an optimistic-lock version column protects concurrent moderation updates.
+
+A moderation decision intentionally does not automatically delete a job, suspend a user or modify escrow. Enforcement actions should remain explicit, separately authorized operations with their own audit trail rather than side effects of a single report review.
