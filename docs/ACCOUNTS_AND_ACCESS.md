@@ -106,4 +106,6 @@ Spring Security grants `ROLE_USER` or `ROLE_ADMIN`; `/admin/**` requires `ROLE_A
 
 ## Current administrative surface
 
-`/admin/overview` exposes account counts and `/admin/users` exposes account management to administrators only. Normal users can never access these endpoints. Administrators may suspend/reactivate normal users; the current endpoint intentionally refuses to suspend other administrators.
+`/admin/overview` exposes account counts and `/admin/users` exposes account management to administrators only. Direct suspension through the generic status endpoint is intentionally forbidden: account suspension must come from the audited enforcement flow for a reviewed report and must pass active-lifecycle safety checks. The generic status endpoint is a narrow recovery path that only reactivates an already suspended account.
+
+Every successful recovery writes an immutable `admin_user_reactivation_audits` row containing the target account, acting administrator, `SUSPENDED -> ACTIVE` transition and timestamp. Administrators can inspect that history through `GET /admin/users/{id}/reactivation-audits`; the endpoint is read-only, validates that the target account exists and returns the newest audit first. No location, escrow or job-private data is included in the response.
