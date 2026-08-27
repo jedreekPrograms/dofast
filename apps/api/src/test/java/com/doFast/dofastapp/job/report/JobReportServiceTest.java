@@ -75,6 +75,32 @@ class JobReportServiceTest {
     }
 
     @Test
+    void withdrawsOwnPendingReportAndExposesTimestamp() {
+        JobReport report = new JobReport(job, reporter, JobReportReason.OTHER, "mistake");
+        ReflectionTestUtils.setField(report, "id", 31L);
+        when(reportRepository.findByIdAndReporter_Id(31L, 7L)).thenReturn(Optional.of(report));
+        when(reportRepository.save(report)).thenReturn(report);
+
+        JobReportResponse response = service.withdraw(31L, reporter);
+
+        assertEquals(JobReportStatus.WITHDRAWN, response.status());
+        assertNotNull(response.withdrawnAt());
+        verify(reportRepository).save(report);
+    }
+
+    @Test
+    void rejectsWithdrawalAfterModerationStarted() {
+        JobReport report = new JobReport(job, reporter, JobReportReason.SPAM, null);
+        ReflectionTestUtils.setField(report, "id", 32L);
+        report.moderate(JobReportStatus.DISMISSED, owner, "resolved");
+        when(reportRepository.findByIdAndReporter_Id(32L, 7L)).thenReturn(Optional.of(report));
+
+        assertThrows(ConflictException.class, () -> service.withdraw(32L, reporter));
+
+        verify(reportRepository, never()).save(report);
+    }
+
+    @Test
     void rejectsOwnJob() {
         job.setCreatedBy(reporter);
         when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
