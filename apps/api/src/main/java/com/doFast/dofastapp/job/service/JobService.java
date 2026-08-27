@@ -17,6 +17,8 @@ import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.entity.JobRouteStop;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.job.search.alert.JobPublicationOutbox;
+import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
@@ -48,6 +50,7 @@ public class JobService {
     private final NotificationService notificationService;
     private final RouteQuoteService routeQuoteService;
     private final LiveTrackingService liveTrackingService;
+    private final JobPublicationOutboxRepository jobPublicationOutboxRepository;
 
     public JobService(
             JobRepository jobRepository,
@@ -55,7 +58,8 @@ public class JobService {
             TransactionService transactionService,
             NotificationService notificationService,
             RouteQuoteService routeQuoteService,
-            LiveTrackingService liveTrackingService
+            LiveTrackingService liveTrackingService,
+            JobPublicationOutboxRepository jobPublicationOutboxRepository
     ) {
         this.jobRepository = jobRepository;
         this.jobCategoryRepository = jobCategoryRepository;
@@ -63,6 +67,7 @@ public class JobService {
         this.notificationService = notificationService;
         this.routeQuoteService = routeQuoteService;
         this.liveTrackingService = liveTrackingService;
+        this.jobPublicationOutboxRepository = jobPublicationOutboxRepository;
     }
 
     @Transactional
@@ -84,6 +89,7 @@ public class JobService {
 
         Job saved = jobRepository.save(job);
         transactionService.holdMoney(saved);
+        jobPublicationOutboxRepository.save(new JobPublicationOutbox(saved));
         return toResponse(saved);
     }
 

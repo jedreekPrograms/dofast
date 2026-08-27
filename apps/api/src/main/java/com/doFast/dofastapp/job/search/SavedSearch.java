@@ -45,6 +45,9 @@ public class SavedSearch {
     @Column(name = "max_price", precision = 12, scale = 2)
     private BigDecimal maxPrice;
 
+    @Column(name = "alerts_enabled", nullable = false)
+    private boolean alertsEnabled;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -76,6 +79,7 @@ public class SavedSearch {
     public JobCategory getCategory() { return category; }
     public BigDecimal getMinPrice() { return minPrice; }
     public BigDecimal getMaxPrice() { return maxPrice; }
+    public boolean isAlertsEnabled() { return alertsEnabled; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 
@@ -84,4 +88,5 @@ public class SavedSearch {
     public void setCategory(JobCategory category) { this.category = category; }
     public void setMinPrice(BigDecimal minPrice) { this.minPrice = minPrice; }
     public void setMaxPrice(BigDecimal maxPrice) { this.maxPrice = maxPrice; }
+    public void setAlertsEnabled(boolean alertsEnabled) { this.alertsEnabled = alertsEnabled; }
 }

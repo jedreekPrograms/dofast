@@ -11,6 +11,7 @@ public record SavedSearchResponse(
         String categoryName,
         BigDecimal minPrice,
         BigDecimal maxPrice,
+        boolean alertsEnabled,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

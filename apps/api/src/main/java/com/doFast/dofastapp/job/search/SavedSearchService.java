@@ -96,6 +96,7 @@ public class SavedSearchService {
         savedSearch.setCategory(category);
         savedSearch.setMinPrice(minPrice);
         savedSearch.setMaxPrice(maxPrice);
+        savedSearch.setAlertsEnabled(request.alertsEnabled());
     }
 
     private SavedSearchResponse toResponse(SavedSearch savedSearch) {
@@ -108,6 +109,7 @@ public class SavedSearchService {
                 category != null ? category.getName() : null,
                 savedSearch.getMinPrice(),
                 savedSearch.getMaxPrice(),
+                savedSearch.isAlertsEnabled(),
                 savedSearch.getCreatedAt(),
                 savedSearch.getUpdatedAt()
         );
