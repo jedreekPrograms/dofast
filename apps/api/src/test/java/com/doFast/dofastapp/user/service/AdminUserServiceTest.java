@@ -2,9 +2,11 @@ package com.doFast.dofastapp.user.service;
 
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.user.dto.AdminUserResponse;
+import com.doFast.dofastapp.user.entity.AdminUserReactivationAudit;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.enums.UserStatus;
+import com.doFast.dofastapp.user.repository.AdminUserReactivationAuditRepository;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +15,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -21,7 +24,9 @@ import static org.mockito.Mockito.when;
 class AdminUserServiceTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final AdminUserService service = new AdminUserService(userRepository);
+    private final AdminUserReactivationAuditRepository reactivationAuditRepository =
+            mock(AdminUserReactivationAuditRepository.class);
+    private final AdminUserService service = new AdminUserService(userRepository, reactivationAuditRepository);
 
     @Test
     void genericStatusEndpointCannotSuspendUser() {
@@ -36,10 +41,11 @@ class AdminUserServiceTest {
 
         verify(target, never()).setStatus(UserStatus.SUSPENDED);
         verify(userRepository, never()).save(target);
+        verify(reactivationAuditRepository, never()).save(any());
     }
 
     @Test
-    void suspendedUserCanBeReactivated() {
+    void suspendedUserCanBeReactivatedAndAudited() {
         User target = mock(User.class);
         User admin = mock(User.class);
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 27, 12, 0);
@@ -57,6 +63,7 @@ class AdminUserServiceTest {
 
         verify(target).setStatus(UserStatus.ACTIVE);
         verify(userRepository).save(target);
+        verify(reactivationAuditRepository).save(any(AdminUserReactivationAudit.class));
         assertEquals(UserStatus.ACTIVE, response.status());
     }
 
@@ -74,5 +81,6 @@ class AdminUserServiceTest {
         );
 
         verify(userRepository, never()).save(target);
+        verify(reactivationAuditRepository, never()).save(any());
     }
 }
