@@ -24,7 +24,7 @@ class SavedSearchMatcherTest {
         JobCategory leaf = category(11L, parent);
 
         Job job = job(owner, leaf, "Przewóz dużej kanapy", "Pomoc przy przeprowadzce", "250.00");
-        SavedSearch savedSearch = savedSearch(subscriber, parent, "kanapa", "200.00", "300.00", true);
+        SavedSearch savedSearch = savedSearch(subscriber, parent, "kanap", "200.00", "300.00", true);
 
         assertTrue(matcher.matches(savedSearch, job));
     }
