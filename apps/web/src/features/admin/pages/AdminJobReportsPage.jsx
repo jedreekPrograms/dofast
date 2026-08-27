@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   enforceAdminJobReport,
+  enforceAdminJobReportAccount,
+  getAdminJobReportAccountEnforcement,
   getAdminJobReportEnforcement,
   getAdminJobReports,
   moderateAdminJobReport,
@@ -31,6 +33,8 @@ function AdminJobReportsPage() {
   const [note, setNote] = useState('')
   const [enforcement, setEnforcement] = useState(null)
   const [enforcementReason, setEnforcementReason] = useState('')
+  const [accountEnforcement, setAccountEnforcement] = useState(null)
+  const [accountEnforcementReason, setAccountEnforcementReason] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [enforcementLoading, setEnforcementLoading] = useState(false)
@@ -57,13 +61,18 @@ function AdminJobReportsPage() {
     loadQueue()
   }, [loadQueue])
 
-  async function loadEnforcement(reportId) {
+  async function loadEnforcements(reportId) {
     setEnforcementLoading(true)
     try {
-      const audit = await getAdminJobReportEnforcement(reportId)
-      setEnforcement(audit)
+      const [listingAudit, accountAudit] = await Promise.all([
+        getAdminJobReportEnforcement(reportId),
+        getAdminJobReportAccountEnforcement(reportId),
+      ])
+      setEnforcement(listingAudit)
+      setAccountEnforcement(accountAudit)
     } catch (requestError) {
       setEnforcement(null)
+      setAccountEnforcement(null)
       setError(requestError.message || 'Nie udało się pobrać historii egzekucji.')
     } finally {
       setEnforcementLoading(false)
@@ -76,8 +85,10 @@ function AdminJobReportsPage() {
     setNote('')
     setEnforcement(null)
     setEnforcementReason('')
+    setAccountEnforcement(null)
+    setAccountEnforcementReason('')
     setError('')
-    loadEnforcement(report.id)
+    loadEnforcements(report.id)
   }
 
   async function submitDecision(event) {
@@ -90,7 +101,7 @@ function AdminJobReportsPage() {
       const updated = await moderateAdminJobReport(selected.id, decision, note)
       setSelected(updated)
       setNote('')
-      await loadEnforcement(updated.id)
+      await loadEnforcements(updated.id)
       await loadQueue()
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się zapisać decyzji moderacyjnej.')
@@ -117,6 +128,32 @@ function AdminJobReportsPage() {
     }
   }
 
+  async function submitAccountEnforcement(event) {
+    event.preventDefault()
+    if (!selected || selected.status !== 'REVIEWED' || accountEnforcement) return
+
+    setBusy(true)
+    setError('')
+    try {
+      const audit = await enforceAdminJobReportAccount(selected.id, accountEnforcementReason)
+      setAccountEnforcement(audit)
+      setAccountEnforcementReason('')
+      await loadQueue()
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się zawiesić konta właściciela zlecenia.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function changeStatus(nextStatus) {
+    setStatus(nextStatus)
+    setPage(0)
+    setSelected(null)
+    setEnforcement(null)
+    setAccountEnforcement(null)
+  }
+
   return (
     <main className="admin-reports-page">
       <header className="page-heading page-heading--row">
@@ -127,7 +164,7 @@ function AdminJobReportsPage() {
         </div>
         <label className="admin-reports-filter">
           Status
-          <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); setSelected(null); setEnforcement(null) }}>
+          <select value={status} onChange={(event) => changeStatus(event.target.value)}>
             <option value="">Wszystkie</option>
             {Object.entries(STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -245,39 +282,77 @@ function AdminJobReportsPage() {
 
               {enforcementLoading && <div className="page-state">Pobieranie historii egzekucji…</div>}
 
-              {!enforcementLoading && selected.status === 'REVIEWED' && !enforcement && (
-                <form className="admin-report-enforcement" onSubmit={submitEnforcement}>
-                  <div>
-                    <span className="eyebrow">Osobna akcja egzekucyjna</span>
-                    <h3>Anuluj otwarte zlecenie</h3>
-                    <p>
-                      Ta operacja jest nieodwracalna z poziomu moderacji. Backend wykona ją tylko wtedy,
-                      gdy zlecenie nadal ma status OPEN; aktywne zlecenia i escrow są chronione.
-                    </p>
-                  </div>
-                  <label>
-                    Powód egzekucji
-                    <textarea
-                      rows={4}
-                      maxLength={1000}
-                      value={enforcementReason}
-                      onChange={(event) => setEnforcementReason(event.target.value)}
-                      placeholder="Opcjonalny wewnętrzny powód zapisany w audycie."
-                    />
-                  </label>
-                  <button className="button button--danger" type="submit" disabled={busy}>
-                    {busy ? 'Wykonywanie…' : 'Anuluj otwarte zlecenie'}
-                  </button>
-                </form>
-              )}
+              {!enforcementLoading && selected.status === 'REVIEWED' && (
+                <div className="admin-report-enforcement-grid">
+                  {!enforcement ? (
+                    <form className="admin-report-enforcement" onSubmit={submitEnforcement}>
+                      <div>
+                        <span className="eyebrow">Egzekucja wobec zlecenia</span>
+                        <h3>Anuluj otwarte zlecenie</h3>
+                        <p>
+                          Operacja jest audytowana i możliwa tylko dla statusu OPEN. Aktywne zlecenia,
+                          escrow i live tracking pozostają chronione.
+                        </p>
+                      </div>
+                      <label>
+                        Powód egzekucji
+                        <textarea
+                          rows={4}
+                          maxLength={1000}
+                          value={enforcementReason}
+                          onChange={(event) => setEnforcementReason(event.target.value)}
+                          placeholder="Opcjonalny wewnętrzny powód zapisany w audycie."
+                        />
+                      </label>
+                      <button className="button button--danger" type="submit" disabled={busy}>
+                        {busy ? 'Wykonywanie…' : 'Anuluj otwarte zlecenie'}
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="admin-report-enforcement-audit">
+                      <h3>Audit egzekucji zlecenia</h3>
+                      <div><span>Akcja</span><strong>Anulowanie otwartego zlecenia</strong></div>
+                      <div><span>Wykonano</span><strong>{new Date(enforcement.createdAt).toLocaleString('pl-PL')}</strong></div>
+                      <div><span>Moderator</span><strong>#{enforcement.moderatorId}</strong></div>
+                      <div><span>Powód</span><strong>{enforcement.reason || 'Brak dodatkowego powodu'}</strong></div>
+                    </div>
+                  )}
 
-              {enforcement && (
-                <div className="admin-report-enforcement-audit">
-                  <h3>Audit trail egzekucji</h3>
-                  <div><span>Akcja</span><strong>Anulowanie otwartego zlecenia</strong></div>
-                  <div><span>Wykonano</span><strong>{new Date(enforcement.createdAt).toLocaleString('pl-PL')}</strong></div>
-                  <div><span>Moderator</span><strong>#{enforcement.moderatorId}</strong></div>
-                  <div><span>Powód</span><strong>{enforcement.reason || 'Brak dodatkowego powodu'}</strong></div>
+                  {!accountEnforcement ? (
+                    <form className="admin-report-account-enforcement" onSubmit={submitAccountEnforcement}>
+                      <div>
+                        <span className="eyebrow">Egzekucja wobec konta</span>
+                        <h3>Zawieś właściciela zlecenia</h3>
+                        <p>
+                          Konto zostanie zawieszone natychmiast, a jego pozostałe otwarte oferty anulowane.
+                          Backend odrzuci sankcję dla administratora oraz użytkownika uczestniczącego w aktywnym,
+                          finalizowanym lub spornym zleceniu.
+                        </p>
+                      </div>
+                      <label>
+                        Powód zawieszenia
+                        <textarea
+                          rows={4}
+                          maxLength={1000}
+                          value={accountEnforcementReason}
+                          onChange={(event) => setAccountEnforcementReason(event.target.value)}
+                          placeholder="Opcjonalny wewnętrzny powód zapisany w audycie konta."
+                        />
+                      </label>
+                      <button className="button button--danger" type="submit" disabled={busy}>
+                        {busy ? 'Wykonywanie…' : 'Zawieś konto właściciela'}
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="admin-report-account-enforcement-audit">
+                      <h3>Audit zawieszenia konta</h3>
+                      <div><span>Akcja</span><strong>Zawieszenie właściciela zlecenia</strong></div>
+                      <div><span>Użytkownik</span><strong>#{accountEnforcement.targetUserId}</strong></div>
+                      <div><span>Wykonano</span><strong>{new Date(accountEnforcement.createdAt).toLocaleString('pl-PL')}</strong></div>
+                      <div><span>Moderator</span><strong>#{accountEnforcement.moderatorId}</strong></div>
+                      <div><span>Powód</span><strong>{accountEnforcement.reason || 'Brak dodatkowego powodu'}</strong></div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
