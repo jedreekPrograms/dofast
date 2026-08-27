@@ -31,7 +31,11 @@ import java.util.stream.Collectors;
 public class NotificationService {
 
     private static final Set<NotificationType> MUTABLE_REALTIME_TYPES = Set.copyOf(
-            EnumSet.of(NotificationType.CHAT_MESSAGE, NotificationType.REVIEW_RECEIVED)
+            EnumSet.of(
+                    NotificationType.CHAT_MESSAGE,
+                    NotificationType.REVIEW_RECEIVED,
+                    NotificationType.SAVED_SEARCH_MATCH
+            )
     );
 
     private final NotificationRepository notificationRepository;
