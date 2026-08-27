@@ -58,7 +58,7 @@ public class AdminUserService {
     }
 
     @Transactional
-    public AdminUserResponse updateStatus(Long userId, UserStatus status, User currentAdmin) {
+    public AdminUserResponse updateStatus(Long userId, UserStatus status, String reason, User currentAdmin) {
         User target = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
 
@@ -74,9 +74,10 @@ public class AdminUserService {
             throw new ForbiddenOperationException("Tylko zawieszone konto może zostać ponownie aktywowane");
         }
 
+        String normalizedReason = reason.trim();
         target.setStatus(UserStatus.ACTIVE);
         User saved = userRepository.save(target);
-        reactivationAuditRepository.save(new AdminUserReactivationAudit(saved, currentAdmin));
+        reactivationAuditRepository.save(new AdminUserReactivationAudit(saved, currentAdmin, normalizedReason));
         return toResponse(saved);
     }
 
@@ -101,6 +102,7 @@ public class AdminUserService {
                 admin.getNickname(),
                 audit.getPreviousStatus(),
                 audit.getNewStatus(),
+                audit.getReason(),
                 audit.getCreatedAt()
         );
     }
