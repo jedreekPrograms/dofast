@@ -11,5 +11,6 @@ public record SavedSearchRequest(
         @Size(max = 100) String query,
         @Size(max = 80) String categorySlug,
         @DecimalMin(value = "0.00") BigDecimal minPrice,
-        @DecimalMin(value = "0.00") BigDecimal maxPrice
+        @DecimalMin(value = "0.00") BigDecimal maxPrice,
+        boolean alertsEnabled
 ) {}
