@@ -4,6 +4,8 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.notification.enums.NotificationType;
+import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,9 +34,11 @@ class AdminJobReportServiceTest {
     @Mock private JobReportEnforcementRepository enforcementRepository;
     @Mock private JobReportAccountEnforcementRepository accountEnforcementRepository;
     @Mock private JobRepository jobRepository;
+    @Mock private NotificationService notificationService;
 
     private AdminJobReportService service;
     private JobReport report;
+    private User reporter;
     private User admin;
     private User owner;
     private Job job;
@@ -44,9 +49,10 @@ class AdminJobReportServiceTest {
                 repository,
                 enforcementRepository,
                 accountEnforcementRepository,
-                jobRepository
+                jobRepository,
+                notificationService
         );
-        User reporter = new User("reporter@example.com", "Reporter");
+        reporter = new User("reporter@example.com", "Reporter");
         owner = new User("owner@example.com", "Owner");
         admin = new User("admin@example.com", "Admin");
         ReflectionTestUtils.setField(reporter, "id", 7L);
@@ -61,7 +67,7 @@ class AdminJobReportServiceTest {
     }
 
     @Test
-    void recordsAuditedModerationDecision() {
+    void recordsAuditedModerationDecisionAndNotifiesReporter() {
         when(repository.findById(15L)).thenReturn(Optional.of(report));
 
         AdminJobReportResponse response = service.moderate(
@@ -74,6 +80,35 @@ class AdminJobReportServiceTest {
         assertEquals(9L, response.reviewedById());
         assertEquals("confirmed by evidence", response.moderationNote());
         assertNotNull(response.reviewedAt());
+        verify(notificationService).notify(
+                eq(reporter),
+                eq(NotificationType.JOB_REPORT_REVIEWED),
+                eq("Zgłoszenie zostało potwierdzone"),
+                any(String.class),
+                eq(job),
+                eq(null)
+        );
+    }
+
+    @Test
+    void notifiesReporterWhenReportIsDismissed() {
+        when(repository.findById(15L)).thenReturn(Optional.of(report));
+
+        AdminJobReportResponse response = service.moderate(
+                15L,
+                new ModerateJobReportRequest(JobReportStatus.DISMISSED, "not enough evidence"),
+                admin
+        );
+
+        assertEquals(JobReportStatus.DISMISSED, response.status());
+        verify(notificationService).notify(
+                eq(reporter),
+                eq(NotificationType.JOB_REPORT_DISMISSED),
+                eq("Zgłoszenie zostało rozpatrzone"),
+                any(String.class),
+                eq(job),
+                eq(null)
+        );
     }
 
     @Test

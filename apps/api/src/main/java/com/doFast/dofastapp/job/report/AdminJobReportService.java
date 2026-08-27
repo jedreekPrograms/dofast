@@ -6,6 +6,8 @@ import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.notification.enums.NotificationType;
+import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.enums.UserStatus;
@@ -31,17 +33,20 @@ public class AdminJobReportService {
     private final JobReportEnforcementRepository enforcementRepository;
     private final JobReportAccountEnforcementRepository accountEnforcementRepository;
     private final JobRepository jobRepository;
+    private final NotificationService notificationService;
 
     public AdminJobReportService(
             JobReportRepository repository,
             JobReportEnforcementRepository enforcementRepository,
             JobReportAccountEnforcementRepository accountEnforcementRepository,
-            JobRepository jobRepository
+            JobRepository jobRepository,
+            NotificationService notificationService
     ) {
         this.repository = repository;
         this.enforcementRepository = enforcementRepository;
         this.accountEnforcementRepository = accountEnforcementRepository;
         this.jobRepository = jobRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -79,6 +84,7 @@ public class AdminJobReportService {
 
         String note = normalize(request.note());
         report.moderate(request.status(), moderator, note);
+        notifyReporter(report);
         return AdminJobReportResponse.from(report);
     }
 
@@ -154,6 +160,20 @@ public class AdminJobReportService {
         );
         accountEnforcementRepository.save(enforcement);
         return JobReportAccountEnforcementResponse.from(enforcement);
+    }
+
+    private void notifyReporter(JobReport report) {
+        boolean reviewed = report.getStatus() == JobReportStatus.REVIEWED;
+        notificationService.notify(
+                report.getReporter(),
+                reviewed ? NotificationType.JOB_REPORT_REVIEWED : NotificationType.JOB_REPORT_DISMISSED,
+                reviewed ? "Zgłoszenie zostało potwierdzone" : "Zgłoszenie zostało rozpatrzone",
+                reviewed
+                        ? "Moderacja potwierdziła Twoje zgłoszenie. Ewentualne dalsze działania są obsługiwane oddzielnie."
+                        : "Moderacja przeanalizowała zgłoszenie i nie potwierdziła naruszenia na podstawie dostępnych informacji.",
+                report.getJob(),
+                null
+        );
     }
 
     private JobReport reviewedReport(Long id) {
