@@ -72,14 +72,14 @@ public class AdminJobReportService {
 
     @Transactional
     public AdminJobReportResponse moderate(Long id, ModerateJobReportRequest request, User moderator) {
-        if (request.status() == JobReportStatus.SUBMITTED) {
+        if (request.status() != JobReportStatus.REVIEWED && request.status() != JobReportStatus.DISMISSED) {
             throw new ConflictException("Moderation decision must be REVIEWED or DISMISSED");
         }
 
         JobReport report = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Zgłoszenie nie istnieje"));
         if (report.getStatus() != JobReportStatus.SUBMITTED) {
-            throw new ConflictException("Zgłoszenie zostało już rozpatrzone");
+            throw new ConflictException("Zgłoszenie zostało już rozpatrzone lub wycofane");
         }
 
         String note = normalize(request.note());

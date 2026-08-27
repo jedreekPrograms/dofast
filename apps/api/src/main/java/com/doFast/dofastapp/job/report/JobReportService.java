@@ -44,6 +44,19 @@ public class JobReportService {
         );
     }
 
+    @Transactional
+    public JobReportResponse withdraw(Long reportId, User reporter) {
+        JobReport report = reportRepository.findByIdAndReporter_Id(reportId, reporter.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Zgłoszenie nie istnieje"));
+
+        if (report.getStatus() != JobReportStatus.SUBMITTED) {
+            throw new ConflictException("Możesz wycofać tylko zgłoszenie oczekujące na moderację");
+        }
+
+        report.withdraw();
+        return JobReportResponse.from(reportRepository.save(report));
+    }
+
     @Transactional(readOnly = true)
     public List<JobReportResponse> mine(User reporter) {
         return reportRepository.findAllByReporter_IdOrderByCreatedAtDesc(reporter.getId())

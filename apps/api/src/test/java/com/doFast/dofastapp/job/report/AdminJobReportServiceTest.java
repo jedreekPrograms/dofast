@@ -245,6 +245,18 @@ class AdminJobReportServiceTest {
     }
 
     @Test
+    void rejectsModeratorSettingWithdrawnState() {
+        assertThrows(
+                ConflictException.class,
+                () -> service.moderate(
+                        15L,
+                        new ModerateJobReportRequest(JobReportStatus.WITHDRAWN, null),
+                        admin
+                )
+        );
+    }
+
+    @Test
     void rejectsSecondModerationDecision() {
         report.moderate(JobReportStatus.DISMISSED, admin, null);
         when(repository.findById(15L)).thenReturn(Optional.of(report));

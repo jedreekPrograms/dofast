@@ -58,6 +58,9 @@ public class JobReport {
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
 
+    @Column(name = "withdrawn_at")
+    private LocalDateTime withdrawnAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by_id")
     private User reviewedBy;
@@ -92,6 +95,11 @@ public class JobReport {
         this.reviewedAt = LocalDateTime.now();
     }
 
+    public void withdraw() {
+        this.status = JobReportStatus.WITHDRAWN;
+        this.withdrawnAt = LocalDateTime.now();
+    }
+
     public Long getId() { return id; }
     public Job getJob() { return job; }
     public User getReporter() { return reporter; }
@@ -100,6 +108,7 @@ public class JobReport {
     public JobReportStatus getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getReviewedAt() { return reviewedAt; }
+    public LocalDateTime getWithdrawnAt() { return withdrawnAt; }
     public User getReviewedBy() { return reviewedBy; }
     public String getModerationNote() { return moderationNote; }
     public long getVersion() { return version; }
