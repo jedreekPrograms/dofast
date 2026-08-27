@@ -8,6 +8,8 @@ Reports are private moderation data. They are never exposed through public disco
 
 `GET /job-reports/mine` returns only reports created by the authenticated user so the client can show submission history/status without exposing other reporters or moderation activity.
 
+The web discovery cards expose a `Zgłoś ofertę` action only to authenticated users viewing somebody else's job. The modal sends only the structured reason and optional note, warns users not to include sensitive payment data, and explains that a report enters moderation rather than automatically removing a listing or sanctioning an account. After a successful submission the current card is marked as reported; duplicate and own-job attempts remain enforced by the backend.
+
 ## Admin moderation
 
 Endpoints under `/admin/job-reports` are protected by the existing `ROLE_ADMIN` security boundary. `GET /admin/job-reports` returns a paginated oldest-first moderation queue and can be filtered by report status. The response contains moderation-relevant report metadata but no job location, route geometry or live-tracking data.
