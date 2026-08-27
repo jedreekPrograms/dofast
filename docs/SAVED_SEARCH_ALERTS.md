@@ -1,6 +1,6 @@
 # Saved search alerts
 
-Saved-search alerts are opt-in notifications for newly published jobs that match a user's saved public discovery filters.
+Saved-search alerts are opt-in notifications for newly published jobs that match a user's saved discovery filters.
 
 ## Publication path
 
@@ -12,16 +12,21 @@ If job creation rolls back, the outbox row rolls back with it. A committed job t
 
 `JobPublicationAlertWorker` polls pending publication events. `JobPublicationAlertProcessor` locks a bounded batch and evaluates only saved searches with `alerts_enabled = true`.
 
-The matcher uses the same public discovery dimensions stored by saved searches:
+The matcher supports:
 
 - case-insensitive query substring across title and description,
 - exact leaf category or its direct parent category,
 - minimum price,
-- maximum price.
+- maximum price,
+- an optional 1–100 km radius around a user-selected search point.
 
-A publisher never receives an alert for their own job.
+A publisher never receives an alert for their own job. Radius matching uses the job's origin/on-site point and rejects jobs without a location when a radius filter is configured.
 
-Exact coordinates, private address labels, route geometry and participant-only tracking data are deliberately excluded from matching and notification bodies.
+## Location privacy
+
+The saved-search center is private account data. It is stored only on the authenticated user's saved-search record as PostGIS `geography(Point,4326)` and is never copied into public discovery responses or notification bodies. Exact job addresses, private address labels, route geometry and participant-only live-tracking positions remain excluded from alert content.
+
+The authenticated saved-search API returns the center only to its owner so the preset can be edited. `V23__saved_search_radius.sql` enforces that center and radius are either both absent or both present, with the radius constrained to 1–100 km.
 
 ## Delivery idempotency
 
@@ -37,11 +42,6 @@ Matches create a durable `SAVED_SEARCH_MATCH` inbox notification linked to the p
 
 Saved searches default to alerts disabled. The saved-search page exposes an explicit per-preset toggle. Updating the toggle reuses the authenticated saved-search update endpoint and remains scoped to the current user.
 
-## Database migration
+## Database migrations
 
-Flyway `V22__saved_search_alert_outbox.sql` adds:
-
-- `saved_searches.alerts_enabled`, default `false`,
-- `job_publication_outbox`, one durable publication event per job,
-- a partial index for pending events,
-- `saved_search_alert_deliveries`, with a uniqueness constraint for idempotent delivery.
+Flyway `V22__saved_search_alert_outbox.sql` adds alert enablement, the durable publication outbox and idempotent delivery records. Flyway `V23__saved_search_radius.sql` adds the optional private center point, radius constraint and a GiST index for future database-side spatial matching optimizations.
