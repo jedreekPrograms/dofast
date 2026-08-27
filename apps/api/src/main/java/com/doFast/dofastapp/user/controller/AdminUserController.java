@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.controller;
 
 import com.doFast.dofastapp.user.dto.AdminOverviewResponse;
+import com.doFast.dofastapp.user.dto.AdminUserReactivationAuditResponse;
 import com.doFast.dofastapp.user.dto.AdminUserResponse;
 import com.doFast.dofastapp.user.dto.UpdateUserStatusRequest;
 import com.doFast.dofastapp.user.entity.User;
@@ -34,6 +35,11 @@ public class AdminUserController {
     @GetMapping("/users")
     public List<AdminUserResponse> users() {
         return adminUserService.getUsers();
+    }
+
+    @GetMapping("/users/{id}/reactivation-audits")
+    public List<AdminUserReactivationAuditResponse> reactivationAudits(@PathVariable Long id) {
+        return adminUserService.getReactivationHistory(id);
     }
 
     @PatchMapping("/users/{id}/status")

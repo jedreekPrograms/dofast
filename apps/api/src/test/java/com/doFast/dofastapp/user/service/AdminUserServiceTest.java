@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.service;
 
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.user.dto.AdminUserReactivationAuditResponse;
 import com.doFast.dofastapp.user.dto.AdminUserResponse;
 import com.doFast.dofastapp.user.entity.AdminUserReactivationAudit;
 import com.doFast.dofastapp.user.entity.User;
@@ -11,6 +12,7 @@ import com.doFast.dofastapp.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -65,6 +67,39 @@ class AdminUserServiceTest {
         verify(userRepository).save(target);
         verify(reactivationAuditRepository).save(any(AdminUserReactivationAudit.class));
         assertEquals(UserStatus.ACTIVE, response.status());
+    }
+
+    @Test
+    void reactivationHistoryIsReturnedNewestFirstWithActorIdentity() {
+        User target = mock(User.class);
+        User admin = mock(User.class);
+        AdminUserReactivationAudit audit = mock(AdminUserReactivationAudit.class);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 8, 27, 14, 30);
+
+        when(userRepository.existsById(8L)).thenReturn(true);
+        when(reactivationAuditRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(8L))
+                .thenReturn(List.of(audit));
+        when(audit.getId()).thenReturn(12L);
+        when(audit.getUser()).thenReturn(target);
+        when(audit.getAdmin()).thenReturn(admin);
+        when(audit.getPreviousStatus()).thenReturn(UserStatus.SUSPENDED);
+        when(audit.getNewStatus()).thenReturn(UserStatus.ACTIVE);
+        when(audit.getCreatedAt()).thenReturn(createdAt);
+        when(target.getId()).thenReturn(8L);
+        when(admin.getId()).thenReturn(2L);
+        when(admin.getEmail()).thenReturn("admin@example.com");
+        when(admin.getNickname()).thenReturn("moderator");
+
+        List<AdminUserReactivationAuditResponse> response = service.getReactivationHistory(8L);
+
+        assertEquals(1, response.size());
+        assertEquals(12L, response.getFirst().id());
+        assertEquals(8L, response.getFirst().userId());
+        assertEquals(2L, response.getFirst().adminId());
+        assertEquals("admin@example.com", response.getFirst().adminEmail());
+        assertEquals(UserStatus.SUSPENDED, response.getFirst().previousStatus());
+        assertEquals(UserStatus.ACTIVE, response.getFirst().newStatus());
+        assertEquals(createdAt, response.getFirst().createdAt());
     }
 
     @Test
