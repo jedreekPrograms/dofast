@@ -8,6 +8,7 @@ import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.provider.RouteProviderResult;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
@@ -43,6 +44,7 @@ class JobMultiStopRouteTest {
     @Mock private NotificationService notificationService;
     @Mock private RouteQuoteService routeQuoteService;
     @Mock private LiveTrackingService liveTrackingService;
+    @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
 
     private JobService service;
     private User owner;
@@ -56,7 +58,8 @@ class JobMultiStopRouteTest {
                 transactionService,
                 notificationService,
                 routeQuoteService,
-                liveTrackingService
+                liveTrackingService,
+                jobPublicationOutboxRepository
         );
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
