@@ -1,0 +1,122 @@
+.admin-reports-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.admin-reports-filter {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 13rem;
+  font-weight: 600;
+}
+
+.admin-reports-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 1.15fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.admin-reports-queue,
+.admin-report-detail {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-reports-queue__heading,
+.admin-report-detail__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-report-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.admin-report-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-color, #d8dee8);
+  border-radius: 0.9rem;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-report-row:hover,
+.admin-report-row--active {
+  border-color: var(--accent-color, #2563eb);
+}
+
+.admin-report-row > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.admin-report-row span,
+.admin-report-facts span,
+.admin-report-audit span {
+  color: var(--text-muted, #667085);
+  font-size: 0.9rem;
+}
+
+.admin-report-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.admin-report-facts > div,
+.admin-report-audit > div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.8rem;
+  border-radius: 0.8rem;
+  background: var(--surface-subtle, rgba(148, 163, 184, 0.08));
+}
+
+.admin-report-description,
+.admin-report-decision,
+.admin-report-audit {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.admin-report-description p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+.admin-report-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.admin-report-decision label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.admin-report-decision textarea {
+  resize: vertical;
+}
+
+@media (max-width: 900px) {
+  .admin-reports-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-facts {
+    grid-template-columns: 1fr;
+  }
+}
