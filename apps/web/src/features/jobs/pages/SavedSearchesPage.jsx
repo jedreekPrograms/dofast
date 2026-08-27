@@ -26,6 +26,9 @@ function toUpdatePayload(savedSearch, alertsEnabled) {
     categorySlug: savedSearch.categorySlug,
     minPrice: savedSearch.minPrice,
     maxPrice: savedSearch.maxPrice,
+    latitude: savedSearch.latitude,
+    longitude: savedSearch.longitude,
+    radiusKm: savedSearch.radiusKm,
     alertsEnabled,
   }
 }
@@ -148,6 +151,12 @@ function SavedSearchesPage() {
                           {minPrice && !maxPrice && `od ${minPrice}`}
                           {!minPrice && maxPrice && `do ${maxPrice}`}
                         </dd>
+                      </div>
+                    )}
+                    {savedSearch.radiusKm != null && (
+                      <div>
+                        <dt>Obszar alertu</dt>
+                        <dd>do {savedSearch.radiusKm} km od prywatnego punktu</dd>
                       </div>
                     )}
                     <div>
