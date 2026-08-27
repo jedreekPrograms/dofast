@@ -14,6 +14,7 @@ import JobExecutionPage from '../features/jobs/pages/JobExecutionPage.jsx'
 import JobsPage from '../features/jobs/pages/JobsPage.jsx'
 import MyJobsPage from '../features/jobs/pages/MyJobsPage.jsx'
 import SavedJobsPage from '../features/jobs/pages/SavedJobsPage.jsx'
+import SavedSearchesPage from '../features/jobs/pages/SavedSearchesPage.jsx'
 import NotificationsPage from '../features/notifications/pages/NotificationsPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import PublicProfilePage from '../features/reviews/pages/PublicProfilePage.jsx'
@@ -34,6 +35,7 @@ function App() {
           <Route element={<RequireAuth />}>
             <Route path="/my-jobs" element={<MyJobsPage />} />
             <Route path="/saved-jobs" element={<SavedJobsPage />} />
+            <Route path="/saved-searches" element={<SavedSearchesPage />} />
             <Route path="/jobs/new" element={<CreateJobPage />} />
             <Route path="/jobs/:jobId" element={<JobDetailsPage />} />
             <Route path="/jobs/:jobId/route" element={<JobExecutionPage />} />
