@@ -14,4 +14,6 @@ Endpoints under `/admin/job-reports` are protected by the existing `ROLE_ADMIN` 
 
 `PATCH /admin/job-reports/{id}` accepts a terminal `REVIEWED` or `DISMISSED` decision plus an optional moderation note. Every decision records the moderator and review timestamp. Reports cannot be moved back to `SUBMITTED` or resolved twice; an optimistic-lock version column protects concurrent moderation updates.
 
+The web admin panel exposes this workflow at `/admin/job-reports`. It defaults to pending reports, supports status filtering and pagination, shows only the moderation-safe response fields, and lets an administrator record one terminal decision with an optional internal note. The main admin dashboard also surfaces the current pending-report count.
+
 A moderation decision intentionally does not automatically delete a job, suspend a user or modify escrow. Enforcement actions should remain explicit, separately authorized operations with their own audit trail rather than side effects of a single report review.
