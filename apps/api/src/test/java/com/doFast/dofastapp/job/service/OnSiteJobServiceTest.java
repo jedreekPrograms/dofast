@@ -9,6 +9,7 @@ import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
 import com.doFast.dofastapp.location.service.GeoPointFactory;
@@ -45,6 +46,7 @@ class OnSiteJobServiceTest {
     @Mock private NotificationService notificationService;
     @Mock private RouteQuoteService routeQuoteService;
     @Mock private LiveTrackingService liveTrackingService;
+    @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
 
     private JobService service;
     private User owner;
@@ -58,7 +60,8 @@ class OnSiteJobServiceTest {
                 transactionService,
                 notificationService,
                 routeQuoteService,
-                liveTrackingService
+                liveTrackingService,
+                jobPublicationOutboxRepository
         );
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
