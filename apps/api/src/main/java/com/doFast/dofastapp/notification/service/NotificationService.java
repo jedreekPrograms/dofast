@@ -2,11 +2,13 @@ package com.doFast.dofastapp.notification.service;
 
 import com.doFast.dofastapp.chat.service.RealtimePublisher;
 import com.doFast.dofastapp.common.dto.PageResponse;
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.dispute.entity.Dispute;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.notification.dto.NotificationPreferencesResponse;
 import com.doFast.dofastapp.notification.dto.NotificationResponse;
+import com.doFast.dofastapp.notification.dto.UnreadNotificationCountResponse;
 import com.doFast.dofastapp.notification.entity.Notification;
 import com.doFast.dofastapp.notification.entity.NotificationPreference;
 import com.doFast.dofastapp.notification.enums.NotificationType;
@@ -55,10 +57,8 @@ public class NotificationService {
         return PageResponse.from(notifications, content);
     }
 
-    public com.doFast.dofastapp.notification.dto.UnreadNotificationCountResponse getUnreadCount(User user) {
-        return new com.doFast.dofastapp.notification.dto.UnreadNotificationCountResponse(
-                notificationRepository.countByRecipientAndReadAtIsNull(user)
-        );
+    public UnreadNotificationCountResponse getUnreadCount(User user) {
+        return new UnreadNotificationCountResponse(notificationRepository.countByRecipientAndReadAtIsNull(user));
     }
 
     public NotificationPreferencesResponse getPreferences(User user) {
@@ -71,7 +71,7 @@ public class NotificationService {
     @Transactional
     public NotificationPreferencesResponse updatePreferences(User user, Set<NotificationType> mutedTypes) {
         if (!MUTABLE_REALTIME_TYPES.containsAll(mutedTypes)) {
-            throw new IllegalArgumentException("Only non-critical realtime notification types can be muted");
+            throw new BusinessException("Można wyciszyć wyłącznie mniej krytyczne powiadomienia czasu rzeczywistego");
         }
         notificationPreferenceRepository.deleteAllByUser(user);
         notificationPreferenceRepository.saveAll(
