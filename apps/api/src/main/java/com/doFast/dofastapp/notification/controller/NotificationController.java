@@ -1,10 +1,13 @@
 package com.doFast.dofastapp.notification.controller;
 
 import com.doFast.dofastapp.common.dto.PageResponse;
+import com.doFast.dofastapp.notification.dto.NotificationPreferencesResponse;
 import com.doFast.dofastapp.notification.dto.NotificationResponse;
 import com.doFast.dofastapp.notification.dto.UnreadNotificationCountResponse;
+import com.doFast.dofastapp.notification.dto.UpdateNotificationPreferencesRequest;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.user.entity.User;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +16,8 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,6 +46,19 @@ public class NotificationController {
     @GetMapping("/unread-count")
     public UnreadNotificationCountResponse unreadCount(@AuthenticationPrincipal User user) {
         return notificationService.getUnreadCount(user);
+    }
+
+    @GetMapping("/preferences")
+    public NotificationPreferencesResponse preferences(@AuthenticationPrincipal User user) {
+        return notificationService.getPreferences(user);
+    }
+
+    @PutMapping("/preferences")
+    public NotificationPreferencesResponse updatePreferences(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody UpdateNotificationPreferencesRequest request
+    ) {
+        return notificationService.updatePreferences(user, request.mutedTypes());
     }
 
     @PostMapping("/{notificationId}/read")

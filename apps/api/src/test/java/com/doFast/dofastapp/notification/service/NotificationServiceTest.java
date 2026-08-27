@@ -1,9 +1,10 @@
 package com.doFast.dofastapp.notification.service;
 
 import com.doFast.dofastapp.chat.service.RealtimePublisher;
-import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.notification.entity.Notification;
 import com.doFast.dofastapp.notification.enums.NotificationType;
+import com.doFast.dofastapp.notification.repository.NotificationPreferenceRepository;
 import com.doFast.dofastapp.notification.repository.NotificationRepository;
 import com.doFast.dofastapp.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,10 +15,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,6 +29,7 @@ import static org.mockito.Mockito.when;
 class NotificationServiceTest {
 
     @Mock private NotificationRepository notificationRepository;
+    @Mock private NotificationPreferenceRepository notificationPreferenceRepository;
     @Mock private RealtimePublisher realtimePublisher;
 
     private NotificationService notificationService;
@@ -32,7 +37,11 @@ class NotificationServiceTest {
 
     @BeforeEach
     void setUp() {
-        notificationService = new NotificationService(notificationRepository, realtimePublisher);
+        notificationService = new NotificationService(
+                notificationRepository,
+                notificationPreferenceRepository,
+                realtimePublisher
+        );
         user = new User("user@example.com", "user");
         ReflectionTestUtils.setField(user, "id", 1L);
     }
@@ -46,17 +55,33 @@ class NotificationServiceTest {
         });
 
         var response = notificationService.notify(
-                user,
-                NotificationType.JOB_ACCEPTED,
-                "Zlecenie przyjęte",
-                "Wykonawca przyjął zlecenie",
-                null,
-                null
+                user, NotificationType.JOB_ACCEPTED, "Zlecenie przyjęte",
+                "Wykonawca przyjął zlecenie", null, null
         );
 
         assertEquals(10L, response.id());
         assertEquals(NotificationType.JOB_ACCEPTED, response.type());
         verify(realtimePublisher).publishNotification("user@example.com", response);
+    }
+
+    @Test
+    void mutedChatNotificationIsStillPersistedButNotPublishedRealtime() {
+        when(notificationPreferenceRepository.existsByUserAndNotificationType(user, NotificationType.CHAT_MESSAGE))
+                .thenReturn(true);
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.notify(user, NotificationType.CHAT_MESSAGE, "Nowa wiadomość", "Treść", null, null);
+
+        verify(notificationRepository).save(any(Notification.class));
+        verify(realtimePublisher, never()).publishNotification(any(), any());
+    }
+
+    @Test
+    void criticalNotificationTypesCannotBeMuted() {
+        assertThrows(
+                BusinessException.class,
+                () -> notificationService.updatePreferences(user, Set.of(NotificationType.JOB_ACCEPTED))
+        );
     }
 
     @Test
@@ -80,7 +105,6 @@ class NotificationServiceTest {
     @Test
     void unreadCountComesFromRecipientScopedQuery() {
         when(notificationRepository.countByRecipientAndReadAtIsNull(user)).thenReturn(7L);
-
         assertEquals(7L, notificationService.getUnreadCount(user).unreadCount());
     }
 }
