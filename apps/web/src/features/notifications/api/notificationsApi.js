@@ -13,6 +13,17 @@ export function getUnreadNotificationCount() {
   return apiRequest('/notifications/unread-count')
 }
 
+export function getNotificationPreferences() {
+  return apiRequest('/notifications/preferences')
+}
+
+export function updateNotificationPreferences(mutedTypes) {
+  return apiRequest('/notifications/preferences', {
+    method: 'PUT',
+    body: JSON.stringify({ mutedTypes }),
+  })
+}
+
 export function markNotificationRead(id) {
   return apiRequest(`/notifications/${id}/read`, { method: 'POST' })
 }
