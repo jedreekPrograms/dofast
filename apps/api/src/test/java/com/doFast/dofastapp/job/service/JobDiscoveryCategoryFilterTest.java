@@ -3,6 +3,7 @@ package com.doFast.dofastapp.job.service;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
 import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.service.NotificationService;
@@ -34,6 +35,7 @@ class JobDiscoveryCategoryFilterTest {
     @Mock private NotificationService notificationService;
     @Mock private RouteQuoteService routeQuoteService;
     @Mock private LiveTrackingService liveTrackingService;
+    @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
 
     private JobService jobService;
 
@@ -45,7 +47,8 @@ class JobDiscoveryCategoryFilterTest {
                 transactionService,
                 notificationService,
                 routeQuoteService,
-                liveTrackingService
+                liveTrackingService,
+                jobPublicationOutboxRepository
         );
     }
 
