@@ -63,7 +63,8 @@
 .admin-report-row span,
 .admin-report-facts span,
 .admin-report-audit span,
-.admin-report-enforcement-audit span {
+.admin-report-enforcement-audit span,
+.admin-report-account-enforcement-audit span {
   color: var(--text-muted, #667085);
   font-size: 0.9rem;
 }
@@ -76,7 +77,8 @@
 
 .admin-report-facts > div,
 .admin-report-audit > div,
-.admin-report-enforcement-audit > div {
+.admin-report-enforcement-audit > div,
+.admin-report-account-enforcement-audit > div {
   display: grid;
   gap: 0.2rem;
   padding: 0.8rem;
@@ -88,13 +90,16 @@
 .admin-report-decision,
 .admin-report-audit,
 .admin-report-enforcement,
-.admin-report-enforcement-audit {
+.admin-report-account-enforcement,
+.admin-report-enforcement-audit,
+.admin-report-account-enforcement-audit {
   display: grid;
   gap: 0.8rem;
 }
 
 .admin-report-description p,
-.admin-report-enforcement p {
+.admin-report-enforcement p,
+.admin-report-account-enforcement p {
   margin: 0;
   white-space: pre-wrap;
   line-height: 1.55;
@@ -107,26 +112,41 @@
 }
 
 .admin-report-decision label,
-.admin-report-enforcement label {
+.admin-report-enforcement label,
+.admin-report-account-enforcement label {
   display: grid;
   gap: 0.4rem;
   font-weight: 600;
 }
 
 .admin-report-decision textarea,
-.admin-report-enforcement textarea {
+.admin-report-enforcement textarea,
+.admin-report-account-enforcement textarea {
   resize: vertical;
 }
 
-.admin-report-enforcement {
+.admin-report-enforcement-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-report-enforcement,
+.admin-report-account-enforcement {
   padding: 1rem;
   border: 1px solid rgba(220, 38, 38, 0.28);
   border-radius: 0.9rem;
   background: rgba(220, 38, 38, 0.04);
 }
 
+.admin-report-account-enforcement {
+  border-color: rgba(185, 28, 28, 0.42);
+  background: rgba(127, 29, 29, 0.05);
+}
+
 .admin-report-enforcement h3,
-.admin-report-enforcement-audit h3 {
+.admin-report-account-enforcement h3,
+.admin-report-enforcement-audit h3,
+.admin-report-account-enforcement-audit h3 {
   margin: 0.2rem 0 0;
 }
 
