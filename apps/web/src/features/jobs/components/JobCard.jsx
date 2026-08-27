@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
+import ReportJobDialog from '../../jobReports/components/ReportJobDialog.jsx'
 import { acceptJob, removeSavedJob, saveJob } from '../api/jobsApi.js'
 
 const priceFormatter = new Intl.NumberFormat('pl-PL', {
@@ -19,12 +20,16 @@ function JobCard({ job, showSaveAction = true, initialSaved = false, onSavedChan
   const [accepting, setAccepting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(initialSaved)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reported, setReported] = useState(false)
   const [error, setError] = useState('')
   const canAccept = user && job.createdById !== user.id && job.status === 'OPEN'
   const canSave = showSaveAction && user && job.createdById !== user.id && job.status === 'OPEN'
+  const canReport = user && job.createdById !== user.id
 
   useEffect(() => {
     setSaved(initialSaved)
+    setReported(false)
   }, [initialSaved, job.id])
 
   async function handleAccept() {
@@ -60,6 +65,12 @@ function JobCard({ job, showSaveAction = true, initialSaved = false, onSavedChan
     } finally {
       setSaving(false)
     }
+  }
+
+  function handleReportSubmitted() {
+    setReported(true)
+    setReportOpen(false)
+    setError('')
   }
 
   const locationSummary = job.fulfillmentMode === 'ON_SITE'
@@ -103,6 +114,16 @@ function JobCard({ job, showSaveAction = true, initialSaved = false, onSavedChan
             {accepting ? 'Przyjmowanie…' : 'Przyjmij zlecenie'}
           </button>
         )}
+        {canReport && (
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={reported}
+            onClick={() => setReportOpen(true)}
+          >
+            {reported ? 'Zgłoszono' : 'Zgłoś ofertę'}
+          </button>
+        )}
         {!user && <Link className="button button--secondary" to="/login">Zaloguj się, aby przyjąć</Link>}
         {error && <span className="job-card__error">{error}</span>}
       </div>
@@ -112,6 +133,14 @@ function JobCard({ job, showSaveAction = true, initialSaved = false, onSavedChan
         <Link to={`/users/${job.createdById}`}>Profil zlecającego</Link>
         <span className="job-card__status">Otwarte</span>
       </footer>
+
+      {reportOpen && (
+        <ReportJobDialog
+          job={job}
+          onClose={() => setReportOpen(false)}
+          onSubmitted={handleReportSubmitted}
+        />
+      )}
     </article>
   )
 }
