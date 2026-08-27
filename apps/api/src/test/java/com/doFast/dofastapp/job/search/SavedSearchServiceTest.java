@@ -70,6 +70,7 @@ class SavedSearchServiceTest {
                         "  przeprowadzki  ",
                         new BigDecimal("100.00"),
                         new BigDecimal("500.00"),
+                        null, null, null,
                         true
                 ),
                 user
@@ -88,13 +89,54 @@ class SavedSearchServiceTest {
     }
 
     @Test
+    void createPersistsValidatedPrivateRadiusCriteria() {
+        when(savedSearchRepository.countByUser(user)).thenReturn(0L);
+        when(savedSearchRepository.existsByUserAndNameIgnoreCase(user, "Blisko mnie")).thenReturn(false);
+        when(savedSearchRepository.save(any(SavedSearch.class))).thenAnswer(invocation -> {
+            SavedSearch saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 32L);
+            ReflectionTestUtils.setField(saved, "createdAt", LocalDateTime.of(2026, 8, 27, 4, 0));
+            ReflectionTestUtils.setField(saved, "updatedAt", LocalDateTime.of(2026, 8, 27, 4, 0));
+            return saved;
+        });
+
+        SavedSearchResponse response = service.create(
+                new SavedSearchRequest("Blisko mnie", null, null, null, null, 51.1079, 17.0385, 15, true),
+                user
+        );
+
+        ArgumentCaptor<SavedSearch> captor = ArgumentCaptor.forClass(SavedSearch.class);
+        verify(savedSearchRepository).save(captor.capture());
+        SavedSearch saved = captor.getValue();
+        assertEquals(51.1079, saved.getCenterLocation().getY(), 0.000001);
+        assertEquals(17.0385, saved.getCenterLocation().getX(), 0.000001);
+        assertEquals(15000, saved.getRadiusMeters());
+        assertEquals(15, response.radiusKm());
+    }
+
+    @Test
+    void createRejectsPartialRadiusCriteria() {
+        when(savedSearchRepository.countByUser(user)).thenReturn(0L);
+        when(savedSearchRepository.existsByUserAndNameIgnoreCase(user, "Niepełna lokalizacja")).thenReturn(false);
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.create(
+                        new SavedSearchRequest("Niepełna lokalizacja", null, null, null, null, 51.1, null, 10, true),
+                        user
+                )
+        );
+        verify(savedSearchRepository, never()).save(any());
+    }
+
+    @Test
     void createRejectsEmptyPreset() {
         when(savedSearchRepository.countByUser(user)).thenReturn(0L);
         when(savedSearchRepository.existsByUserAndNameIgnoreCase(user, "Wszystko")).thenReturn(false);
 
         assertThrows(
                 BusinessException.class,
-                () -> service.create(new SavedSearchRequest("Wszystko", " ", " ", null, null, false), user)
+                () -> service.create(new SavedSearchRequest("Wszystko", " ", " ", null, null, null, null, null, false), user)
         );
         verify(savedSearchRepository, never()).save(any());
     }
@@ -113,6 +155,7 @@ class SavedSearchServiceTest {
                                 null,
                                 new BigDecimal("500.00"),
                                 new BigDecimal("100.00"),
+                                null, null, null,
                                 false
                         ),
                         user
@@ -127,7 +170,7 @@ class SavedSearchServiceTest {
 
         assertThrows(
                 ConflictException.class,
-                () -> service.create(new SavedSearchRequest("Paczki", "paczka", null, null, null, false), user)
+                () -> service.create(new SavedSearchRequest("Paczki", "paczka", null, null, null, null, null, null, false), user)
         );
         verify(savedSearchRepository, never()).save(any());
     }
@@ -138,7 +181,7 @@ class SavedSearchServiceTest {
 
         assertThrows(
                 ConflictException.class,
-                () -> service.create(new SavedSearchRequest("Jeszcze jedno", "zakupy", null, null, null, false), user)
+                () -> service.create(new SavedSearchRequest("Jeszcze jedno", "zakupy", null, null, null, null, null, null, false), user)
         );
         verify(savedSearchRepository, never()).save(any());
     }
@@ -154,12 +197,13 @@ class SavedSearchServiceTest {
         when(savedSearchRepository.existsByUserAndNameIgnoreCaseAndIdNot(user, "Zakupy", 9L)).thenReturn(false);
         when(savedSearchRepository.save(existing)).thenReturn(existing);
 
-        service.update(9L, new SavedSearchRequest("Zakupy", "market", null, null, null, false), user);
+        service.update(9L, new SavedSearchRequest("Zakupy", "market", null, null, null, null, null, null, false), user);
 
         assertEquals("market", existing.getQuery());
         assertNull(existing.getCategory());
         assertNull(existing.getMinPrice());
         assertNull(existing.getMaxPrice());
+        assertNull(existing.getCenterLocation());
         assertFalse(existing.isAlertsEnabled());
     }
 }
