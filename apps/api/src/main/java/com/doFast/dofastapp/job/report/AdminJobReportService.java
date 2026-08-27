@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 public class AdminJobReportService {
@@ -34,6 +35,12 @@ public class AdminJobReportService {
                 ? repository.findAllByOrderByCreatedAtAsc(pageable)
                 : repository.findAllByStatusOrderByCreatedAtAsc(status, pageable);
         return PageResponse.from(reports, reports.stream().map(AdminJobReportResponse::from).toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<JobReportEnforcementResponse> enforcement(Long reportId) {
+        return enforcementRepository.findByReport_Id(reportId)
+                .map(JobReportEnforcementResponse::from);
     }
 
     @Transactional
