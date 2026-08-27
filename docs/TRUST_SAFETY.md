@@ -22,4 +22,8 @@ A moderation decision does not itself delete a job, suspend a user or modify esc
 
 `POST /admin/job-reports/{id}/enforcement` currently supports `CANCEL_OPEN_JOB`. It is accepted only after the report has been confirmed as `REVIEWED`, only once per report, and only while the reported job is still `OPEN`. The action uses the normal job cancellation state transition, which removes the listing from open discovery without touching an active assignment, live tracking or escrow.
 
+`GET /admin/job-reports/{id}/enforcement` returns the persisted enforcement audit for the selected report, or `204 No Content` when no enforcement has been recorded. This lets the admin UI restore the durable enforcement state after a reload without duplicating actions or exposing that audit outside the admin boundary.
+
+The moderation panel presents enforcement only after a report is confirmed. It clearly separates the irreversible `CANCEL_OPEN_JOB` control from the review decision, warns that active jobs are protected, accepts an optional internal reason, and replaces the control with the persisted enforcement audit once the action succeeds.
+
 Every enforcement writes an immutable audit record containing the report, affected job, moderator, action, optional reason and timestamp. Active (`IN_PROGRESS` or later) jobs are deliberately rejected by this endpoint because sanctions that can affect participant funds or an active service require a separate, stronger workflow.
