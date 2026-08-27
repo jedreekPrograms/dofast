@@ -13,6 +13,8 @@ import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.job.search.alert.JobPublicationOutbox;
+import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.provider.RouteProviderResult;
@@ -55,6 +57,7 @@ class JobServiceTest {
     @Mock private NotificationService notificationService;
     @Mock private RouteQuoteService routeQuoteService;
     @Mock private LiveTrackingService liveTrackingService;
+    @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
 
     private JobService jobService;
     private User owner;
@@ -62,13 +65,21 @@ class JobServiceTest {
 
     @BeforeEach
     void setUp() {
-        jobService = new JobService(jobRepository, jobCategoryRepository, transactionService, notificationService, routeQuoteService, liveTrackingService);
+        jobService = new JobService(
+                jobRepository,
+                jobCategoryRepository,
+                transactionService,
+                notificationService,
+                routeQuoteService,
+                liveTrackingService,
+                jobPublicationOutboxRepository
+        );
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
     }
 
     @Test
-    void createJobUsesServerRouteQuoteAssignsLeafCategoryAndLocksFunds() {
+    void createJobUsesServerRouteQuoteAssignsLeafCategoryLocksFundsAndEnqueuesPublication() {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         UUID quoteId = UUID.randomUUID();
         when(routeQuoteService.consume(quoteId, owner)).thenReturn(routeQuote(quoteId, owner));
@@ -88,6 +99,7 @@ class JobServiceTest {
         assertEquals(4200, response.routeDistanceMeters());
         assertEquals(720, response.routeDurationSeconds());
         verify(transactionService).holdMoney(any(Job.class));
+        verify(jobPublicationOutboxRepository).save(any(JobPublicationOutbox.class));
     }
 
     @Test
