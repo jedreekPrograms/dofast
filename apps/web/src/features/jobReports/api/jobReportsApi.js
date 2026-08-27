@@ -7,6 +7,12 @@ export function reportJob(jobId, payload) {
   })
 }
 
+export function withdrawJobReport(reportId) {
+  return apiRequest(`/job-reports/${reportId}/withdraw`, {
+    method: 'POST',
+  })
+}
+
 export function getMyJobReports(options = {}) {
   return apiRequest('/job-reports/mine', options)
 }
