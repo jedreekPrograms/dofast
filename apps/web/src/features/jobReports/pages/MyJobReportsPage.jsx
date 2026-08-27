@@ -102,6 +102,12 @@ function MyJobReportsPage() {
                     <dt>Wysłano</dt>
                     <dd>{new Date(report.createdAt).toLocaleString('pl-PL')}</dd>
                   </div>
+                  {report.reviewedAt && (
+                    <div>
+                      <dt>Rozstrzygnięto</dt>
+                      <dd>{new Date(report.reviewedAt).toLocaleString('pl-PL')}</dd>
+                    </div>
+                  )}
                 </dl>
 
                 {report.details && (

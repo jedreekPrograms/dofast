@@ -8,7 +8,8 @@ public record JobReportResponse(
         JobReportReason reason,
         String details,
         JobReportStatus status,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        LocalDateTime reviewedAt
 ) {
     static JobReportResponse from(JobReport report) {
         return new JobReportResponse(
@@ -17,7 +18,8 @@ public record JobReportResponse(
                 report.getReason(),
                 report.getDetails(),
                 report.getStatus(),
-                report.getCreatedAt()
+                report.getCreatedAt(),
+                report.getReviewedAt()
         );
     }
 }
