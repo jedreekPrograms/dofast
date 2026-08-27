@@ -13,6 +13,9 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import org.locationtech.jts.geom.Point;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -44,6 +47,13 @@ public class SavedSearch {
 
     @Column(name = "max_price", precision = 12, scale = 2)
     private BigDecimal maxPrice;
+
+    @JdbcTypeCode(SqlTypes.GEOGRAPHY)
+    @Column(name = "center_location", columnDefinition = "geography(Point,4326)")
+    private Point centerLocation;
+
+    @Column(name = "radius_meters")
+    private Integer radiusMeters;
 
     @Column(name = "alerts_enabled", nullable = false)
     private boolean alertsEnabled;
@@ -79,6 +89,8 @@ public class SavedSearch {
     public JobCategory getCategory() { return category; }
     public BigDecimal getMinPrice() { return minPrice; }
     public BigDecimal getMaxPrice() { return maxPrice; }
+    public Point getCenterLocation() { return centerLocation; }
+    public Integer getRadiusMeters() { return radiusMeters; }
     public boolean isAlertsEnabled() { return alertsEnabled; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
@@ -88,5 +100,7 @@ public class SavedSearch {
     public void setCategory(JobCategory category) { this.category = category; }
     public void setMinPrice(BigDecimal minPrice) { this.minPrice = minPrice; }
     public void setMaxPrice(BigDecimal maxPrice) { this.maxPrice = maxPrice; }
+    public void setCenterLocation(Point centerLocation) { this.centerLocation = centerLocation; }
+    public void setRadiusMeters(Integer radiusMeters) { this.radiusMeters = radiusMeters; }
     public void setAlertsEnabled(boolean alertsEnabled) { this.alertsEnabled = alertsEnabled; }
 }
