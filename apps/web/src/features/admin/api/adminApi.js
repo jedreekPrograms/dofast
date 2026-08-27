@@ -75,6 +75,10 @@ export function getAdminJobReportEnforcement(reportId) {
   return apiRequest(`/admin/job-reports/${reportId}/enforcement`)
 }
 
+export function getAdminJobReportAccountEnforcement(reportId) {
+  return apiRequest(`/admin/job-reports/${reportId}/account-enforcement`)
+}
+
 export function moderateAdminJobReport(reportId, status, note = '') {
   return apiRequest(`/admin/job-reports/${reportId}`, {
     method: 'PATCH',
@@ -87,6 +91,16 @@ export function enforceAdminJobReport(reportId, reason = '') {
     method: 'POST',
     body: JSON.stringify({
       action: 'CANCEL_OPEN_JOB',
+      reason: reason.trim() || null,
+    }),
+  })
+}
+
+export function enforceAdminJobReportAccount(reportId, reason = '') {
+  return apiRequest(`/admin/job-reports/${reportId}/account-enforcement`, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'SUSPEND_JOB_OWNER',
       reason: reason.trim() || null,
     }),
   })
