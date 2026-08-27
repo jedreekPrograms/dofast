@@ -11,6 +11,9 @@ public record SavedSearchResponse(
         String categoryName,
         BigDecimal minPrice,
         BigDecimal maxPrice,
+        Double latitude,
+        Double longitude,
+        Integer radiusKm,
         boolean alertsEnabled,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
