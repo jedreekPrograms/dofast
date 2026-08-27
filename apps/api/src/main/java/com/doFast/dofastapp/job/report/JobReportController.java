@@ -34,6 +34,14 @@ public class JobReportController {
         return service.report(jobId, request, user);
     }
 
+    @PostMapping("/{reportId}/withdraw")
+    public JobReportResponse withdraw(
+            @PathVariable Long reportId,
+            @AuthenticationPrincipal User user
+    ) {
+        return service.withdraw(reportId, user);
+    }
+
     @GetMapping("/mine")
     public List<JobReportResponse> mine(@AuthenticationPrincipal User user) {
         return service.mine(user);
