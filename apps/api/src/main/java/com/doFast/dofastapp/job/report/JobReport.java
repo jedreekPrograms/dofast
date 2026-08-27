@@ -15,6 +15,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 
 import java.time.LocalDateTime;
 
@@ -57,6 +58,17 @@ public class JobReport {
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_id")
+    private User reviewedBy;
+
+    @Column(name = "moderation_note", length = 1000)
+    private String moderationNote;
+
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     protected JobReport() {}
 
     public JobReport(Job job, User reporter, JobReportReason reason, String details) {
@@ -73,6 +85,13 @@ public class JobReport {
         }
     }
 
+    public void moderate(JobReportStatus status, User moderator, String note) {
+        this.status = status;
+        this.reviewedBy = moderator;
+        this.moderationNote = note;
+        this.reviewedAt = LocalDateTime.now();
+    }
+
     public Long getId() { return id; }
     public Job getJob() { return job; }
     public User getReporter() { return reporter; }
@@ -81,4 +100,7 @@ public class JobReport {
     public JobReportStatus getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getReviewedAt() { return reviewedAt; }
+    public User getReviewedBy() { return reviewedBy; }
+    public String getModerationNote() { return moderationNote; }
+    public long getVersion() { return version; }
 }
