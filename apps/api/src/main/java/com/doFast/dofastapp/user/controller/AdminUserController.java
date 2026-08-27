@@ -48,6 +48,6 @@ public class AdminUserController {
             @AuthenticationPrincipal User admin,
             @RequestBody @Valid UpdateUserStatusRequest request
     ) {
-        return adminUserService.updateStatus(id, request.status(), admin);
+        return adminUserService.updateStatus(id, request.status(), request.reason(), admin);
     }
 }
