@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  getAdminJobReports,
   getAdminOverview,
   getAdminUsers,
   getAdminVerifications,
@@ -18,6 +19,7 @@ function AdminPage() {
   const [overview, setOverview] = useState(null)
   const [finance, setFinance] = useState(null)
   const [pendingVerifications, setPendingVerifications] = useState(0)
+  const [pendingReports, setPendingReports] = useState(0)
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -30,13 +32,15 @@ function AdminPage() {
       getAdminUsers(),
       getFinanceReconciliation(),
       getAdminVerifications({ status: 'PENDING', page: 0, size: 1 }),
+      getAdminJobReports({ status: 'SUBMITTED', page: 0, size: 1 }),
     ])
-      .then(([overviewData, usersData, financeData, verificationData]) => {
+      .then(([overviewData, usersData, financeData, verificationData, reportData]) => {
         if (!active) return
         setOverview(overviewData)
         setUsers(usersData)
         setFinance(financeData)
         setPendingVerifications(verificationData.totalElements)
+        setPendingReports(reportData.totalElements)
       })
       .catch((requestError) => {
         if (active) setError(requestError.message || 'Nie udało się pobrać panelu administratora.')
@@ -72,9 +76,10 @@ function AdminPage() {
         <div>
           <span className="eyebrow">Administracja</span>
           <h1>Panel administratora</h1>
-          <p>Zarządzaj kontami, kontroluj spory, weryfikacje i spójność rozliczeń.</p>
+          <p>Zarządzaj kontami, kontroluj spory, zgłoszenia, weryfikacje i spójność rozliczeń.</p>
         </div>
         <div className="admin-heading-actions">
+          <Link className="button button--secondary" to="/admin/job-reports">Zgłoszenia</Link>
           <Link className="button button--secondary" to="/admin/verifications">Weryfikacje</Link>
           <Link className="button button--primary" to="/admin/disputes">Spory</Link>
         </div>
@@ -90,6 +95,9 @@ function AdminPage() {
           <div className="panel"><span>Zawieszone</span><strong>{overview.suspendedUsers}</strong></div>
           <Link className="panel admin-stat-link" to="/admin/verifications">
             <span>Weryfikacje oczekujące</span><strong>{pendingVerifications}</strong>
+          </Link>
+          <Link className="panel admin-stat-link" to="/admin/job-reports">
+            <span>Zgłoszenia oczekujące</span><strong>{pendingReports}</strong>
           </Link>
         </section>
       )}
