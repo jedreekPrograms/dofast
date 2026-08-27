@@ -51,20 +51,19 @@ function AdminPage() {
     return () => { active = false }
   }, [])
 
-  async function toggleStatus(user) {
-    const nextStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE'
+  async function reactivateUser(user) {
     setBusyId(user.id)
     setError('')
     try {
-      const updated = await updateAdminUserStatus(user.id, nextStatus)
+      const updated = await updateAdminUserStatus(user.id, 'ACTIVE')
       setUsers((current) => current.map((item) => item.id === updated.id ? updated : item))
       setOverview((current) => current ? {
         ...current,
-        activeUsers: current.activeUsers + (nextStatus === 'ACTIVE' ? 1 : -1),
-        suspendedUsers: current.suspendedUsers + (nextStatus === 'SUSPENDED' ? 1 : -1),
+        activeUsers: current.activeUsers + 1,
+        suspendedUsers: current.suspendedUsers - 1,
       } : current)
     } catch (requestError) {
-      setError(requestError.message || 'Nie udało się zmienić statusu konta.')
+      setError(requestError.message || 'Nie udało się ponownie aktywować konta.')
     } finally {
       setBusyId(null)
     }
@@ -125,7 +124,10 @@ function AdminPage() {
       {!loading && (
         <section className="panel admin-users">
           <div className="admin-users__heading">
-            <div><h2>Konta użytkowników</h2><p>Rola ADMIN nie może być nadawana przez publiczną rejestrację.</p></div>
+            <div>
+              <h2>Konta użytkowników</h2>
+              <p>Zawieszenia wykonuj z kolejki potwierdzonych zgłoszeń, aby zachować audyt i zabezpieczenia aktywnych zleceń.</p>
+            </div>
           </div>
           <div className="admin-users__list">
             {users.map((user) => (
@@ -136,9 +138,13 @@ function AdminPage() {
                 </div>
                 <span className="admin-user__role">{user.role}</span>
                 <span className={`status-pill ${user.status === 'SUSPENDED' ? 'status-pill--cancelled' : 'status-pill--done'}`}>{user.status}</span>
-                <button className="button button--secondary" type="button" disabled={user.role === 'ADMIN' || busyId === user.id} onClick={() => toggleStatus(user)}>
-                  {user.status === 'ACTIVE' ? 'Zawieś' : 'Aktywuj'}
-                </button>
+                {user.status === 'SUSPENDED' && user.role !== 'ADMIN' ? (
+                  <button className="button button--secondary" type="button" disabled={busyId === user.id} onClick={() => reactivateUser(user)}>
+                    {busyId === user.id ? 'Aktywowanie…' : 'Aktywuj'}
+                  </button>
+                ) : (
+                  <span className="admin-user__role">{user.role === 'ADMIN' ? 'Chronione konto' : 'Sankcja przez zgłoszenie'}</span>
+                )}
               </div>
             ))}
           </div>
