@@ -11,15 +11,8 @@ import {
 } from '../api/adminApi.js'
 import './AdminPage.css'
 
-const moneyFormatter = new Intl.NumberFormat('pl-PL', {
-  style: 'currency',
-  currency: 'PLN',
-})
-
-const dateTimeFormatter = new Intl.DateTimeFormat('pl-PL', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
+const moneyFormatter = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' })
+const dateTimeFormatter = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
 
 function AdminPage() {
   const [overview, setOverview] = useState(null)
@@ -33,201 +26,107 @@ function AdminPage() {
   const [expandedAuditUserId, setExpandedAuditUserId] = useState(null)
   const [auditLoadingId, setAuditLoadingId] = useState(null)
   const [auditsByUserId, setAuditsByUserId] = useState({})
+  const [reactivationReasons, setReactivationReasons] = useState({})
 
   useEffect(() => {
     let active = true
     Promise.all([
-      getAdminOverview(),
-      getAdminUsers(),
-      getFinanceReconciliation(),
+      getAdminOverview(), getAdminUsers(), getFinanceReconciliation(),
       getAdminVerifications({ status: 'PENDING', page: 0, size: 1 }),
       getAdminJobReports({ status: 'SUBMITTED', page: 0, size: 1 }),
     ])
       .then(([overviewData, usersData, financeData, verificationData, reportData]) => {
         if (!active) return
-        setOverview(overviewData)
-        setUsers(usersData)
-        setFinance(financeData)
-        setPendingVerifications(verificationData.totalElements)
-        setPendingReports(reportData.totalElements)
+        setOverview(overviewData); setUsers(usersData); setFinance(financeData)
+        setPendingVerifications(verificationData.totalElements); setPendingReports(reportData.totalElements)
       })
-      .catch((requestError) => {
-        if (active) setError(requestError.message || 'Nie udało się pobrać panelu administratora.')
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
+      .catch((requestError) => { if (active) setError(requestError.message || 'Nie udało się pobrać panelu administratora.') })
+      .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
 
   async function loadReactivationAudits(userId, { force = false } = {}) {
     if (!force && Object.prototype.hasOwnProperty.call(auditsByUserId, userId)) return
-
-    setAuditLoadingId(userId)
-    setError('')
+    setAuditLoadingId(userId); setError('')
     try {
       const audits = await getAdminUserReactivationAudits(userId)
       setAuditsByUserId((current) => ({ ...current, [userId]: audits }))
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się pobrać historii reaktywacji.')
-    } finally {
-      setAuditLoadingId(null)
-    }
+    } finally { setAuditLoadingId(null) }
   }
 
   async function toggleReactivationAudits(userId) {
-    if (expandedAuditUserId === userId) {
-      setExpandedAuditUserId(null)
-      return
-    }
-    setExpandedAuditUserId(userId)
-    await loadReactivationAudits(userId)
+    if (expandedAuditUserId === userId) { setExpandedAuditUserId(null); return }
+    setExpandedAuditUserId(userId); await loadReactivationAudits(userId)
   }
 
   async function reactivateUser(user) {
-    setBusyId(user.id)
-    setError('')
+    const reason = (reactivationReasons[user.id] || '').trim()
+    if (!reason) { setError('Podaj powód reaktywacji konta. Zostanie zapisany w audycie.'); return }
+    setBusyId(user.id); setError('')
     try {
-      const updated = await updateAdminUserStatus(user.id, 'ACTIVE')
+      const updated = await updateAdminUserStatus(user.id, 'ACTIVE', reason)
       setUsers((current) => current.map((item) => item.id === updated.id ? updated : item))
-      setOverview((current) => current ? {
-        ...current,
-        activeUsers: current.activeUsers + 1,
-        suspendedUsers: current.suspendedUsers - 1,
-      } : current)
+      setOverview((current) => current ? { ...current, activeUsers: current.activeUsers + 1, suspendedUsers: current.suspendedUsers - 1 } : current)
+      setReactivationReasons((current) => ({ ...current, [user.id]: '' }))
       setExpandedAuditUserId(user.id)
       await loadReactivationAudits(user.id, { force: true })
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się ponownie aktywować konta.')
-    } finally {
-      setBusyId(null)
-    }
+    } finally { setBusyId(null) }
   }
 
   return (
     <main className="admin-page">
       <header className="page-heading page-heading--row">
-        <div>
-          <span className="eyebrow">Administracja</span>
-          <h1>Panel administratora</h1>
-          <p>Zarządzaj kontami, kontroluj spory, zgłoszenia, weryfikacje i spójność rozliczeń.</p>
-        </div>
+        <div><span className="eyebrow">Administracja</span><h1>Panel administratora</h1><p>Zarządzaj kontami, kontroluj spory, zgłoszenia, weryfikacje i spójność rozliczeń.</p></div>
         <div className="admin-heading-actions">
           <Link className="button button--secondary" to="/admin/job-reports">Zgłoszenia</Link>
           <Link className="button button--secondary" to="/admin/verifications">Weryfikacje</Link>
           <Link className="button button--primary" to="/admin/disputes">Spory</Link>
         </div>
       </header>
-
       {loading && <div className="page-state">Pobieranie danych administracyjnych…</div>}
       {error && <div className="form-message form-message--error">{error}</div>}
-
-      {!loading && overview && (
-        <section className="admin-stats">
-          <div className="panel"><span>Użytkownicy</span><strong>{overview.totalUsers}</strong></div>
-          <div className="panel"><span>Aktywne konta</span><strong>{overview.activeUsers}</strong></div>
-          <div className="panel"><span>Zawieszone</span><strong>{overview.suspendedUsers}</strong></div>
-          <Link className="panel admin-stat-link" to="/admin/verifications">
-            <span>Weryfikacje oczekujące</span><strong>{pendingVerifications}</strong>
-          </Link>
-          <Link className="panel admin-stat-link" to="/admin/job-reports">
-            <span>Zgłoszenia oczekujące</span><strong>{pendingReports}</strong>
-          </Link>
-        </section>
-      )}
-
-      {!loading && finance && (
-        <section className={`panel finance-health ${finance.healthy ? 'finance-health--ok' : 'finance-health--alert'}`}>
-          <div className="finance-health__heading">
-            <div>
-              <span className="eyebrow">Reconciliation</span>
-              <h2>{finance.healthy ? 'Rozliczenia są spójne' : 'Wykryto niespójność rozliczeń'}</h2>
+      {!loading && overview && <section className="admin-stats">
+        <div className="panel"><span>Użytkownicy</span><strong>{overview.totalUsers}</strong></div>
+        <div className="panel"><span>Aktywne konta</span><strong>{overview.activeUsers}</strong></div>
+        <div className="panel"><span>Zawieszone</span><strong>{overview.suspendedUsers}</strong></div>
+        <Link className="panel admin-stat-link" to="/admin/verifications"><span>Weryfikacje oczekujące</span><strong>{pendingVerifications}</strong></Link>
+        <Link className="panel admin-stat-link" to="/admin/job-reports"><span>Zgłoszenia oczekujące</span><strong>{pendingReports}</strong></Link>
+      </section>}
+      {!loading && finance && <section className={`panel finance-health ${finance.healthy ? 'finance-health--ok' : 'finance-health--alert'}`}>
+        <div className="finance-health__heading"><div><span className="eyebrow">Reconciliation</span><h2>{finance.healthy ? 'Rozliczenia są spójne' : 'Wykryto niespójność rozliczeń'}</h2></div><strong className="finance-health__badge">{finance.healthy ? 'OK' : 'WYMAGA UWAGI'}</strong></div>
+        <div className="finance-health__grid">
+          <div><span>Saldo vs ledger</span><strong>{finance.walletBalanceMismatches}</strong></div><div><span>Błędy sekwencji ledgera</span><strong>{finance.ledgerSequenceMismatches}</strong></div><div><span>Stripe vs ledger</span><strong>{finance.stripeLedgerMismatches}</strong></div><div><span>Aktywne escrow</span><strong>{finance.heldEscrowCount}</strong></div><div><span>Środki w escrow</span><strong>{moneyFormatter.format(Number(finance.heldEscrowAmount))}</strong></div><div><span>Rozliczone wpłaty Stripe</span><strong>{finance.processedStripePayments}</strong></div>
+        </div>
+      </section>}
+      {!loading && <section className="panel admin-users">
+        <div className="admin-users__heading"><div><h2>Konta użytkowników</h2><p>Zawieszenia wykonuj z kolejki potwierdzonych zgłoszeń. Reaktywacja wymaga uzasadnienia zapisywanego w trwałym audycie.</p></div></div>
+        <div className="admin-users__list">{users.map((user) => {
+          const audits = auditsByUserId[user.id] || []; const isExpanded = expandedAuditUserId === user.id
+          return <div className="admin-user-entry" key={user.id}>
+            <div className="admin-user">
+              <div><strong>{user.nickname}</strong><span>{user.email}</span></div><span className="admin-user__role">{user.role}</span><span className={`status-pill ${user.status === 'SUSPENDED' ? 'status-pill--cancelled' : 'status-pill--done'}`}>{user.status}</span>
+              <div className="admin-user__actions">
+                {user.status === 'SUSPENDED' && user.role !== 'ADMIN' ? <>
+                  <textarea rows="2" maxLength="1000" value={reactivationReasons[user.id] || ''} onChange={(event) => setReactivationReasons((current) => ({ ...current, [user.id]: event.target.value }))} placeholder="Powód reaktywacji (wymagany, trafia do audytu)" aria-label={`Powód reaktywacji konta ${user.email}`} />
+                  <button className="button button--secondary" type="button" disabled={busyId === user.id || !(reactivationReasons[user.id] || '').trim()} onClick={() => reactivateUser(user)}>{busyId === user.id ? 'Aktywowanie…' : 'Aktywuj'}</button>
+                </> : <span className="admin-user__role">{user.role === 'ADMIN' ? 'Chronione konto' : 'Sankcja przez zgłoszenie'}</span>}
+                {user.role !== 'ADMIN' && <button className="button button--ghost" type="button" disabled={auditLoadingId === user.id} onClick={() => toggleReactivationAudits(user.id)}>{auditLoadingId === user.id ? 'Pobieranie…' : isExpanded ? 'Ukryj historię' : 'Historia reaktywacji'}</button>}
+              </div>
             </div>
-            <strong className="finance-health__badge">{finance.healthy ? 'OK' : 'WYMAGA UWAGI'}</strong>
+            {isExpanded && user.role !== 'ADMIN' && <div className="admin-user-audits">
+              <div className="admin-user-audits__heading"><strong>Audyt reaktywacji</strong><span>Najnowsze zdarzenia są pokazane jako pierwsze.</span></div>
+              {auditLoadingId === user.id ? <div className="page-state">Pobieranie historii…</div> : audits.length === 0 ? <p className="admin-user-audits__empty">To konto nie było jeszcze reaktywowane przez administratora.</p> : <div className="admin-user-audits__list">{audits.map((audit) => <div className="admin-user-audit" key={audit.id}>
+                <div><strong>{audit.previousStatus} → {audit.newStatus}</strong><span>{dateTimeFormatter.format(new Date(audit.createdAt))}</span><small>Powód: {audit.reason}</small></div>
+                <div><span>Administrator</span><strong>{audit.adminNickname || audit.adminEmail}</strong><small>{audit.adminEmail}</small></div>
+              </div>)}</div>}
+            </div>}
           </div>
-          <div className="finance-health__grid">
-            <div><span>Saldo vs ledger</span><strong>{finance.walletBalanceMismatches}</strong></div>
-            <div><span>Błędy sekwencji ledgera</span><strong>{finance.ledgerSequenceMismatches}</strong></div>
-            <div><span>Stripe vs ledger</span><strong>{finance.stripeLedgerMismatches}</strong></div>
-            <div><span>Aktywne escrow</span><strong>{finance.heldEscrowCount}</strong></div>
-            <div><span>Środki w escrow</span><strong>{moneyFormatter.format(Number(finance.heldEscrowAmount))}</strong></div>
-            <div><span>Rozliczone wpłaty Stripe</span><strong>{finance.processedStripePayments}</strong></div>
-          </div>
-        </section>
-      )}
-
-      {!loading && (
-        <section className="panel admin-users">
-          <div className="admin-users__heading">
-            <div>
-              <h2>Konta użytkowników</h2>
-              <p>Zawieszenia wykonuj z kolejki potwierdzonych zgłoszeń. Reaktywacje są audytowane i ich historię można sprawdzić poniżej.</p>
-            </div>
-          </div>
-          <div className="admin-users__list">
-            {users.map((user) => {
-              const audits = auditsByUserId[user.id] || []
-              const isExpanded = expandedAuditUserId === user.id
-              return (
-                <div className="admin-user-entry" key={user.id}>
-                  <div className="admin-user">
-                    <div>
-                      <strong>{user.nickname}</strong>
-                      <span>{user.email}</span>
-                    </div>
-                    <span className="admin-user__role">{user.role}</span>
-                    <span className={`status-pill ${user.status === 'SUSPENDED' ? 'status-pill--cancelled' : 'status-pill--done'}`}>{user.status}</span>
-                    <div className="admin-user__actions">
-                      {user.status === 'SUSPENDED' && user.role !== 'ADMIN' ? (
-                        <button className="button button--secondary" type="button" disabled={busyId === user.id} onClick={() => reactivateUser(user)}>
-                          {busyId === user.id ? 'Aktywowanie…' : 'Aktywuj'}
-                        </button>
-                      ) : (
-                        <span className="admin-user__role">{user.role === 'ADMIN' ? 'Chronione konto' : 'Sankcja przez zgłoszenie'}</span>
-                      )}
-                      {user.role !== 'ADMIN' && (
-                        <button className="button button--ghost" type="button" disabled={auditLoadingId === user.id} onClick={() => toggleReactivationAudits(user.id)}>
-                          {auditLoadingId === user.id ? 'Pobieranie…' : isExpanded ? 'Ukryj historię' : 'Historia reaktywacji'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isExpanded && user.role !== 'ADMIN' && (
-                    <div className="admin-user-audits">
-                      <div className="admin-user-audits__heading">
-                        <strong>Audyt reaktywacji</strong>
-                        <span>Najnowsze zdarzenia są pokazane jako pierwsze.</span>
-                      </div>
-                      {auditLoadingId === user.id ? (
-                        <div className="page-state">Pobieranie historii…</div>
-                      ) : audits.length === 0 ? (
-                        <p className="admin-user-audits__empty">To konto nie było jeszcze reaktywowane przez administratora.</p>
-                      ) : (
-                        <div className="admin-user-audits__list">
-                          {audits.map((audit) => (
-                            <div className="admin-user-audit" key={audit.id}>
-                              <div>
-                                <strong>{audit.previousStatus} → {audit.newStatus}</strong>
-                                <span>{dateTimeFormatter.format(new Date(audit.createdAt))}</span>
-                              </div>
-                              <div>
-                                <span>Administrator</span>
-                                <strong>{audit.adminNickname || audit.adminEmail}</strong>
-                                <small>{audit.adminEmail}</small>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
+        })}</div>
+      </section>}
     </main>
   )
 }

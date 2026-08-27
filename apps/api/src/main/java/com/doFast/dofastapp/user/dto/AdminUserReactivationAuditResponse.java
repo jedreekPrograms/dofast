@@ -12,6 +12,7 @@ public record AdminUserReactivationAuditResponse(
         String adminNickname,
         UserStatus previousStatus,
         UserStatus newStatus,
+        String reason,
         LocalDateTime createdAt
 ) {
 }
