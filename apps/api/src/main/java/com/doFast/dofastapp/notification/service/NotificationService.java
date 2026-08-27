@@ -73,7 +73,7 @@ public class NotificationService {
         if (!MUTABLE_REALTIME_TYPES.containsAll(mutedTypes)) {
             throw new BusinessException("Można wyciszyć wyłącznie mniej krytyczne powiadomienia czasu rzeczywistego");
         }
-        notificationPreferenceRepository.deleteAllByUser(user);
+        notificationPreferenceRepository.deleteAllForUser(user);
         notificationPreferenceRepository.saveAll(
                 mutedTypes.stream().map(type -> new NotificationPreference(user, type)).toList()
         );
