@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { deleteSavedSearch, getSavedSearches, updateSavedSearch } from '../api/jobsApi.js'
+import {
+  deleteSavedSearch,
+  getSavedSearches,
+  getSavedSearchResults,
+  updateSavedSearch,
+} from '../api/jobsApi.js'
 import './JobsPage.css'
 import './SavedSearchesPage.css'
 
@@ -17,6 +22,11 @@ function buildSearchUrl(savedSearch) {
 function formatPrice(value) {
   if (value == null) return null
   return `${Number(value).toLocaleString('pl-PL', { maximumFractionDigits: 2 })} zł`
+}
+
+function formatDistance(meters) {
+  if (meters == null) return null
+  return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(meters < 10_000 ? 1 : 0)} km`
 }
 
 function toUpdatePayload(savedSearch, alertsEnabled) {
@@ -39,6 +49,9 @@ function SavedSearchesPage() {
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
   const [alertUpdatingId, setAlertUpdatingId] = useState(null)
+  const [resultsLoadingId, setResultsLoadingId] = useState(null)
+  const [resultsById, setResultsById] = useState({})
+  const [resultsErrorById, setResultsErrorById] = useState({})
 
   const loadSavedSearches = useCallback(async (signal) => {
     setLoading(true)
@@ -66,6 +79,11 @@ function SavedSearchesPage() {
     try {
       await deleteSavedSearch(id)
       setSavedSearches((current) => current.filter((savedSearch) => savedSearch.id !== id))
+      setResultsById((current) => {
+        const next = { ...current }
+        delete next[id]
+        return next
+      })
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się usunąć zapisanego wyszukiwania.')
     } finally {
@@ -86,6 +104,32 @@ function SavedSearchesPage() {
       setError(requestError.message || 'Nie udało się zmienić ustawienia alertu.')
     } finally {
       setAlertUpdatingId(null)
+    }
+  }
+
+  async function handleRadiusResults(savedSearch) {
+    const id = savedSearch.id
+    if (resultsById[id]) {
+      setResultsById((current) => {
+        const next = { ...current }
+        delete next[id]
+        return next
+      })
+      return
+    }
+
+    setResultsLoadingId(id)
+    setResultsErrorById((current) => ({ ...current, [id]: '' }))
+    try {
+      const results = await getSavedSearchResults(id)
+      setResultsById((current) => ({ ...current, [id]: results }))
+    } catch (requestError) {
+      setResultsErrorById((current) => ({
+        ...current,
+        [id]: requestError.message || 'Nie udało się pobrać wyników z prywatnego obszaru.',
+      }))
+    } finally {
+      setResultsLoadingId(null)
     }
   }
 
@@ -123,6 +167,8 @@ function SavedSearchesPage() {
             {savedSearches.map((savedSearch) => {
               const minPrice = formatPrice(savedSearch.minPrice)
               const maxPrice = formatPrice(savedSearch.maxPrice)
+              const radiusResults = resultsById[savedSearch.id]
+              const radiusResultsError = resultsErrorById[savedSearch.id]
               return (
                 <article className="saved-search-card" key={savedSearch.id}>
                   <div>
@@ -166,9 +212,24 @@ function SavedSearchesPage() {
                   </dl>
 
                   <div className="saved-search-card__actions">
-                    <Link className="button button--primary" to={buildSearchUrl(savedSearch)}>
-                      Pokaż wyniki
-                    </Link>
+                    {savedSearch.radiusKm == null ? (
+                      <Link className="button button--primary" to={buildSearchUrl(savedSearch)}>
+                        Pokaż wyniki
+                      </Link>
+                    ) : (
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        disabled={resultsLoadingId === savedSearch.id}
+                        onClick={() => handleRadiusResults(savedSearch)}
+                      >
+                        {resultsLoadingId === savedSearch.id
+                          ? 'Pobieranie…'
+                          : radiusResults
+                            ? 'Ukryj wyniki'
+                            : 'Pokaż wyniki'}
+                      </button>
+                    )}
                     <button
                       className="button button--secondary"
                       type="button"
@@ -190,6 +251,31 @@ function SavedSearchesPage() {
                       {deletingId === savedSearch.id ? 'Usuwanie…' : 'Usuń'}
                     </button>
                   </div>
+
+                  {radiusResultsError && (
+                    <div className="jobs-state jobs-state--error">{radiusResultsError}</div>
+                  )}
+                  {radiusResults && (
+                    <div className="saved-search-card__private-results">
+                      <p>{radiusResults.length} najbliższych pasujących zleceń</p>
+                      {radiusResults.length === 0 && <div className="jobs-state">Brak aktualnych zleceń w tym obszarze.</div>}
+                      {radiusResults.map((job) => (
+                        <div className="saved-search-result" key={job.id}>
+                          <div>
+                            <strong>{job.title}</strong>
+                            <span>{job.locationLabel || 'Lokalizacja do ustalenia'}</span>
+                          </div>
+                          <div>
+                            <strong>{formatPrice(job.price)}</strong>
+                            <span>{formatDistance(job.distanceMeters)}</span>
+                          </div>
+                          <Link className="button button--secondary" to={`/jobs/${job.id}`}>
+                            Szczegóły
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </article>
               )
             })}

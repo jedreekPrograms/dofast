@@ -56,6 +56,11 @@ export function getSavedSearches(options = {}) {
   return apiRequest('/saved-searches', options)
 }
 
+export function getSavedSearchResults(id, limit = 50, options = {}) {
+  const params = new URLSearchParams({ limit: String(limit) })
+  return apiRequest(`/saved-searches/${id}/results?${params.toString()}`, options)
+}
+
 export function createSavedSearch(payload) {
   return apiRequest('/saved-searches', {
     method: 'POST',
