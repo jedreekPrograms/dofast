@@ -52,18 +52,21 @@ The batch status endpoint accepts only positive ids, requires at least one id an
 
 ## Saved searches
 
-Authenticated users can persist reusable public discovery filters:
+Authenticated users can persist reusable discovery filters:
 
 - `GET /saved-searches` returns the current user's presets ordered by most recently updated;
+- `GET /saved-searches/{id}/results?limit=50` returns private radius-filtered results for one owned preset;
 - `POST /saved-searches` creates a preset;
 - `PUT /saved-searches/{id}` replaces one owned preset;
 - `DELETE /saved-searches/{id}` removes one owned preset.
 
-A preset stores a user-visible name plus the same public filters already supported by `GET /jobs`: optional text query, optional active category slug and optional minimum/maximum reward. At least one discovery filter is required, price ranges are validated server-side and each account is limited to 20 presets. Names are unique per user case-insensitively, which prevents visually duplicated entries such as `Paczki` and `paczki`.
+A preset stores a user-visible name plus optional text query, category, minimum/maximum reward and an optional private center point with radius. At least one criterion is required, price ranges are validated server-side and each account is limited to 20 presets. Names are unique per user case-insensitively, which prevents visually duplicated entries such as `Paczki` and `paczki`.
 
-Saved searches never store exact coordinates, private address labels, route geometry or participant-only data. Category values are persisted as foreign keys to the existing catalog and returned as stable public slugs/names. Deleting a user cascades their presets; deleting a category clears only the optional category filter instead of deleting the user's entire preset.
+Radius presets keep their center coordinates behind the authenticated saved-search boundary. The private results endpoint resolves the owned preset server-side and applies text, category, price and PostGIS `ST_DWithin` filtering in one database query. Only normal public job fields plus the computed distance are returned; the stored center coordinates, exact addresses, route geometry and participant-only tracking data are never part of the response. Results are ordered by distance and capped to 1–100 entries.
 
-`V21__saved_searches.sql` adds the persistence table, non-negative/range checks, a case-insensitive per-user name uniqueness index and an index for deterministic user-list ordering. Automatic notifications for newly published matching jobs are intentionally a separate follow-up slice so publication is not coupled to an unbounded synchronous user scan; the persisted preset model is the stable input for that delivery pipeline.
+Saved searches never expose exact coordinates, private address labels, route geometry or participant-only data in shareable discovery URLs or notification bodies. Category values are persisted as foreign keys to the existing catalog and returned as stable public slugs/names. Deleting a user cascades their presets; deleting a category clears only the optional category filter instead of deleting the user's entire preset.
+
+`V21__saved_searches.sql` adds the persistence table and `V23__saved_search_radius.sql` adds the private PostGIS center/radius criteria. The private results read reuses those columns and existing job/category/PostGIS indexes, so no additional schema migration is required.
 
 ## Response envelope
 
@@ -92,7 +95,7 @@ Text search is case-insensitive and matches:
 - public origin/location label;
 - public destination label, when present.
 
-Only `OPEN` jobs participate in public discovery.
+Only `OPEN` jobs participate in public discovery and private saved-search result reads.
 
 Exact coordinates and private location labels are never part of discovery responses. Nearby category filtering is executed server-side against persisted category relationships and does not alter the existing PostGIS privacy boundary.
 
@@ -122,6 +125,8 @@ The API rejects:
 - overlong text/category queries;
 - malformed category slugs;
 - invalid latitude/longitude, radius or nearby limit;
+- private saved-search result limits outside `1..100`;
+- private saved-search result reads for a preset without radius criteria;
 - empty, oversized or non-positive saved-job batch ids;
 - attempts to bookmark the caller's own job;
 - saved-search presets with no discovery criteria;
@@ -148,7 +153,7 @@ Authenticated users can save an open job directly from its discovery card. The `
 
 For an authenticated discovery page, the web client hydrates bookmark state with one `GET /saved-jobs/status` batch request after loading the public jobs. Each card therefore reflects the persisted state after reload without issuing N+1 status requests. The same card can toggle the bookmark with the idempotent `PUT`/`DELETE` endpoints and updates the page-level saved-id set immediately after a successful mutation. A bookmark-status lookup failure does not hide otherwise public discovery results.
 
-Applied discovery filters are mirrored into readable URL query parameters. Authenticated users can save the currently applied public filters under a custom name and manage them at the protected `/saved-searches` route. Selecting `Pokaż wyniki` rebuilds the normal public discovery URL, so presets remain compatible with reloads, browser navigation and link sharing without exposing private location data.
+Applied public discovery filters are mirrored into readable URL query parameters. Presets without a private radius still rebuild that shareable public URL. For radius presets, `/saved-searches` loads results through the authenticated private-results endpoint and renders them inline, so the saved center never has to be copied into the browser URL. The UI shows only the configured radius description, public job labels and computed distance from the private center.
 
 Carlisle is an internal technical milestone name and is intentionally not exposed in customer-facing UI text.
 
@@ -158,7 +163,7 @@ CI verifies:
 
 - Maven unit tests, including paginated and nearby category-filter routing and normalization;
 - saved-job idempotency, open-job eligibility, own-job rejection, batched status lookup, stale-bookmark cleanup and pagination behavior;
-- saved-search normalization, required criteria, price-range validation, duplicate-name rejection, per-user limits and updates;
+- saved-search normalization, required criteria, price-range validation, duplicate-name rejection, per-user limits, radius validation and private result routing;
 - frontend lint/build and production dependency audit;
 - PostGIS and `pg_trgm` availability;
 - Flyway migrations;
