@@ -16,10 +16,10 @@ export function getFinanceReconciliation() {
   return apiRequest('/admin/finance/reconciliation')
 }
 
-export function updateAdminUserStatus(userId, status) {
+export function updateAdminUserStatus(userId, status, reason) {
   return apiRequest(`/admin/users/${userId}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, reason }),
   })
 }
 
