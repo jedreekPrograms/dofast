@@ -16,6 +16,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,6 +63,28 @@ class AdminJobReportServiceTest {
         assertEquals(9L, response.reviewedById());
         assertEquals("confirmed by evidence", response.moderationNote());
         assertNotNull(response.reviewedAt());
+    }
+
+    @Test
+    void returnsPersistedEnforcementAudit() {
+        report.moderate(JobReportStatus.REVIEWED, admin, "confirmed");
+        JobReportEnforcement enforcement = new JobReportEnforcement(
+                report,
+                job,
+                admin,
+                JobReportEnforcementAction.CANCEL_OPEN_JOB,
+                "policy violation"
+        );
+        ReflectionTestUtils.setField(enforcement, "id", 21L);
+        ReflectionTestUtils.setField(enforcement, "createdAt", java.time.LocalDateTime.now());
+        when(enforcementRepository.findByReport_Id(15L)).thenReturn(Optional.of(enforcement));
+
+        Optional<JobReportEnforcementResponse> response = service.enforcement(15L);
+
+        assertTrue(response.isPresent());
+        assertEquals(21L, response.orElseThrow().id());
+        assertEquals(JobReportEnforcementAction.CANCEL_OPEN_JOB, response.orElseThrow().action());
+        assertEquals("policy violation", response.orElseThrow().reason());
     }
 
     @Test

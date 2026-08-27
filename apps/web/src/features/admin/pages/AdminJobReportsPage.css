@@ -62,7 +62,8 @@
 
 .admin-report-row span,
 .admin-report-facts span,
-.admin-report-audit span {
+.admin-report-audit span,
+.admin-report-enforcement-audit span {
   color: var(--text-muted, #667085);
   font-size: 0.9rem;
 }
@@ -74,7 +75,8 @@
 }
 
 .admin-report-facts > div,
-.admin-report-audit > div {
+.admin-report-audit > div,
+.admin-report-enforcement-audit > div {
   display: grid;
   gap: 0.2rem;
   padding: 0.8rem;
@@ -84,12 +86,15 @@
 
 .admin-report-description,
 .admin-report-decision,
-.admin-report-audit {
+.admin-report-audit,
+.admin-report-enforcement,
+.admin-report-enforcement-audit {
   display: grid;
   gap: 0.8rem;
 }
 
-.admin-report-description p {
+.admin-report-description p,
+.admin-report-enforcement p {
   margin: 0;
   white-space: pre-wrap;
   line-height: 1.55;
@@ -101,14 +106,28 @@
   gap: 0.7rem;
 }
 
-.admin-report-decision label {
+.admin-report-decision label,
+.admin-report-enforcement label {
   display: grid;
   gap: 0.4rem;
   font-weight: 600;
 }
 
-.admin-report-decision textarea {
+.admin-report-decision textarea,
+.admin-report-enforcement textarea {
   resize: vertical;
+}
+
+.admin-report-enforcement {
+  padding: 1rem;
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  border-radius: 0.9rem;
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.admin-report-enforcement h3,
+.admin-report-enforcement-audit h3 {
+  margin: 0.2rem 0 0;
 }
 
 @media (max-width: 900px) {

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAdminJobReports, moderateAdminJobReport } from '../api/adminApi.js'
+import {
+  enforceAdminJobReport,
+  getAdminJobReportEnforcement,
+  getAdminJobReports,
+  moderateAdminJobReport,
+} from '../api/adminApi.js'
 import './AdminJobReportsPage.css'
 
 const STATUS_LABELS = {
@@ -24,8 +29,11 @@ function AdminJobReportsPage() {
   const [selected, setSelected] = useState(null)
   const [decision, setDecision] = useState('REVIEWED')
   const [note, setNote] = useState('')
+  const [enforcement, setEnforcement] = useState(null)
+  const [enforcementReason, setEnforcementReason] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [enforcementLoading, setEnforcementLoading] = useState(false)
   const [error, setError] = useState('')
 
   const loadQueue = useCallback(async () => {
@@ -49,11 +57,27 @@ function AdminJobReportsPage() {
     loadQueue()
   }, [loadQueue])
 
+  async function loadEnforcement(reportId) {
+    setEnforcementLoading(true)
+    try {
+      const audit = await getAdminJobReportEnforcement(reportId)
+      setEnforcement(audit)
+    } catch (requestError) {
+      setEnforcement(null)
+      setError(requestError.message || 'Nie udało się pobrać historii egzekucji.')
+    } finally {
+      setEnforcementLoading(false)
+    }
+  }
+
   function selectReport(report) {
     setSelected(report)
     setDecision('REVIEWED')
     setNote('')
+    setEnforcement(null)
+    setEnforcementReason('')
     setError('')
+    loadEnforcement(report.id)
   }
 
   async function submitDecision(event) {
@@ -66,9 +90,28 @@ function AdminJobReportsPage() {
       const updated = await moderateAdminJobReport(selected.id, decision, note)
       setSelected(updated)
       setNote('')
+      await loadEnforcement(updated.id)
       await loadQueue()
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się zapisać decyzji moderacyjnej.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitEnforcement(event) {
+    event.preventDefault()
+    if (!selected || selected.status !== 'REVIEWED' || enforcement) return
+
+    setBusy(true)
+    setError('')
+    try {
+      const audit = await enforceAdminJobReport(selected.id, enforcementReason)
+      setEnforcement(audit)
+      setEnforcementReason('')
+      await loadQueue()
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się wykonać akcji egzekucyjnej.')
     } finally {
       setBusy(false)
     }
@@ -84,7 +127,7 @@ function AdminJobReportsPage() {
         </div>
         <label className="admin-reports-filter">
           Status
-          <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); setSelected(null) }}>
+          <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); setSelected(null); setEnforcement(null) }}>
             <option value="">Wszystkie</option>
             {Object.entries(STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -193,10 +236,48 @@ function AdminJobReportsPage() {
 
               {selected.status !== 'SUBMITTED' && (
                 <div className="admin-report-audit">
-                  <h3>Audit trail</h3>
+                  <h3>Audit trail moderacji</h3>
                   <div><span>Rozpatrzono</span><strong>{selected.reviewedAt ? new Date(selected.reviewedAt).toLocaleString('pl-PL') : '—'}</strong></div>
                   <div><span>Moderator</span><strong>{selected.reviewedById ? `#${selected.reviewedById}` : '—'}</strong></div>
                   <div><span>Notatka</span><strong>{selected.moderationNote || 'Brak notatki'}</strong></div>
+                </div>
+              )}
+
+              {enforcementLoading && <div className="page-state">Pobieranie historii egzekucji…</div>}
+
+              {!enforcementLoading && selected.status === 'REVIEWED' && !enforcement && (
+                <form className="admin-report-enforcement" onSubmit={submitEnforcement}>
+                  <div>
+                    <span className="eyebrow">Osobna akcja egzekucyjna</span>
+                    <h3>Anuluj otwarte zlecenie</h3>
+                    <p>
+                      Ta operacja jest nieodwracalna z poziomu moderacji. Backend wykona ją tylko wtedy,
+                      gdy zlecenie nadal ma status OPEN; aktywne zlecenia i escrow są chronione.
+                    </p>
+                  </div>
+                  <label>
+                    Powód egzekucji
+                    <textarea
+                      rows={4}
+                      maxLength={1000}
+                      value={enforcementReason}
+                      onChange={(event) => setEnforcementReason(event.target.value)}
+                      placeholder="Opcjonalny wewnętrzny powód zapisany w audycie."
+                    />
+                  </label>
+                  <button className="button button--danger" type="submit" disabled={busy}>
+                    {busy ? 'Wykonywanie…' : 'Anuluj otwarte zlecenie'}
+                  </button>
+                </form>
+              )}
+
+              {enforcement && (
+                <div className="admin-report-enforcement-audit">
+                  <h3>Audit trail egzekucji</h3>
+                  <div><span>Akcja</span><strong>Anulowanie otwartego zlecenia</strong></div>
+                  <div><span>Wykonano</span><strong>{new Date(enforcement.createdAt).toLocaleString('pl-PL')}</strong></div>
+                  <div><span>Moderator</span><strong>#{enforcement.moderatorId}</strong></div>
+                  <div><span>Powód</span><strong>{enforcement.reason || 'Brak dodatkowego powodu'}</strong></div>
                 </div>
               )}
             </>

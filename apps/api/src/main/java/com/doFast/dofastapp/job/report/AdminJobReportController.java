@@ -5,6 +5,7 @@ import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,6 +35,13 @@ public class AdminJobReportController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
         return service.list(status, page, size);
+    }
+
+    @GetMapping("/{id}/enforcement")
+    public ResponseEntity<JobReportEnforcementResponse> enforcement(@PathVariable Long id) {
+        return service.enforcement(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @PatchMapping("/{id}")
