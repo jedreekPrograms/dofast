@@ -10,6 +10,7 @@ import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.repository.AdminUserReactivationAuditRepository;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,7 +39,7 @@ class AdminUserServiceTest {
 
         assertThrows(
                 ForbiddenOperationException.class,
-                () -> service.updateStatus(7L, UserStatus.SUSPENDED, admin)
+                () -> service.updateStatus(7L, UserStatus.SUSPENDED, "review complete", admin)
         );
 
         verify(target, never()).setStatus(UserStatus.SUSPENDED);
@@ -47,7 +48,7 @@ class AdminUserServiceTest {
     }
 
     @Test
-    void suspendedUserCanBeReactivatedAndAudited() {
+    void suspendedUserCanBeReactivatedAndAuditedWithNormalizedReason() {
         User target = mock(User.class);
         User admin = mock(User.class);
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 27, 12, 0);
@@ -61,16 +62,24 @@ class AdminUserServiceTest {
         when(target.getCreatedAt()).thenReturn(createdAt);
         when(userRepository.save(target)).thenAnswer(invocation -> target);
 
-        AdminUserResponse response = service.updateStatus(8L, UserStatus.ACTIVE, admin);
+        AdminUserResponse response = service.updateStatus(
+                8L,
+                UserStatus.ACTIVE,
+                "  Zakończono ręczną weryfikację konta  ",
+                admin
+        );
 
         verify(target).setStatus(UserStatus.ACTIVE);
         verify(userRepository).save(target);
-        verify(reactivationAuditRepository).save(any(AdminUserReactivationAudit.class));
+        ArgumentCaptor<AdminUserReactivationAudit> auditCaptor =
+                ArgumentCaptor.forClass(AdminUserReactivationAudit.class);
+        verify(reactivationAuditRepository).save(auditCaptor.capture());
+        assertEquals("Zakończono ręczną weryfikację konta", auditCaptor.getValue().getReason());
         assertEquals(UserStatus.ACTIVE, response.status());
     }
 
     @Test
-    void reactivationHistoryIsReturnedNewestFirstWithActorIdentity() {
+    void reactivationHistoryIsReturnedNewestFirstWithActorIdentityAndReason() {
         User target = mock(User.class);
         User admin = mock(User.class);
         AdminUserReactivationAudit audit = mock(AdminUserReactivationAudit.class);
@@ -84,6 +93,7 @@ class AdminUserServiceTest {
         when(audit.getAdmin()).thenReturn(admin);
         when(audit.getPreviousStatus()).thenReturn(UserStatus.SUSPENDED);
         when(audit.getNewStatus()).thenReturn(UserStatus.ACTIVE);
+        when(audit.getReason()).thenReturn("Manual review passed");
         when(audit.getCreatedAt()).thenReturn(createdAt);
         when(target.getId()).thenReturn(8L);
         when(admin.getId()).thenReturn(2L);
@@ -99,6 +109,7 @@ class AdminUserServiceTest {
         assertEquals("admin@example.com", response.getFirst().adminEmail());
         assertEquals(UserStatus.SUSPENDED, response.getFirst().previousStatus());
         assertEquals(UserStatus.ACTIVE, response.getFirst().newStatus());
+        assertEquals("Manual review passed", response.getFirst().reason());
         assertEquals(createdAt, response.getFirst().createdAt());
     }
 
@@ -112,7 +123,7 @@ class AdminUserServiceTest {
 
         assertThrows(
                 ForbiddenOperationException.class,
-                () -> service.updateStatus(9L, UserStatus.ACTIVE, admin)
+                () -> service.updateStatus(9L, UserStatus.ACTIVE, "not needed", admin)
         );
 
         verify(userRepository, never()).save(target);
