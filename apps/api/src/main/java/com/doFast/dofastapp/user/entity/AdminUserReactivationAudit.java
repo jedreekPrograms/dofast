@@ -40,16 +40,20 @@ public class AdminUserReactivationAudit {
     @Column(name = "new_status", nullable = false, length = 20)
     private UserStatus newStatus;
 
+    @Column(name = "reason", nullable = false, length = 1000)
+    private String reason;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     protected AdminUserReactivationAudit() {}
 
-    public AdminUserReactivationAudit(User user, User admin) {
+    public AdminUserReactivationAudit(User user, User admin, String reason) {
         this.user = user;
         this.admin = admin;
         this.previousStatus = UserStatus.SUSPENDED;
         this.newStatus = UserStatus.ACTIVE;
+        this.reason = reason;
     }
 
     @PrePersist
@@ -62,5 +66,6 @@ public class AdminUserReactivationAudit {
     public User getAdmin() { return admin; }
     public UserStatus getPreviousStatus() { return previousStatus; }
     public UserStatus getNewStatus() { return newStatus; }
+    public String getReason() { return reason; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }
