@@ -4,9 +4,11 @@ import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.user.dto.AdminOverviewResponse;
 import com.doFast.dofastapp.user.dto.AdminUserResponse;
+import com.doFast.dofastapp.user.entity.AdminUserReactivationAudit;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.enums.UserStatus;
+import com.doFast.dofastapp.user.repository.AdminUserReactivationAuditRepository;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -19,9 +21,14 @@ import java.util.List;
 public class AdminUserService {
 
     private final UserRepository userRepository;
+    private final AdminUserReactivationAuditRepository reactivationAuditRepository;
 
-    public AdminUserService(UserRepository userRepository) {
+    public AdminUserService(
+            UserRepository userRepository,
+            AdminUserReactivationAuditRepository reactivationAuditRepository
+    ) {
         this.userRepository = userRepository;
+        this.reactivationAuditRepository = reactivationAuditRepository;
     }
 
     public AdminOverviewResponse getOverview() {
@@ -57,7 +64,9 @@ public class AdminUserService {
         }
 
         target.setStatus(UserStatus.ACTIVE);
-        return toResponse(userRepository.save(target));
+        User saved = userRepository.save(target);
+        reactivationAuditRepository.save(new AdminUserReactivationAudit(saved, currentAdmin));
+        return toResponse(saved);
     }
 
     private AdminUserResponse toResponse(User user) {
