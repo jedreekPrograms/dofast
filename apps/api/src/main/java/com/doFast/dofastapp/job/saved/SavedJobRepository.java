@@ -18,6 +18,17 @@ public interface SavedJobRepository extends JpaRepository<SavedJob, Long> {
     @Modifying
     long deleteByUser_IdAndJob_Id(Long userId, Long jobId);
 
+    @Modifying
+    @Query("""
+            delete from SavedJob saved
+            where saved.user.id = :userId
+              and saved.job.status <> :status
+            """)
+    int deleteByUserAndJobStatusNot(
+            @Param("userId") Long userId,
+            @Param("status") JobStatus status
+    );
+
     @Query("""
             select saved.job.id
             from SavedJob saved

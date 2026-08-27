@@ -46,7 +46,7 @@ Authenticated users can keep a private shortlist of currently available jobs:
 - `GET /saved-jobs/status?jobIds=1,2,3` returns the subset of up to 50 requested job ids saved by the current user in one query, avoiding per-card N+1 status requests;
 - `GET /saved-jobs?page=0&size=20` returns a stable paginated list of the user's saved jobs.
 
-Bookmarks are private to the authenticated user and are protected by a database uniqueness constraint on `(user_id, job_id)`. The list endpoint deliberately excludes jobs that are no longer `OPEN`, so stale accepted/completed/cancelled offers do not remain actionable in the shortlist. Foreign keys cascade bookmark cleanup when a user or job is deleted.
+Bookmarks are private to the authenticated user and are protected by a database uniqueness constraint on `(user_id, job_id)`. Users cannot bookmark their own jobs: the server rejects that operation even if a custom client bypasses the web UI. The shortlist is actionable-only; before each paginated read the service removes that user's bookmarks whose jobs are no longer `OPEN`, then returns the remaining open jobs. This prevents accepted, completed or cancelled offers from accumulating as stale rows over time. Foreign keys still cascade bookmark cleanup when a user or job is deleted.
 
 The batch status endpoint accepts only positive ids, requires at least one id and caps the request at 50 ids. Duplicate requested ids are collapsed before the repository lookup. It returns only saved ids, so the web client can initialize bookmark state for an entire discovery page with one authenticated request.
 
@@ -94,7 +94,7 @@ The indexes are designed around the actual public search workload instead of ind
 
 Category filtering uses the existing indexed foreign key from jobs to the category catalog and the unique category slug constraint introduced with the catalog; no additional Flyway migration is required for this slice. Nearby filtering combines those relationships with the existing PostGIS radius predicate.
 
-`V19__saved_jobs.sql` adds the bookmark table, a user/creation-time index for ordered shortlist reads, a job lookup index and the uniqueness constraint that keeps repeated save requests idempotent at the persistence boundary.
+`V19__saved_jobs.sql` adds the bookmark table, a user/creation-time index for ordered shortlist reads, a job lookup index and the uniqueness constraint that keeps repeated save requests idempotent at the persistence boundary. Saved-job lifecycle cleanup uses the existing indexed user/job relationships and requires no schema migration.
 
 ## Validation
 
@@ -108,9 +108,10 @@ The API rejects:
 - malformed category slugs;
 - invalid latitude/longitude, radius or nearby limit;
 - empty, oversized or non-positive saved-job batch ids;
+- attempts to bookmark the caller's own job;
 - malformed request-parameter types.
 
-Validation errors use the shared API error contract and return HTTP 400.
+Validation errors use the shared API error contract. Input validation returns HTTP 400, while forbidden ownership operations use the shared forbidden-operation response.
 
 ## Web client
 
@@ -136,7 +137,7 @@ Carlisle is an internal technical milestone name and is intentionally not expose
 CI verifies:
 
 - Maven unit tests, including paginated and nearby category-filter routing and normalization;
-- saved-job idempotency, open-job eligibility, batched status lookup and pagination behavior;
+- saved-job idempotency, open-job eligibility, own-job rejection, batched status lookup, stale-bookmark cleanup and pagination behavior;
 - frontend lint/build and production dependency audit;
 - PostGIS and `pg_trgm` availability;
 - Flyway migrations;

@@ -3,6 +3,7 @@ package com.doFast.dofastapp.job.saved;
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
@@ -42,6 +43,9 @@ public class SavedJobService {
         if (job.getStatus() != JobStatus.OPEN) {
             throw new ConflictException("Możesz zapisać tylko dostępne zlecenie");
         }
+        if (sameUser(job.getCreatedBy(), user)) {
+            throw new ForbiddenOperationException("Nie możesz zapisać własnego zlecenia");
+        }
         if (!savedJobRepository.existsByUser_IdAndJob_Id(user.getId(), jobId)) {
             savedJobRepository.save(new SavedJob(user, job));
         }
@@ -62,7 +66,9 @@ public class SavedJobService {
         return new SavedJobBatchStatusResponse(new LinkedHashSet<>(savedIds));
     }
 
+    @Transactional
     public PageResponse<JobResponse> list(User user, int page, int size) {
+        savedJobRepository.deleteByUserAndJobStatusNot(user.getId(), JobStatus.OPEN);
         Page<SavedJob> saved = savedJobRepository.findByUserAndJobStatus(
                 user.getId(),
                 JobStatus.OPEN,
@@ -74,5 +80,12 @@ public class SavedJobService {
                         .map(entry -> jobService.getJob(entry.getJob().getId()))
                         .toList()
         );
+    }
+
+    private boolean sameUser(User first, User second) {
+        return first != null
+                && second != null
+                && first.getId() != null
+                && first.getId().equals(second.getId());
     }
 }
