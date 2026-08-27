@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.notification.service;
 
 import com.doFast.dofastapp.chat.service.RealtimePublisher;
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.notification.entity.Notification;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.repository.NotificationPreferenceRepository;
@@ -78,7 +79,7 @@ class NotificationServiceTest {
     @Test
     void criticalNotificationTypesCannotBeMuted() {
         assertThrows(
-                IllegalArgumentException.class,
+                BusinessException.class,
                 () -> notificationService.updatePreferences(user, Set.of(NotificationType.JOB_ACCEPTED))
         );
     }
