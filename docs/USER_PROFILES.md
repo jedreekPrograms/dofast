@@ -40,6 +40,14 @@ Flyway `V33__user_service_categories.sql` stores the relation in `user_service_c
 
 If a selected catalog category is later deactivated, it is no longer returned as a public specialization. A later profile update can remove the stale relation normally. Specializations are declarative profile data only: selecting one does not automatically accept matching jobs, subscribe to alerts, grant location access or imply current availability.
 
+## Inline marketplace trust cards
+
+The web client reuses the same public profile contract in decision-heavy surfaces instead of showing only opaque numeric user IDs. Job details render requester and worker trust cards, and an open job therefore exposes the requester's public reputation before another user accepts it. The selected chat conversation also renders a compact counterpart trust card above the message history.
+
+Inline cards show only public profile data: verification state, rating/review count, completed-job total, optional public location, declared specializations and a link to the full profile. The fuller job-details variant can also show the public bio and account age. Profile requests are deduplicated and cached for the current browser session so moving between conversations does not create repeated reads for the same user.
+
+Trust-card loading is deliberately fail-open for the surrounding workflow. If the public profile request fails, job lifecycle controls and chat history/composer continue to work and the card degrades to a simple user reference plus a profile link. A presentation failure therefore cannot block completion, disputes, cancellation, messaging or escrow-related actions.
+
 ## Location privacy
 
 `publicLocation` is deliberately a free-form public label such as `Wrocław i okolice`. It is not geocoded and is not linked to the PostGIS coordinates used for job discovery, exact participant-only locations, routes or live tracking. Users therefore choose the granularity they want to publish.
