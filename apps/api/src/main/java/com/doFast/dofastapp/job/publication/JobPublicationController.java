@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.publication;
 
 import com.doFast.dofastapp.job.publication.dto.CreateJobPublicationRequest;
 import com.doFast.dofastapp.job.publication.dto.JobPublicationResponse;
+import com.doFast.dofastapp.payment.dto.CreatePaymentIntentResponse;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -19,9 +20,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class JobPublicationController {
 
     private final JobPublicationService publicationService;
+    private final JobPublicationPaymentIntentService paymentIntentService;
 
-    public JobPublicationController(JobPublicationService publicationService) {
+    public JobPublicationController(
+            JobPublicationService publicationService,
+            JobPublicationPaymentIntentService paymentIntentService
+    ) {
         this.publicationService = publicationService;
+        this.paymentIntentService = paymentIntentService;
     }
 
     @PostMapping
@@ -36,6 +42,11 @@ public class JobPublicationController {
     @GetMapping("/{id}")
     public JobPublicationResponse get(@PathVariable Long id, @AuthenticationPrincipal User user) {
         return publicationService.get(id, user);
+    }
+
+    @PostMapping("/{id}/payment-intent")
+    public CreatePaymentIntentResponse createPaymentIntent(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return paymentIntentService.create(id, user);
     }
 
     @PostMapping("/{id}/cancel")
