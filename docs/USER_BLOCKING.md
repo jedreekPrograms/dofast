@@ -24,6 +24,8 @@ Chat message delivery enforces this policy before any message row is inserted, n
 
 Accepting an open job also enforces the symmetric block policy before the worker is assigned. A blocked relationship therefore cannot start a new job relationship, initialize live tracking or create the `JOB_ACCEPTED` notification. The rejection message is intentionally neutral and does not disclose which side created the block.
 
+Saved-search alert delivery also applies the same symmetric check after a search matches but before any delivery row or notification is created. Users therefore do not receive automated `SAVED_SEARCH_MATCH` notifications for new jobs published by an account when either side has blocked the other. The outbox event is still processed normally so a blocked relationship cannot leave publication work stuck or repeatedly retried.
+
 When the caller has blocked the selected chat counterpart, the web composer is disabled immediately and the draft is discarded. This is UX only: the backend remains the source of truth and rejects delivery if either participant has blocked the other, including a reverse block that is intentionally not exposed to the caller.
 
 Existing active jobs are not cancelled merely because either participant later creates a block. Their escrow, completion/dispute lifecycle and participant-only location authorization continue to follow the dedicated job rules; blocking prevents new interaction surfaces rather than silently mutating financial or safety-critical state.
