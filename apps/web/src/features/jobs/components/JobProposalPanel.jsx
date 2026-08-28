@@ -116,6 +116,11 @@ function JobProposalPanel({ job, currentUserId, onJobUpdated, onSuccess }) {
     setError('')
     try {
       const accepted = await acceptJobProposal(job.id, proposalId)
+      setProposals((current) => current.map((proposal) => {
+        if (proposal.id === proposalId) return accepted.proposal
+        if (proposal.status === 'SUBMITTED') return { ...proposal, status: 'REJECTED' }
+        return proposal
+      }))
       onJobUpdated?.(accepted.job)
       onSuccess?.('Wykonawca został wybrany, a escrow dopasowane do zaakceptowanej ceny.')
     } catch (requestError) {
