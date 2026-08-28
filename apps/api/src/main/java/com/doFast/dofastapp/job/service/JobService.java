@@ -25,6 +25,7 @@ import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
 import com.doFast.dofastapp.location.service.GeoPointFactory;
+import com.doFast.dofastapp.location.tracking.enums.TrackingPhase;
 import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
@@ -244,6 +245,10 @@ public class JobService {
         if (job.getStatus() != JobStatus.IN_PROGRESS) throw new ConflictException("Zlecenie nie jest w trakcie realizacji");
         if (job.getTakenBy() == null || !sameUser(job.getTakenBy(), currentUser)) {
             throw new ForbiddenOperationException("Tylko wykonawca może zgłosić wykonanie zlecenia");
+        }
+        if (usesLiveTracking(job)
+                && liveTrackingService.getTracking(jobId, currentUser).phase() != TrackingPhase.ARRIVED_DESTINATION) {
+            throw new ConflictException("Najpierw potwierdź dotarcie do punktu B");
         }
         job.requestCompletion(LocalDateTime.now());
         Job saved = jobRepository.save(job);
