@@ -142,6 +142,8 @@ public class UserService {
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
         user.setNickname(request.nickname().trim());
+        user.setBio(normalizePublicProfileField(request.bio()));
+        user.setPublicLocation(normalizePublicProfileField(request.publicLocation()));
         return toResponse(userRepository.save(user));
     }
 
@@ -195,6 +197,8 @@ public class UserService {
                 user.getId(),
                 user.getEmail(),
                 user.getNickname(),
+                user.getBio(),
+                user.getPublicLocation(),
                 user.getRole(),
                 user.getStatus(),
                 user.getCreatedAt()
@@ -265,6 +269,11 @@ public class UserService {
     private String normalizeOptionalEmail(String value) {
         if (value == null || value.isBlank()) return null;
         return normalizeEmail(value);
+    }
+
+    private String normalizePublicProfileField(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
     }
 
     private String normalizeGoogleNickname(GoogleIdentity googleIdentity) {
