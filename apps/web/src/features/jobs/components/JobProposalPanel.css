@@ -1,0 +1,224 @@
+.job-proposal-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 18px;
+}
+
+.job-proposal-panel__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.job-proposal-panel__heading h2 {
+  margin: 7px 0 0;
+}
+
+.job-proposal-panel__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.job-proposal-panel__badges span,
+.job-proposal-status {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #f1f3f6;
+  color: #4f5661;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.job-proposal-panel__privacy {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #e3e7ee;
+  border-radius: 12px;
+  background: #f8f9fb;
+  color: #5d6570;
+  line-height: 1.5;
+}
+
+.job-proposal-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.55fr) minmax(0, 1.45fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.job-proposal-form .button {
+  width: fit-content;
+  grid-column: 1 / -1;
+}
+
+.job-proposal-form textarea {
+  min-height: 106px;
+  resize: vertical;
+}
+
+.job-proposal-form__fixed-price {
+  display: grid;
+  gap: 5px;
+  padding: 13px 14px;
+  border: 1px solid #dfe3e9;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.job-proposal-form__fixed-price > span,
+.job-proposal-card__amount-row div > span {
+  color: #7b818c;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.job-proposal-form__fixed-price strong {
+  font-size: 1.35rem;
+}
+
+.job-proposal-form__fixed-price small,
+.job-proposal-form .field small {
+  color: #747b86;
+  line-height: 1.45;
+}
+
+.job-proposal-list {
+  display: grid;
+  gap: 14px;
+}
+
+.job-proposal-list__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #666d78;
+  font-size: 0.88rem;
+}
+
+.job-proposal-card {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.15fr);
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #e0e4e9;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.job-proposal-card--own {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.job-proposal-card--accepted {
+  border-color: #bdddc8;
+  background: #fbfffc;
+}
+
+.job-proposal-card--withdrawn,
+.job-proposal-card--rejected {
+  background: #fafafa;
+}
+
+.job-proposal-card__offer {
+  display: grid;
+  gap: 11px;
+  align-content: start;
+  min-width: 0;
+}
+
+.job-proposal-card__amount-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.job-proposal-card__amount-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.job-proposal-card__amount-row strong {
+  font-size: 1.4rem;
+}
+
+.job-proposal-card__offer > p {
+  margin: 0;
+  color: #4f5661;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.job-proposal-card__offer > small {
+  color: #868c96;
+}
+
+.job-proposal-card__offer > .button {
+  width: fit-content;
+}
+
+.job-proposal-status--accepted {
+  background: #e7f7ec;
+  color: #24613b;
+}
+
+.job-proposal-status--rejected,
+.job-proposal-status--withdrawn {
+  background: #f0f0f1;
+  color: #70757d;
+}
+
+.job-proposal-status--submitted {
+  background: #eaf1ff;
+  color: #345f9d;
+}
+
+.job-proposal-card__note {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f2f3f5;
+  color: #626975;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.job-proposal-card__note--success {
+  background: #eaf8ef;
+  color: #28643e;
+}
+
+@media (max-width: 820px) {
+  .job-proposal-panel {
+    grid-column: auto;
+  }
+
+  .job-proposal-panel__heading,
+  .job-proposal-list__toolbar,
+  .job-proposal-card__amount-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .job-proposal-panel__badges {
+    justify-content: flex-start;
+  }
+
+  .job-proposal-form,
+  .job-proposal-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .job-proposal-form .button,
+  .job-proposal-card__offer > .button,
+  .job-proposal-list__toolbar .button {
+    width: 100%;
+  }
+}
