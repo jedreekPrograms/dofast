@@ -6,11 +6,13 @@ import com.doFast.dofastapp.payment.dto.PlatformFeePolicyResponse;
 import com.doFast.dofastapp.payment.dto.PlatformFeeQuoteResponse;
 import com.doFast.dofastapp.payment.fee.PlatformFeePolicy;
 import com.doFast.dofastapp.payment.fee.PlatformFeeQuote;
+import com.doFast.dofastapp.payment.fee.PlatformFeeQuoteService;
 import com.doFast.dofastapp.payment.service.StripePaymentService;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Min;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,13 +31,16 @@ public class PaymentController {
 
     private final StripePaymentService stripePaymentService;
     private final PlatformFeePolicy platformFeePolicy;
+    private final PlatformFeeQuoteService platformFeeQuoteService;
 
     public PaymentController(
             StripePaymentService stripePaymentService,
-            PlatformFeePolicy platformFeePolicy
+            PlatformFeePolicy platformFeePolicy,
+            PlatformFeeQuoteService platformFeeQuoteService
     ) {
         this.stripePaymentService = stripePaymentService;
         this.platformFeePolicy = platformFeePolicy;
+        this.platformFeeQuoteService = platformFeeQuoteService;
     }
 
     @PostMapping("/create-intent")
@@ -63,15 +68,19 @@ public class PaymentController {
             @RequestParam
             @DecimalMin("0.01")
             @Digits(integer = 17, fraction = 2)
-            BigDecimal amount
+            BigDecimal amount,
+            @RequestParam(required = false) @Min(1) Long jobId,
+            @AuthenticationPrincipal User user
     ) {
-        PlatformFeeQuote quote = platformFeePolicy.quoteCurrent(amount);
+        PlatformFeeQuote quote = jobId == null
+                ? platformFeeQuoteService.quoteCurrent(amount)
+                : platformFeeQuoteService.quoteForJob(jobId, amount, user);
         return new PlatformFeeQuoteResponse(
                 quote.grossAmount(),
                 quote.platformFeeAmount(),
                 quote.workerPayoutAmount(),
                 quote.basisPoints(),
-                platformFeePolicy.currentPercent()
+                BigDecimal.valueOf(quote.basisPoints()).movePointLeft(2)
         );
     }
 }
