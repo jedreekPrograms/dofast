@@ -33,6 +33,12 @@ public class User {
     @Column(nullable = false, length = 80)
     private String nickname;
 
+    @Column(length = 600)
+    private String bio;
+
+    @Column(name = "public_location", length = 120)
+    private String publicLocation;
+
     @Column(nullable = false, length = 255)
     private String password;
 
@@ -77,6 +83,8 @@ public class User {
     public String getPassword() { return password; }
     public boolean isPasswordLoginEnabled() { return passwordLoginEnabled; }
     public String getNickname() { return nickname; }
+    public String getBio() { return bio; }
+    public String getPublicLocation() { return publicLocation; }
     public UserRole getRole() { return role; }
     public UserStatus getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
@@ -84,6 +92,8 @@ public class User {
 
     public void setEmail(String email) { this.email = email; }
     public void setNickname(String nickname) { this.nickname = nickname; }
+    public void setBio(String bio) { this.bio = bio; }
+    public void setPublicLocation(String publicLocation) { this.publicLocation = publicLocation; }
     public void setPassword(String password) { this.password = password; }
     public void setPasswordLoginEnabled(boolean passwordLoginEnabled) { this.passwordLoginEnabled = passwordLoginEnabled; }
     public void setRole(UserRole role) { this.role = role; }
