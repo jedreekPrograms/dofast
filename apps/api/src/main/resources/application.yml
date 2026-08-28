@@ -76,6 +76,7 @@ dofast:
     eta-refresh-seconds: ${TRACKING_ETA_REFRESH_SECONDS:30}
     eta-refresh-movement-meters: ${TRACKING_ETA_REFRESH_MOVEMENT_METERS:150}
     stale-after-seconds: ${TRACKING_STALE_AFTER_SECONDS:20}
+    checkpoint-arrival-radius-meters: ${TRACKING_CHECKPOINT_ARRIVAL_RADIUS_METERS:100}
     max-implied-speed-meters-per-second: ${TRACKING_MAX_IMPLIED_SPEED_METERS_PER_SECOND:80}
     max-accuracy-meters: ${TRACKING_MAX_ACCURACY_METERS:150}
     min-update-interval-millis: ${TRACKING_MIN_UPDATE_INTERVAL_MILLIS:1000}
