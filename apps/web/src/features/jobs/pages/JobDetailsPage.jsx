@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import ReviewDialog from '../../reviews/components/ReviewDialog.jsx'
+import UserTrustCard from '../../reviews/components/UserTrustCard.jsx'
 import {
   acceptJob,
   approveJobCancellation,
@@ -290,24 +291,10 @@ function JobDetailsPage() {
         </section>
 
         <section className="job-details-panel">
-          <span className="eyebrow">Uczestnicy</span>
-          <div className="job-details-people">
-            <div>
-              <span>Zlecający</span>
-              <strong>Użytkownik #{job.createdById}</strong>
-              <Link to={`/users/${job.createdById}`}>Zobacz profil</Link>
-            </div>
-            <div>
-              <span>Wykonawca</span>
-              {job.takenById ? (
-                <>
-                  <strong>Użytkownik #{job.takenById}</strong>
-                  <Link to={`/users/${job.takenById}`}>Zobacz profil</Link>
-                </>
-              ) : (
-                <strong>Jeszcze nie wybrano</strong>
-              )}
-            </div>
+          <span className="eyebrow">Uczestnicy i zaufanie</span>
+          <div className="marketplace-trust-grid">
+            <UserTrustCard userId={job.createdById} roleLabel="Zlecający" />
+            <UserTrustCard userId={job.takenById} roleLabel="Wykonawca" />
           </div>
         </section>
 
