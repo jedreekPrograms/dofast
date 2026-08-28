@@ -3,6 +3,7 @@ package com.doFast.dofastapp.job.attachment;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.job.service.JobVisibilityService;
 import com.doFast.dofastapp.user.entity.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,19 +28,22 @@ public class JobAttachmentService {
     private final JobAttachmentAccessPolicy accessPolicy;
     private final AttachmentFilePolicy filePolicy;
     private final AttachmentStorage storage;
+    private final JobVisibilityService jobVisibilityService;
 
     public JobAttachmentService(
             JobRepository jobRepository,
             JobAttachmentRepository attachmentRepository,
             JobAttachmentAccessPolicy accessPolicy,
             AttachmentFilePolicy filePolicy,
-            AttachmentStorage storage
+            AttachmentStorage storage,
+            JobVisibilityService jobVisibilityService
     ) {
         this.jobRepository = jobRepository;
         this.attachmentRepository = attachmentRepository;
         this.accessPolicy = accessPolicy;
         this.filePolicy = filePolicy;
         this.storage = storage;
+        this.jobVisibilityService = jobVisibilityService;
     }
 
     @Transactional
@@ -76,7 +80,7 @@ public class JobAttachmentService {
     }
 
     public List<JobAttachmentResponse> listVisible(Long jobId, User user) {
-        ensureJobExists(jobId);
+        jobVisibilityService.assertCanViewPublicDetail(jobId, user);
         return attachmentRepository.findAllByJob_IdAndDeletedAtIsNullOrderByCreatedAtAscIdAsc(jobId)
                 .stream()
                 .filter(attachment -> accessPolicy.canRead(attachment, user))
@@ -103,12 +107,6 @@ public class JobAttachmentService {
     private Job getJobForUpdate(Long jobId) {
         return jobRepository.findByIdForUpdate(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
-    }
-
-    private void ensureJobExists(Long jobId) {
-        if (!jobRepository.existsById(jobId)) {
-            throw new ResourceNotFoundException("Zlecenie nie istnieje");
-        }
     }
 
     private JobAttachment getAttachment(Long jobId, Long attachmentId) {
