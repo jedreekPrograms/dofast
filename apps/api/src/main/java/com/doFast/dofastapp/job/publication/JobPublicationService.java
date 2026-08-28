@@ -81,6 +81,7 @@ public class JobPublicationService {
             if (!existing.getPayloadHash().equals(payloadHash)) {
                 throw new ConflictException("Identyfikator publikacji został już użyty dla innego zlecenia");
             }
+            expireIfNecessary(existing, LocalDateTime.now());
             return toResponse(existing);
         }
 
