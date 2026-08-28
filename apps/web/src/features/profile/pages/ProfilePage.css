@@ -50,6 +50,103 @@
   line-height: 1.45;
 }
 
+.account-specializations {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 20px;
+}
+
+.account-specializations__heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.account-specializations__heading h2 {
+  margin: 5px 0 8px;
+}
+
+.account-specializations__heading p {
+  margin: 0;
+  max-width: 760px;
+  color: #6f7682;
+  line-height: 1.55;
+}
+
+.account-specializations__heading > strong {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #f2f3f5;
+  font-size: 0.84rem;
+}
+
+.specialization-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.specialization-group {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #e2e5e9;
+  border-radius: 14px;
+}
+
+.specialization-group legend {
+  padding: 0 7px;
+  font-weight: 800;
+}
+
+.specialization-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.specialization-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e2e5e9;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.specialization-option--selected {
+  border-color: #17191f;
+  background: #f7f7f8;
+}
+
+.specialization-option input {
+  margin-top: 3px;
+}
+
+.specialization-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.specialization-option strong {
+  overflow-wrap: anywhere;
+}
+
+.specialization-option small {
+  color: #777e89;
+}
+
+@media (max-width: 900px) {
+  .specialization-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 760px) {
   .account-grid {
     grid-template-columns: 1fr;
@@ -57,5 +154,16 @@
 
   .profile-actions {
     justify-content: flex-start;
+  }
+
+  .account-specializations__heading {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .specialization-options {
+    grid-template-columns: 1fr;
   }
 }
