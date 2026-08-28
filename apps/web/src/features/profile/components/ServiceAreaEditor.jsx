@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import LocationMapPicker from '../../jobs/components/LocationMapPicker.jsx'
 import {
-  deleteMyServiceArea,
+  clearMyServiceArea,
   getMyServiceArea,
   updateMyServiceArea,
 } from '../api/profileApi.js'
@@ -92,7 +92,7 @@ function ServiceAreaEditor() {
     setError('')
     setSaving(true)
     try {
-      await deleteMyServiceArea()
+      await clearMyServiceArea()
       setConfigured(false)
       setLocation(null)
       setRadiusKm('10')
