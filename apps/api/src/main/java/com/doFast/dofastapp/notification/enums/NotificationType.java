@@ -2,6 +2,8 @@ package com.doFast.dofastapp.notification.enums;
 
 public enum NotificationType {
     JOB_ACCEPTED,
+    JOB_PROPOSAL_RECEIVED,
+    JOB_PROPOSAL_ACCEPTED,
     COMPLETION_REQUESTED,
     JOB_COMPLETED,
     JOB_CANCELLATION_REQUESTED,
