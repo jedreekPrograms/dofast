@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,6 +39,7 @@ class UserProfileDetailsTest {
     @Mock private ReviewRepository reviewRepository;
     @Mock private JobRepository jobRepository;
     @Mock private VerificationService verificationService;
+    @Mock private UserServiceCategoryService userServiceCategoryService;
 
     @Test
     void ownerUpdateNormalizesOptionalPublicFields() {
@@ -83,12 +85,14 @@ class UserProfileDetailsTest {
         when(jobRepository.countByStatusAndCreatedBy(JobStatus.DONE, user)).thenReturn(4L);
         when(jobRepository.countByStatusAndTakenBy(JobStatus.DONE, user)).thenReturn(23L);
         when(verificationService.isVerified(9L)).thenReturn(true);
+        when(userServiceCategoryService.getForUser(9L)).thenReturn(List.of());
 
         UserProfileService service = new UserProfileService(
                 userRepository,
                 reviewRepository,
                 jobRepository,
-                verificationService
+                verificationService,
+                userServiceCategoryService
         );
 
         var profile = service.getProfile(9L);
@@ -102,6 +106,7 @@ class UserProfileDetailsTest {
         assertEquals(17L, profile.reviewsCount());
         assertEquals(27L, profile.completedJobsTotal());
         assertTrue(profile.identityVerified());
+        assertTrue(profile.serviceCategories().isEmpty());
     }
 
     private User user(Long id, LocalDateTime createdAt) {
