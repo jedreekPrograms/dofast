@@ -20,6 +20,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,7 +57,7 @@ class JobProposalAssignmentModeTest {
 
         assertThrows(ConflictException.class, () -> service.acceptJob(91L, worker));
 
-        verify(job, never()).assignTo(worker, org.mockito.ArgumentMatchers.any());
+        verify(job, never()).assignTo(eq(worker), any());
         verify(jobRepository, never()).save(job);
         verify(liveTrackingService, never()).initializeForAcceptedJob(job);
     }
