@@ -54,9 +54,10 @@ public class UserServiceCategoryService {
             throw new BusinessException("Możesz wybrać maksymalnie 10 specjalizacji");
         }
 
-        List<JobCategory> requestedCategories = requestedIds.isEmpty()
+        List<Long> requestedIdList = List.copyOf(requestedIds);
+        List<JobCategory> requestedCategories = requestedIdList.isEmpty()
                 ? List.of()
-                : jobCategoryRepository.findByIdInAndActiveTrue(requestedIds);
+                : jobCategoryRepository.findByIdInAndActiveTrue(requestedIdList);
 
         if (requestedCategories.size() != requestedIds.size()) {
             throw new BusinessException("Co najmniej jedna wybrana specjalizacja nie istnieje lub jest nieaktywna");
