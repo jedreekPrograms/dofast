@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -176,21 +177,21 @@ class JobProposalServiceTest {
 
     private void prepareOpenProposalJob() {
         when(jobRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(job));
-        when(job.getId()).thenReturn(101L);
+        lenient().when(job.getId()).thenReturn(101L);
         when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
         when(job.getStatus()).thenReturn(JobStatus.OPEN);
         when(job.getCreatedBy()).thenReturn(requester);
-        when(job.getPrice()).thenReturn(new BigDecimal("30.00"));
-        when(job.getTitle()).thenReturn("Zakupy");
-        when(requester.getId()).thenReturn(11L);
+        lenient().when(job.getPrice()).thenReturn(new BigDecimal("30.00"));
+        lenient().when(job.getTitle()).thenReturn("Zakupy");
+        lenient().when(requester.getId()).thenReturn(11L);
         when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(false);
     }
 
     private void prepareProposalJobForRead() {
         when(jobRepository.findById(101L)).thenReturn(Optional.of(job));
-        when(job.getId()).thenReturn(101L);
+        lenient().when(job.getId()).thenReturn(101L);
         when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
         when(job.getCreatedBy()).thenReturn(requester);
-        when(requester.getId()).thenReturn(11L);
+        lenient().when(requester.getId()).thenReturn(11L);
     }
 }
