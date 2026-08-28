@@ -82,11 +82,7 @@ CANCELLED_REQUEST=$(curl --fail --silent --show-error \
 printf '%s' "$CANCELLED_REQUEST" > /tmp/payout-cancel-request.json
 CANCEL_ID=$(json_value /tmp/payout-cancel-request.json id)
 
-# Move the queued payout into the future before cancellation so this smoke deterministically
-# exercises the user-cancel path instead of racing the background sandbox dispatcher.
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 \
-  -c "UPDATE payout_requests SET next_attempt_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes' WHERE id = $CANCEL_ID AND status = 'REQUESTED';"
-
+# The dedicated smoke uses a 15s dispatch interval so this public API cancellation path is deterministic.
 curl --fail --silent --show-error -X POST \
   -H "Authorization: Bearer $USER_TOKEN" \
   "$api/wallet/payouts/$CANCEL_ID/cancel" > /tmp/payout-cancelled.json
@@ -125,7 +121,7 @@ REPLAY_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
 test "$REPLAY_BALANCE" = "38.00"
 
 PAID=''
-for attempt in {1..20}; do
+for attempt in {1..25}; do
   HISTORY=$(curl --fail --silent --show-error \
     -H "Authorization: Bearer $USER_TOKEN" "$api/wallet/payouts")
   STATUS=$(python3 -c 'import json,sys; target=int(sys.argv[1]); data=json.load(sys.stdin); print(next(item["status"] for item in data if item["id"] == target))' "$PAYOUT_ID" <<< "$HISTORY")
@@ -134,7 +130,7 @@ for attempt in {1..20}; do
     break
   fi
   sleep 1
- done
+done
 test "$PAID" = "yes"
 
 PROVIDER_REFERENCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \

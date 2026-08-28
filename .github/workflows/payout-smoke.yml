@@ -44,7 +44,8 @@ jobs:
           sed -i 's/^ADMIN_BOOTSTRAP_NICKNAME=.*/ADMIN_BOOTSTRAP_NICKNAME=Payout Admin/' .env
           sed -i 's/^PAYOUT_PROVIDER=.*/PAYOUT_PROVIDER=sandbox/' .env
           sed -i 's/^PAYOUT_SANDBOX_ENABLED=.*/PAYOUT_SANDBOX_ENABLED=true/' .env
-          sed -i 's/^PAYOUT_DISPATCH_INTERVAL_MS=.*/PAYOUT_DISPATCH_INTERVAL_MS=1000/' .env
+          # Keep a wide deterministic cancellation window. Production keeps the normal 2s dispatcher cadence.
+          sed -i 's/^PAYOUT_DISPATCH_INTERVAL_MS=.*/PAYOUT_DISPATCH_INTERVAL_MS=15000/' .env
 
       - name: Build API with transient registry retry
         shell: bash
