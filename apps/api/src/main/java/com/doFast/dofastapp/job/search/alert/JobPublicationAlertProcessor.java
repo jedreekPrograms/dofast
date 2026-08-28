@@ -5,6 +5,7 @@ import com.doFast.dofastapp.job.search.SavedSearch;
 import com.doFast.dofastapp.job.search.SavedSearchRepository;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,19 +23,22 @@ public class JobPublicationAlertProcessor {
     private final SavedSearchAlertDeliveryRepository deliveryRepository;
     private final SavedSearchMatcher matcher;
     private final NotificationService notificationService;
+    private final UserBlockService userBlockService;
 
     public JobPublicationAlertProcessor(
             JobPublicationOutboxRepository outboxRepository,
             SavedSearchRepository savedSearchRepository,
             SavedSearchAlertDeliveryRepository deliveryRepository,
             SavedSearchMatcher matcher,
-            NotificationService notificationService
+            NotificationService notificationService,
+            UserBlockService userBlockService
     ) {
         this.outboxRepository = outboxRepository;
         this.savedSearchRepository = savedSearchRepository;
         this.deliveryRepository = deliveryRepository;
         this.matcher = matcher;
         this.notificationService = notificationService;
+        this.userBlockService = userBlockService;
     }
 
     @Transactional
@@ -49,6 +53,7 @@ public class JobPublicationAlertProcessor {
             Job job = event.getJob();
             for (SavedSearch savedSearch : alertSearches) {
                 if (!matcher.matches(savedSearch, job)) continue;
+                if (userBlockService.isInteractionBlocked(savedSearch.getUser(), job.getCreatedBy())) continue;
                 if (deliveryRepository.existsBySavedSearch_IdAndJob_Id(savedSearch.getId(), job.getId())) continue;
 
                 deliveryRepository.save(new SavedSearchAlertDelivery(savedSearch, job));
