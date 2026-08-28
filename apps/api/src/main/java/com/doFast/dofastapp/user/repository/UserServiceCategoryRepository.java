@@ -18,4 +18,15 @@ public interface UserServiceCategoryRepository extends JpaRepository<UserService
             order by relation.category.sortOrder asc, relation.category.name asc
             """)
     List<UserServiceCategory> findForUser(@Param("userId") Long userId);
+
+    @Query("""
+            select relation.category.id
+            from UserServiceCategory relation
+            where relation.user.id = :userId
+              and relation.category.active = true
+              and relation.category.parent is not null
+              and relation.category.fulfillmentMode is not null
+            order by relation.category.sortOrder asc, relation.category.name asc
+            """)
+    List<Long> findActiveCategoryIdsForUser(@Param("userId") Long userId);
 }

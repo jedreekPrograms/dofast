@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import JobCard from '../components/JobCard.jsx'
@@ -7,6 +7,7 @@ import {
   createSavedSearch,
   getJobCategories,
   getJobs,
+  getRecommendedJobs,
   getSavedJobStatuses,
 } from '../api/jobsApi.js'
 import './JobsPage.css'
@@ -48,9 +49,12 @@ function JobsPage() {
   const [filters, setFilters] = useState(initialFilters)
   const [categories, setCategories] = useState([])
   const [result, setResult] = useState(null)
+  const [recommendations, setRecommendations] = useState(null)
   const [savedJobIds, setSavedJobIds] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false)
+  const [recommendationsError, setRecommendationsError] = useState('')
   const [savedSearchName, setSavedSearchName] = useState('')
   const [savingSearch, setSavingSearch] = useState(false)
   const [savedSearchMessage, setSavedSearchMessage] = useState('')
@@ -58,6 +62,18 @@ function JobsPage() {
   const [limitSavedSearchByLocation, setLimitSavedSearchByLocation] = useState(false)
   const [savedSearchLocation, setSavedSearchLocation] = useState(null)
   const [savedSearchRadiusKm, setSavedSearchRadiusKm] = useState('10')
+
+  const applySavedStatuses = useCallback((jobIds, savedIds) => {
+    const savedSet = new Set(savedIds)
+    setSavedJobIds((current) => {
+      const next = new Set(current)
+      jobIds.forEach((jobId) => {
+        if (savedSet.has(jobId)) next.add(jobId)
+        else next.delete(jobId)
+      })
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -80,21 +96,17 @@ function JobsPage() {
 
       try {
         const data = await getJobs(filters, { signal: controller.signal })
-        let nextSavedJobIds = new Set()
 
         if (userId && data.content?.length) {
           try {
-            const statuses = await getSavedJobStatuses(
-              data.content.map((job) => job.id),
-              { signal: controller.signal },
-            )
-            nextSavedJobIds = new Set(statuses.savedJobIds ?? [])
+            const jobIds = data.content.map((job) => job.id)
+            const statuses = await getSavedJobStatuses(jobIds, { signal: controller.signal })
+            applySavedStatuses(jobIds, statuses.savedJobIds ?? [])
           } catch (requestError) {
             if (requestError.name === 'AbortError') throw requestError
           }
         }
 
-        setSavedJobIds(nextSavedJobIds)
         setResult(data)
       } catch (requestError) {
         if (requestError.name !== 'AbortError') {
@@ -109,7 +121,44 @@ function JobsPage() {
 
     loadJobs()
     return () => controller.abort()
-  }, [filters, userId])
+  }, [applySavedStatuses, filters, userId])
+
+  useEffect(() => {
+    if (!userId) return undefined
+
+    const controller = new AbortController()
+
+    async function loadRecommendations() {
+      setRecommendationsLoading(true)
+      setRecommendationsError('')
+
+      try {
+        const data = await getRecommendedJobs(0, 6, { signal: controller.signal })
+        const recommendedJobs = data.jobs?.content ?? []
+
+        if (recommendedJobs.length) {
+          try {
+            const jobIds = recommendedJobs.map((job) => job.id)
+            const statuses = await getSavedJobStatuses(jobIds, { signal: controller.signal })
+            applySavedStatuses(jobIds, statuses.savedJobIds ?? [])
+          } catch (requestError) {
+            if (requestError.name === 'AbortError') throw requestError
+          }
+        }
+
+        setRecommendations(data)
+      } catch (requestError) {
+        if (requestError.name !== 'AbortError') {
+          setRecommendationsError('Nie udało się pobrać rekomendowanych zleceń.')
+        }
+      } finally {
+        if (!controller.signal.aborted) setRecommendationsLoading(false)
+      }
+    }
+
+    loadRecommendations()
+    return () => controller.abort()
+  }, [applySavedStatuses, userId])
 
   function updateDraft(event) {
     const { name, value } = event.target
@@ -180,6 +229,7 @@ function JobsPage() {
   }
 
   const jobs = result?.content ?? []
+  const recommendedJobs = recommendations?.jobs?.content ?? []
   const hasPublicFilters = Boolean(
     filters.query?.trim()
       || filters.category
@@ -200,6 +250,59 @@ function JobsPage() {
           Przeglądaj aktualne zadania i filtruj je po kategorii, cenie, nazwie, opisie lub obszarze.
         </p>
       </header>
+
+      {user && (
+        <section className="jobs-recommended" aria-labelledby="jobs-recommended-title">
+          <div className="jobs-results__heading">
+            <div>
+              <span className="jobs-hero__badge">Dla Ciebie</span>
+              <h2 id="jobs-recommended-title">Zgodne z Twoimi specjalizacjami</h2>
+              {recommendations?.specializationCount > 0 && (
+                <p>
+                  Dopasowanie na podstawie {recommendations.specializationCount} aktywnych specjalizacji.
+                  {recommendations.jobs && ` ${recommendations.jobs.totalElements} otwartych ofert.`}
+                </p>
+              )}
+            </div>
+            <Link className="button button--secondary jobs-recommended__profile-link" to="/profile">
+              Edytuj specjalizacje
+            </Link>
+          </div>
+
+          {recommendationsLoading && <div className="jobs-state">Dobieranie zleceń…</div>}
+          {!recommendationsLoading && recommendationsError && (
+            <div className="jobs-state jobs-state--error">{recommendationsError}</div>
+          )}
+          {!recommendationsLoading && !recommendationsError && recommendations?.specializationCount === 0 && (
+            <div className="jobs-state jobs-recommended__empty">
+              <strong>Uzupełnij specjalizacje, aby otrzymywać rekomendacje.</strong>
+              <span>Wybierz do 10 konkretnych usług na swoim profilu.</span>
+              <Link className="button button--primary" to="/profile">Ustaw specjalizacje</Link>
+            </div>
+          )}
+          {!recommendationsLoading
+            && !recommendationsError
+            && recommendations?.specializationCount > 0
+            && recommendedJobs.length === 0 && (
+              <div className="jobs-state">
+                Obecnie nie ma otwartych zleceń w Twoich specjalizacjach. Nowe oferty pojawią się tutaj automatycznie.
+              </div>
+            )}
+
+          {!recommendationsLoading && !recommendationsError && recommendedJobs.length > 0 && (
+            <div className="jobs-grid jobs-grid--recommended">
+              {recommendedJobs.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  initialSaved={savedJobIds.has(job.id)}
+                  onSavedChange={updateSavedState}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <form className="jobs-filters" onSubmit={applyFilters}>
         <label className="jobs-filters__search">

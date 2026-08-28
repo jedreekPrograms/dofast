@@ -3,7 +3,6 @@ package com.doFast.dofastapp.job.service;
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
-import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.entity.Job;
@@ -70,7 +69,7 @@ public class JobDiscoveryService {
                         pageable
                 );
 
-        return PageResponse.from(result, result.getContent().stream().map(this::toResponse).toList());
+        return PageResponse.from(result, result.getContent().stream().map(JobResponseMapper::toResponse).toList());
     }
 
     public List<NearbyJobResponse> getNearbyJobs(
@@ -101,33 +100,6 @@ public class JobDiscoveryService {
                 );
 
         return matches.stream().map(this::toNearbyResponse).toList();
-    }
-
-    private JobResponse toResponse(Job job) {
-        JobCategory category = job.getCategory();
-        return new JobResponse(
-                job.getId(),
-                job.getTitle(),
-                job.getDescription(),
-                job.getPrice(),
-                job.getStatus(),
-                category != null ? category.getId() : null,
-                category != null ? category.getSlug() : null,
-                category != null ? category.getName() : null,
-                category != null ? category.getFulfillmentMode() : null,
-                job.getLocationLabel(),
-                job.getDestinationLabel(),
-                job.getRouteDistanceMeters(),
-                job.getRouteDurationSeconds(),
-                job.getCreatedBy().getId(),
-                job.getTakenBy() != null ? job.getTakenBy().getId() : null,
-                job.getCreatedAt(),
-                job.getUpdatedAt(),
-                job.getTakenAt(),
-                job.getCompletionRequestedAt(),
-                job.getCompletedAt(),
-                job.getCancelledAt()
-        );
     }
 
     private NearbyJobResponse toNearbyResponse(NearbyJobProjection match) {

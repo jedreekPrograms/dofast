@@ -5,7 +5,9 @@ import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
+import com.doFast.dofastapp.job.dto.RecommendedJobsResponse;
 import com.doFast.dofastapp.job.service.JobDiscoveryService;
+import com.doFast.dofastapp.job.service.JobRecommendationService;
 import com.doFast.dofastapp.job.service.JobService;
 import com.doFast.dofastapp.job.service.JobVisibilityService;
 import com.doFast.dofastapp.location.dto.LocationResponse;
@@ -39,15 +41,18 @@ public class JobController {
 
     private final JobService jobService;
     private final JobDiscoveryService jobDiscoveryService;
+    private final JobRecommendationService jobRecommendationService;
     private final JobVisibilityService jobVisibilityService;
 
     public JobController(
             JobService jobService,
             JobDiscoveryService jobDiscoveryService,
+            JobRecommendationService jobRecommendationService,
             JobVisibilityService jobVisibilityService
     ) {
         this.jobService = jobService;
         this.jobDiscoveryService = jobDiscoveryService;
+        this.jobRecommendationService = jobRecommendationService;
         this.jobVisibilityService = jobVisibilityService;
     }
 
@@ -68,6 +73,15 @@ public class JobController {
             @AuthenticationPrincipal User user
     ) {
         return jobDiscoveryService.getOpenJobs(query, category, minPrice, maxPrice, page, size, user);
+    }
+
+    @GetMapping("/recommended")
+    public RecommendedJobsResponse getRecommendedJobs(
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "6") @Min(1) @Max(24) int size,
+            @AuthenticationPrincipal User user
+    ) {
+        return jobRecommendationService.getRecommendedJobs(user, page, size);
     }
 
     @GetMapping("/nearby")

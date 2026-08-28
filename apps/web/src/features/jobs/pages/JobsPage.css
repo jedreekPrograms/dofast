@@ -36,6 +36,54 @@
   line-height: 1.6;
 }
 
+.jobs-recommended {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid #dfe3e8;
+  border-radius: 20px;
+  background: #f8fafb;
+}
+
+.jobs-recommended .jobs-hero__badge {
+  margin-bottom: 8px;
+  background: #e9edf2;
+}
+
+.jobs-recommended__profile-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  text-decoration: none;
+}
+
+.jobs-recommended__empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.jobs-recommended__empty strong {
+  color: #31353e;
+}
+
+.jobs-recommended__empty span {
+  color: #737986;
+}
+
+.jobs-recommended__empty .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  text-decoration: none;
+}
+
+.jobs-grid--recommended .job-card {
+  border-color: #dfe3e8;
+}
+
 .jobs-filters {
   display: grid;
   grid-template-columns: minmax(220px, 1.6fr) minmax(190px, 1.1fr) repeat(2, minmax(110px, 0.65fr)) auto;
@@ -338,6 +386,15 @@
   .jobs-filters__actions,
   .saved-search-create__form label {
     grid-column: auto;
+  }
+
+  .jobs-results__heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .jobs-recommended__profile-link {
+    width: 100%;
   }
 
   .jobs-filters__actions,

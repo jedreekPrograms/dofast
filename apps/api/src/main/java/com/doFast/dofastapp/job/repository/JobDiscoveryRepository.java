@@ -84,6 +84,27 @@ public interface JobDiscoveryRepository extends Repository<Job, Long> {
             Pageable pageable
     );
 
+    @Query("""
+            select j
+            from Job j
+            join j.category category
+            where j.status = :status
+              and category.id in :categoryIds
+              and j.createdBy.id <> :viewerId
+              and not exists (
+                    select ub.id
+                    from UserBlock ub
+                    where (ub.blocker.id = :viewerId and ub.blockedUser.id = j.createdBy.id)
+                       or (ub.blocker.id = j.createdBy.id and ub.blockedUser.id = :viewerId)
+              )
+            """)
+    Page<Job> findRecommendedOpenJobs(
+            @Param("status") JobStatus status,
+            @Param("categoryIds") List<Long> categoryIds,
+            @Param("viewerId") Long viewerId,
+            Pageable pageable
+    );
+
     @Query(value = """
             WITH origin AS (
                 SELECT CAST(ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326) AS geography) AS point
