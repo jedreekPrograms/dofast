@@ -73,6 +73,14 @@ dofast:
       allowed-origin-patterns: ${WEBSOCKET_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
   payments:
     platform-fee-basis-points: ${PLATFORM_FEE_BASIS_POINTS:100}
+  payouts:
+    provider: ${PAYOUT_PROVIDER:disabled}
+    sandbox-enabled: ${PAYOUT_SANDBOX_ENABLED:false}
+    minimum-amount: ${PAYOUT_MINIMUM_AMOUNT:1.00}
+    max-attempts: ${PAYOUT_MAX_ATTEMPTS:5}
+    retry-base-seconds: ${PAYOUT_RETRY_BASE_SECONDS:15}
+    stale-processing-seconds: ${PAYOUT_STALE_PROCESSING_SECONDS:300}
+    dispatch-interval-ms: ${PAYOUT_DISPATCH_INTERVAL_MS:2000}
   routing:
     provider: ${ROUTING_PROVIDER:deterministic}
     quote-ttl-minutes: ${ROUTING_QUOTE_TTL_MINUTES:15}

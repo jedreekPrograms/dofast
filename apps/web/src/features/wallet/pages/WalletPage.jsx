@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getWallet, getWalletTransactions } from '../api/walletApi.js'
+import PayoutPanel from '../components/PayoutPanel.jsx'
 import StripeTopUpPanel from '../components/StripeTopUpPanel.jsx'
 import './WalletPage.css'
 
@@ -9,6 +10,8 @@ const TYPE_LABELS = {
   ESCROW_ADJUSTMENT_LOCK: 'Dopłata do escrow',
   ESCROW_ADJUSTMENT_REFUND: 'Zwrot różnicy escrow',
   ESCROW_RELEASE: 'Wypłata za zlecenie',
+  PAYOUT_RESERVE: 'Rezerwacja wypłaty',
+  PAYOUT_RESTORE: 'Zwrot anulowanej/nieudanej wypłaty',
   WITHDRAW: 'Wypłata z portfela',
   REFUND: 'Zwrot środków',
 }
@@ -68,7 +71,7 @@ function WalletPage() {
         <div>
           <span className="eyebrow">Rozliczenia</span>
           <h1>Portfel</h1>
-          <p>Saldo, doładowania i pełna historia operacji związanych z Twoimi zleceniami.</p>
+          <p>Saldo, doładowania, wypłaty i pełna historia operacji związanych z Twoimi zleceniami.</p>
         </div>
         <button type="button" className="wallet-refresh" onClick={() => loadWallet()} disabled={loading || refreshing}>
           {refreshing ? 'Odświeżanie…' : 'Odśwież saldo'}
@@ -84,10 +87,14 @@ function WalletPage() {
               <span>Dostępne saldo</span>
               <strong>{moneyFormatter.format(Number(wallet.balance))}</strong>
             </div>
-            <small>Każda zmiana salda jest zapisywana w ledgerze. Środki z płatności pojawiają się dopiero po potwierdzeniu Stripe.</small>
+            <small>
+              Każda zmiana salda jest zapisywana w ledgerze. Środki z płatności pojawiają się dopiero po potwierdzeniu Stripe,
+              a kwota zleconej wypłaty jest od razu rezerwowana.
+            </small>
           </section>
 
           <StripeTopUpPanel onPaymentSettled={handlePaymentSettled} />
+          <PayoutPanel onWalletChanged={loadWallet} />
 
           <section className="panel">
             <div className="wallet-history__heading">

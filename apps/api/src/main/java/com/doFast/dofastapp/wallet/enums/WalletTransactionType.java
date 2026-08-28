@@ -6,6 +6,8 @@ public enum WalletTransactionType {
     ESCROW_ADJUSTMENT_LOCK,
     ESCROW_ADJUSTMENT_REFUND,
     ESCROW_RELEASE,
+    PAYOUT_RESERVE,
+    PAYOUT_RESTORE,
     WITHDRAW,
     REFUND
 }

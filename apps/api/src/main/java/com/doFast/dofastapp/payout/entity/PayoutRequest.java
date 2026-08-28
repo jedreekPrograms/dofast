@@ -1,0 +1,203 @@
+package com.doFast.dofastapp.payout.entity;
+
+import com.doFast.dofastapp.payout.enums.PayoutStatus;
+import com.doFast.dofastapp.user.entity.User;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(
+        name = "payout_requests",
+        uniqueConstraints = @UniqueConstraint(name = "uk_payout_requests_request_key", columnNames = "request_key"),
+        indexes = {
+                @Index(name = "idx_payout_requests_user_requested", columnList = "user_id,requested_at"),
+                @Index(name = "idx_payout_requests_dispatch", columnList = "provider_code,status,next_attempt_at,requested_at")
+        }
+)
+public class PayoutRequest {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Version
+    @Column(nullable = false)
+    private int version;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Column(name = "request_key", nullable = false, length = 160)
+    private String requestKey;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
+
+    @Column(nullable = false, length = 3)
+    private String currency;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private PayoutStatus status;
+
+    @Column(name = "provider_code", nullable = false, length = 32)
+    private String providerCode;
+
+    @Column(name = "provider_reference", length = 255)
+    private String providerReference;
+
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount;
+
+    @Column(name = "requested_at", nullable = false)
+    private LocalDateTime requestedAt;
+
+    @Column(name = "next_attempt_at", nullable = false)
+    private LocalDateTime nextAttemptAt;
+
+    @Column(name = "processing_started_at")
+    private LocalDateTime processingStartedAt;
+
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
+
+    @Column(name = "failure_code", length = 64)
+    private String failureCode;
+
+    @Column(name = "last_error_at")
+    private LocalDateTime lastErrorAt;
+
+    public PayoutRequest() {}
+
+    public void initialize(
+            User user,
+            String requestKey,
+            BigDecimal amount,
+            String currency,
+            String providerCode,
+            LocalDateTime now
+    ) {
+        if (user == null || requestKey == null || requestKey.isBlank() || amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Invalid payout request initialization");
+        }
+        if (currency == null || currency.isBlank() || providerCode == null || providerCode.isBlank() || now == null) {
+            throw new IllegalArgumentException("Payout currency, provider and time are required");
+        }
+        this.user = user;
+        this.requestKey = requestKey;
+        this.amount = amount;
+        this.currency = currency;
+        this.providerCode = providerCode;
+        this.status = PayoutStatus.REQUESTED;
+        this.attemptCount = 0;
+        this.requestedAt = now;
+        this.nextAttemptAt = now;
+        this.processingStartedAt = null;
+        this.resolvedAt = null;
+        this.failureCode = null;
+        this.lastErrorAt = null;
+        this.providerReference = null;
+    }
+
+    public void startProcessing(LocalDateTime now) {
+        requireStatus(PayoutStatus.REQUESTED);
+        status = PayoutStatus.PROCESSING;
+        processingStartedAt = now;
+        attemptCount++;
+    }
+
+    public void scheduleRetry(String code, LocalDateTime nextAttemptAt, LocalDateTime now) {
+        requireStatus(PayoutStatus.PROCESSING);
+        status = PayoutStatus.REQUESTED;
+        processingStartedAt = null;
+        this.nextAttemptAt = nextAttemptAt;
+        failureCode = code;
+        lastErrorAt = now;
+    }
+
+    public void requireReview(String code, LocalDateTime now) {
+        if (status != PayoutStatus.REQUESTED && status != PayoutStatus.PROCESSING) {
+            throw new IllegalStateException("Only queued or processing payouts can require review");
+        }
+        status = PayoutStatus.REVIEW_REQUIRED;
+        processingStartedAt = null;
+        failureCode = code;
+        lastErrorAt = now;
+    }
+
+    public void retryByAdmin(LocalDateTime now) {
+        requireStatus(PayoutStatus.REVIEW_REQUIRED);
+        status = PayoutStatus.REQUESTED;
+        processingStartedAt = null;
+        nextAttemptAt = now;
+        failureCode = null;
+    }
+
+    public void markPaid(String providerReference, LocalDateTime now) {
+        requireStatus(PayoutStatus.PROCESSING);
+        if (providerReference == null || providerReference.isBlank()) {
+            throw new IllegalArgumentException("Provider reference is required for paid payout");
+        }
+        status = PayoutStatus.PAID;
+        this.providerReference = providerReference;
+        processingStartedAt = null;
+        resolvedAt = now;
+        failureCode = null;
+    }
+
+    public void markFailed(String code, LocalDateTime now) {
+        if (status != PayoutStatus.PROCESSING && status != PayoutStatus.REVIEW_REQUIRED) {
+            throw new IllegalStateException("Only processing or review-required payout can fail");
+        }
+        status = PayoutStatus.FAILED;
+        processingStartedAt = null;
+        resolvedAt = now;
+        failureCode = code;
+        lastErrorAt = now;
+    }
+
+    public void cancel(LocalDateTime now) {
+        requireStatus(PayoutStatus.REQUESTED);
+        status = PayoutStatus.CANCELLED;
+        processingStartedAt = null;
+        resolvedAt = now;
+    }
+
+    private void requireStatus(PayoutStatus expected) {
+        if (status != expected) {
+            throw new IllegalStateException("Expected payout status " + expected + " but was " + status);
+        }
+    }
+
+    public Long getId() { return id; }
+    public User getUser() { return user; }
+    public String getRequestKey() { return requestKey; }
+    public BigDecimal getAmount() { return amount; }
+    public String getCurrency() { return currency; }
+    public PayoutStatus getStatus() { return status; }
+    public String getProviderCode() { return providerCode; }
+    public String getProviderReference() { return providerReference; }
+    public int getAttemptCount() { return attemptCount; }
+    public LocalDateTime getRequestedAt() { return requestedAt; }
+    public LocalDateTime getNextAttemptAt() { return nextAttemptAt; }
+    public LocalDateTime getProcessingStartedAt() { return processingStartedAt; }
+    public LocalDateTime getResolvedAt() { return resolvedAt; }
+    public String getFailureCode() { return failureCode; }
+    public LocalDateTime getLastErrorAt() { return lastErrorAt; }
+}
