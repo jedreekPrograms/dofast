@@ -40,14 +40,6 @@ public class SavedJobService {
         this.userBlockService = userBlockService;
     }
 
-    SavedJobService(
-            SavedJobRepository savedJobRepository,
-            JobRepository jobRepository,
-            JobService jobService
-    ) {
-        this(savedJobRepository, jobRepository, jobService, null);
-    }
-
     @Transactional
     public void save(Long jobId, User user) {
         Job job = jobRepository.findById(jobId)
@@ -58,7 +50,7 @@ public class SavedJobService {
         if (sameUser(job.getCreatedBy(), user)) {
             throw new ForbiddenOperationException("Nie możesz zapisać własnego zlecenia");
         }
-        if (userBlockService != null && userBlockService.isInteractionBlocked(job.getCreatedBy(), user)) {
+        if (userBlockService.isInteractionBlocked(job.getCreatedBy(), user)) {
             throw new ForbiddenOperationException("Nie możesz zapisać tego zlecenia");
         }
         if (!savedJobRepository.existsByUser_IdAndJob_Id(user.getId(), jobId)) {
