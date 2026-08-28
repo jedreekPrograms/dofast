@@ -133,3 +133,25 @@ DB_STATE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
 test "${DB_STATE//[[:space:]]/}" = "TO_DESTINATION|null"
 
 echo 'Live tracking advances A -> stop 1 -> stop 2 -> B: OK'
+
+EARLY_COMPLETION_STATUS=$(curl --silent --output /tmp/multistop-early-completion.json --write-out '%{http_code}' \
+  -X POST -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/completion")
+test "$EARLY_COMPLETION_STATUS" = "409"
+CURRENT_JOB=$(curl --fail --silent --show-error -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID")
+python3 -c 'import json,sys; assert json.load(sys.stdin)["status"]=="IN_PROGRESS"' <<< "$CURRENT_JOB"
+
+echo 'Transport completion is blocked before final B arrival: OK'
+
+ARRIVED=$(curl --fail --silent --show-error -X POST \
+  -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/tracking/checkpoint")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["phase"]=="ARRIVED_DESTINATION"; assert d["sharingActive"] is False; assert d["location"] is None; assert d["remainingDistanceMeters"] is None; assert d["remainingDurationSeconds"] is None' <<< "$ARRIVED"
+
+DB_ARRIVED=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT phase || '|' || (current_location IS NULL)::text || '|' || (remaining_distance_meters IS NULL)::text FROM job_live_tracking WHERE job_id=$JOB_ID;")
+test "${DB_ARRIVED//[[:space:]]/}" = "ARRIVED_DESTINATION|true|true"
+
+COMPLETION=$(curl --fail --silent --show-error -X POST \
+  -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/completion")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]=="COMPLETION_REQUESTED"' <<< "$COMPLETION"
+
+echo 'Final B arrival unlocks the normal completion-request lifecycle: OK'
