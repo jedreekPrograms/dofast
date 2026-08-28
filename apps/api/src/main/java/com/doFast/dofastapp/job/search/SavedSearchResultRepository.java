@@ -48,6 +48,12 @@ interface SavedSearchResultRepository extends Repository<Job, Long> {
               )
               AND (:minPrice IS NULL OR j.price >= :minPrice)
               AND (:maxPrice IS NULL OR j.price <= :maxPrice)
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM user_blocks ub
+                    WHERE (ub.blocker_id = :viewerId AND ub.blocked_user_id = j.created_by_id)
+                       OR (ub.blocker_id = j.created_by_id AND ub.blocked_user_id = :viewerId)
+              )
             ORDER BY j.location <-> origin.point, j.created_at DESC
             LIMIT :limit
             """, nativeQuery = true)
@@ -59,6 +65,7 @@ interface SavedSearchResultRepository extends Repository<Job, Long> {
             @Param("categorySlug") String categorySlug,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
+            @Param("viewerId") Long viewerId,
             @Param("limit") int limit
     );
 }

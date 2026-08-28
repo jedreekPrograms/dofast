@@ -37,6 +37,9 @@ public class SavedSearchResultService {
         if (center == null || radiusMeters == null) {
             throw new BusinessException("To zapisane wyszukiwanie nie ma prywatnego filtra promienia");
         }
+        if (user == null || user.getId() == null) {
+            throw new ResourceNotFoundException("Zapisane wyszukiwanie nie istnieje");
+        }
 
         JobCategory category = savedSearch.getCategory();
         return savedSearchResultRepository.findMatches(
@@ -47,6 +50,7 @@ public class SavedSearchResultService {
                         category != null ? category.getSlug() : null,
                         savedSearch.getMinPrice(),
                         savedSearch.getMaxPrice(),
+                        user.getId(),
                         limit
                 )
                 .stream()

@@ -47,7 +47,7 @@ class SavedSearchResultServiceTest {
     }
 
     @Test
-    void returnsOnlyDatabaseFilteredRadiusMatchesWithoutExposingCenter() {
+    void returnsOnlyDatabaseFilteredRadiusMatchesForCurrentViewerWithoutExposingCenter() {
         JobCategory category = new JobCategory();
         ReflectionTestUtils.setField(category, "slug", "przeprowadzki");
 
@@ -69,6 +69,7 @@ class SavedSearchResultServiceTest {
                 "przeprowadzki",
                 new BigDecimal("100.00"),
                 new BigDecimal("500.00"),
+                7L,
                 50
         )).thenReturn(List.of(projection));
 
@@ -96,6 +97,7 @@ class SavedSearchResultServiceTest {
                 "przeprowadzki",
                 new BigDecimal("100.00"),
                 new BigDecimal("500.00"),
+                7L,
                 50
         );
     }
@@ -116,6 +118,7 @@ class SavedSearchResultServiceTest {
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.anyInt()
         );
     }
