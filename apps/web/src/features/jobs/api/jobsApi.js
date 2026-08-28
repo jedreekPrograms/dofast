@@ -119,6 +119,25 @@ export function createJob(payload) {
   return apiRequest('/jobs', { method: 'POST', body: JSON.stringify(payload) })
 }
 
+export function createJobPublication(job, requestId) {
+  return apiRequest('/jobs/publications', {
+    method: 'POST',
+    body: JSON.stringify({ requestId, job }),
+  })
+}
+
+export function getJobPublication(id, options = {}) {
+  return apiRequest(`/jobs/publications/${id}`, options)
+}
+
+export function createJobPublicationPaymentIntent(id) {
+  return apiRequest(`/jobs/publications/${id}/payment-intent`, { method: 'POST' })
+}
+
+export function cancelJobPublication(id) {
+  return apiRequest(`/jobs/publications/${id}/cancel`, { method: 'POST' })
+}
+
 export function acceptJob(id) {
   return apiRequest(`/jobs/${id}/accept`, { method: 'POST' })
 }

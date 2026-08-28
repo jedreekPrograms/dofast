@@ -1,5 +1,7 @@
 package com.doFast.dofastapp.payment.webhook;
 
+import com.doFast.dofastapp.job.publication.JobPublicationPaymentIntentService;
+import com.doFast.dofastapp.job.publication.JobPublicationStripeSettlementService;
 import com.doFast.dofastapp.payment.service.StripePaymentService;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
@@ -25,13 +27,16 @@ public class StripeWebhookController {
 
     private final String endpointSecret;
     private final StripePaymentService stripePaymentService;
+    private final JobPublicationStripeSettlementService publicationSettlementService;
 
     public StripeWebhookController(
             @Value("${stripe.webhook.secret}") String endpointSecret,
-            StripePaymentService stripePaymentService
+            StripePaymentService stripePaymentService,
+            JobPublicationStripeSettlementService publicationSettlementService
     ) {
         this.endpointSecret = endpointSecret;
         this.stripePaymentService = stripePaymentService;
+        this.publicationSettlementService = publicationSettlementService;
     }
 
     @PostMapping
@@ -58,21 +63,15 @@ public class StripeWebhookController {
         }
 
         try {
-            boolean processed = stripePaymentService.processSuccessfulPayment(paymentIntent, event.getId());
+            boolean processed = isJobPublication(paymentIntent)
+                    ? publicationSettlementService.processSuccessfulPayment(paymentIntent, event.getId())
+                    : stripePaymentService.processSuccessfulPayment(paymentIntent, event.getId());
             if (!processed) {
-                log.info(
-                        "Stripe event {} / PaymentIntent {} was already processed",
-                        event.getId(),
-                        paymentIntent.getId()
-                );
+                log.info("Stripe event {} / PaymentIntent {} was already processed", event.getId(), paymentIntent.getId());
                 return ResponseEntity.ok("already processed");
             }
 
-            log.info(
-                    "Processed Stripe event {} / PaymentIntent {}",
-                    event.getId(),
-                    paymentIntent.getId()
-            );
+            log.info("Processed Stripe event {} / PaymentIntent {}", event.getId(), paymentIntent.getId());
             return ResponseEntity.ok("ok");
         } catch (RuntimeException ex) {
             log.error(
@@ -83,5 +82,10 @@ public class StripeWebhookController {
             );
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
         }
+    }
+
+    private boolean isJobPublication(PaymentIntent paymentIntent) {
+        return paymentIntent.getMetadata() != null
+                && JobPublicationPaymentIntentService.PURPOSE.equals(paymentIntent.getMetadata().get("purpose"));
     }
 }

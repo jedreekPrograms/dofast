@@ -1,0 +1,86 @@
+name: Job publication payment smoke
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/job-publication-payment-smoke.yml"
+      - ".github/scripts/job-publication-payment-smoke.sh"
+      - "apps/api/src/main/java/com/doFast/dofastapp/job/publication/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
+      - "apps/api/src/main/resources/db/migration/V40__job_publication_payments.sql"
+      - "apps/web/src/features/jobs/**"
+      - "apps/web/src/shared/payments/**"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/job-publication-payment-smoke.yml"
+      - ".github/scripts/job-publication-payment-smoke.sh"
+      - "apps/api/src/main/java/com/doFast/dofastapp/job/publication/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
+      - "apps/api/src/main/resources/db/migration/V40__job_publication_payments.sql"
+      - "apps/web/src/features/jobs/**"
+      - "apps/web/src/shared/payments/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: job-publication-payment-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  job-publication-payment-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare local configuration
+        shell: bash
+        run: cp .env.example .env
+
+      - name: Build API with transient registry retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if docker compose build api; then
+              exit 0
+            fi
+            if test "$attempt" = "3"; then
+              echo "API image build failed after $attempt attempts"
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
+
+      - name: Start PostgreSQL and API
+        run: docker compose up -d --no-build db api
+
+      - name: Wait for API
+        shell: bash
+        run: |
+          for attempt in {1..45}; do
+            if curl --fail --silent http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs db api
+          exit 1
+
+      - name: Verify wallet reservation, idempotency, cancellation and fully-funded publication
+        run: bash .github/scripts/job-publication-payment-smoke.sh
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail=300 db api
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans

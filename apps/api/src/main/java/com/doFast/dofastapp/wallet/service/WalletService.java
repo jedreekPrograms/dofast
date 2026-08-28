@@ -54,6 +54,11 @@ public class WalletService {
     }
 
     @Transactional
+    public BigDecimal getBalanceForUpdate(Long userId) {
+        return getWalletForUpdate(userId).getBalance();
+    }
+
+    @Transactional
     public boolean credit(
             Long userId,
             BigDecimal amount,

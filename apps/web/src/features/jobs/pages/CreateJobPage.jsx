@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import JobAssignmentModePicker from '../components/JobAssignmentModePicker.jsx'
+import JobPublicationPaymentPanel from '../components/JobPublicationPaymentPanel.jsx'
 import LocationMapPicker from '../components/LocationMapPicker.jsx'
 import RouteMapPicker from '../components/RouteMapPicker.jsx'
-import { createJob, createRouteQuote, getJobCategories, getRouteModeEstimates } from '../api/jobsApi.js'
+import { createJobPublication, createRouteQuote, getJobCategories, getRouteModeEstimates } from '../api/jobsApi.js'
 import './CreateJobPage.css'
 
 const EMPTY_FORM = {
@@ -16,8 +17,14 @@ const EMPTY_FORM = {
 }
 const MAX_STOPS = 10
 
+function createPublicationRequestId() {
+  if (window.crypto?.randomUUID) return `jobpub_${window.crypto.randomUUID()}`
+  return `jobpub_${Date.now()}_${Math.random().toString(36).slice(2)}`
+}
+
 function CreateJobPage() {
   const navigate = useNavigate()
+  const requestIdRef = useRef(createPublicationRequestId())
   const [form, setForm] = useState(EMPTY_FORM)
   const [categories, setCategories] = useState([])
   const [categoriesLoading, setCategoriesLoading] = useState(true)
@@ -30,7 +37,9 @@ function CreateJobPage() {
   const [modesLoading, setModesLoading] = useState(false)
   const [routing, setRouting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [publication, setPublication] = useState(null)
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [routeError, setRouteError] = useState('')
 
   useEffect(() => {
@@ -99,7 +108,7 @@ function CreateJobPage() {
   }, [invalidateRoute])
 
   useEffect(() => {
-    if (fulfillmentMode !== 'POINT_TO_POINT') return undefined
+    if (fulfillmentMode !== 'POINT_TO_POINT' || publication) return undefined
     if (!isCompletePoint(origin)
       || !isCompletePoint(destination)
       || !stops.every(isCompletePoint)) {
@@ -133,7 +142,7 @@ function CreateJobPage() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [destination, fulfillmentMode, origin, stops])
+  }, [destination, fulfillmentMode, origin, publication, stops])
 
   useEffect(() => {
     if (!routeQuote?.id || fulfillmentMode !== 'POINT_TO_POINT') {
@@ -182,6 +191,18 @@ function CreateJobPage() {
     setForm((current) => ({ ...current, priceNegotiationEnabled }))
   }
 
+  function resetPublicationFlow(message) {
+    requestIdRef.current = createPublicationRequestId()
+    setPublication(null)
+    setError('')
+    setInfo(message || '')
+    if (fulfillmentMode === 'POINT_TO_POINT') {
+      setRouteQuote(null)
+      setModeComparison(null)
+      setDestination((current) => (current ? { ...current } : current))
+    }
+  }
+
   async function submit(event) {
     event.preventDefault()
     if (!selectedCategory) {
@@ -199,6 +220,7 @@ function CreateJobPage() {
 
     setSubmitting(true)
     setError('')
+    setInfo('')
     try {
       const payload = {
         title: form.title,
@@ -211,10 +233,26 @@ function CreateJobPage() {
       if (fulfillmentMode === 'ON_SITE') payload.location = normalizePoint(location)
       else payload.routeQuoteId = routeQuote.id
 
-      await createJob(payload)
-      navigate('/my-jobs')
+      const result = await createJobPublication(payload, requestIdRef.current)
+      if (result.status === 'PUBLISHED' && result.jobId) {
+        navigate('/my-jobs')
+        return
+      }
+      if (result.status === 'PAYMENT_REQUIRED') {
+        setPublication(result)
+        return
+      }
+      if (result.status === 'PAYMENT_RECEIVED') {
+        resetPublicationFlow('Płatność jest już w Twoim portfelu. Przygotuj publikację ponownie z aktualnym saldem.')
+        return
+      }
+      if (result.status === 'CANCELLED') {
+        resetPublicationFlow('Poprzednia próba publikacji została anulowana. Możesz spróbować ponownie.')
+        return
+      }
+      setError('Nie udało się ustalić stanu publikacji.')
     } catch (requestError) {
-      setError(requestError.message || 'Nie udało się opublikować zlecenia.')
+      setError(requestError.message || 'Nie udało się przygotować publikacji zlecenia.')
     } finally {
       setSubmitting(false)
     }
@@ -235,122 +273,133 @@ function CreateJobPage() {
     <main className="create-job-page">
       <header className="page-heading">
         <span className="eyebrow">Nowe zlecenie</span>
-        <h1>{fulfillmentMode === 'ON_SITE' ? 'Gdzie ma być wykonane?' : 'Skąd i dokąd?'}</h1>
-        <p>{fulfillmentMode === 'ON_SITE'
-          ? 'Wskaż miejsce wykonania usługi. Publicznie pokażemy tylko obszar, a dokładny adres dostanie wykonawca po przyjęciu zlecenia.'
-          : 'Dla zleceń transportowych wybierz A i B, a w razie potrzeby dodaj do 10 przystanków. Dokładne adresy są widoczne wyłącznie dla stron zlecenia.'}</p>
+        <h1>{publication ? 'Dokończ finansowanie' : (fulfillmentMode === 'ON_SITE' ? 'Gdzie ma być wykonane?' : 'Skąd i dokąd?')}</h1>
+        <p>{publication
+          ? 'Formularz jest zamrożony dla tej próby publikacji. Zlecenie nie jest jeszcze publiczne.'
+          : (fulfillmentMode === 'ON_SITE'
+            ? 'Wskaż miejsce wykonania usługi. Publicznie pokażemy tylko obszar, a dokładny adres dostanie wykonawca po przyjęciu zlecenia.'
+            : 'Dla zleceń transportowych wybierz A i B, a w razie potrzeby dodaj do 10 przystanków. Dokładne adresy są widoczne wyłącznie dla stron zlecenia.')}</p>
       </header>
 
-      <form className="panel create-job-form" onSubmit={submit}>
-        <label className="field create-job-form__wide">
-          <span>Kategoria usługi</span>
-          <select name="categoryId" value={form.categoryId} onChange={updateCategory} required disabled={categoriesLoading || submitting}>
-            <option value="">{categoriesLoading ? 'Ładowanie kategorii…' : 'Wybierz podkategorię'}</option>
-            {selectableGroups.map((group) => (
-              <optgroup key={group.id} label={group.name}>
-                {group.children.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <small>{selectedCategory
-            ? (fulfillmentMode === 'ON_SITE' ? 'Ta usługa jest wykonywana w jednym miejscu.' : 'Ta usługa wymaga przejazdu pomiędzy punktami.')
-            : 'Typ lokalizacji dobierzemy automatycznie na podstawie wybranej usługi.'}</small>
-        </label>
+      {publication ? (
+        <JobPublicationPaymentPanel
+          publication={publication}
+          onPublished={() => navigate('/my-jobs')}
+          onReset={resetPublicationFlow}
+        />
+      ) : (
+        <form className="panel create-job-form" onSubmit={submit}>
+          <label className="field create-job-form__wide">
+            <span>Kategoria usługi</span>
+            <select name="categoryId" value={form.categoryId} onChange={updateCategory} required disabled={categoriesLoading || submitting}>
+              <option value="">{categoriesLoading ? 'Ładowanie kategorii…' : 'Wybierz podkategorię'}</option>
+              {selectableGroups.map((group) => (
+                <optgroup key={group.id} label={group.name}>
+                  {group.children.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <small>{selectedCategory
+              ? (fulfillmentMode === 'ON_SITE' ? 'Ta usługa jest wykonywana w jednym miejscu.' : 'Ta usługa wymaga przejazdu pomiędzy punktami.')
+              : 'Typ lokalizacji dobierzemy automatycznie na podstawie wybranej usługi.'}</small>
+          </label>
 
-        {!selectedCategory && (
-          <div className="create-job-form__wide route-summary">Wybierz kategorię, aby wskazać miejsce lub trasę realizacji.</div>
-        )}
+          {!selectedCategory && (
+            <div className="create-job-form__wide route-summary">Wybierz kategorię, aby wskazać miejsce lub trasę realizacji.</div>
+          )}
 
-        {fulfillmentMode === 'ON_SITE' && (
-          <div className="create-job-form__wide">
-            <LocationMapPicker location={location} onLocationChange={updateOnSiteLocation} disabled={submitting} />
-          </div>
-        )}
-
-        {fulfillmentMode === 'POINT_TO_POINT' && (
-          <>
+          {fulfillmentMode === 'ON_SITE' && (
             <div className="create-job-form__wide">
-              <RouteMapPicker
-                origin={origin}
-                stops={stops}
-                destination={destination}
-                routeQuote={routeQuote}
-                onPointChange={updatePoint}
-                onAddStop={addStop}
-                onRemoveStop={removeStop}
-                disabled={submitting}
-              />
+              <LocationMapPicker location={location} onLocationChange={updateOnSiteLocation} disabled={submitting} />
             </div>
+          )}
 
-            <div className="create-job-form__wide route-summary" aria-live="polite">
-              {routing && <span>Wyznaczanie całej trasy i czasu dojazdu…</span>}
-              {!routing && routeQuote && (
-                <>
-                  <strong>{routeLabel(routeQuote)}</strong>
-                  <div className="route-mode-grid">
-                    {modeEstimates.map((estimate) => (
-                      <div className="route-mode-card" key={estimate.mode}>
-                        <span>{modeLabel(estimate.mode)}</span>
-                        {estimate.available ? (
-                          <strong>{formatDuration(estimate.durationSeconds)} · {formatDistance(estimate.distanceMeters)}</strong>
-                        ) : (
-                          <strong>Niedostępna</strong>
-                        )}
-                      </div>
-                    ))}
-                    {modesLoading && modeEstimates.length === 1 && (
-                      <div className="route-mode-card route-mode-card--loading">Liczenie roweru i pieszo…</div>
+          {fulfillmentMode === 'POINT_TO_POINT' && (
+            <>
+              <div className="create-job-form__wide">
+                <RouteMapPicker
+                  origin={origin}
+                  stops={stops}
+                  destination={destination}
+                  routeQuote={routeQuote}
+                  onPointChange={updatePoint}
+                  onAddStop={addStop}
+                  onRemoveStop={removeStop}
+                  disabled={submitting}
+                />
+              </div>
+
+              <div className="create-job-form__wide route-summary" aria-live="polite">
+                {routing && <span>Wyznaczanie całej trasy i czasu dojazdu…</span>}
+                {!routing && routeQuote && (
+                  <>
+                    <strong>{routeLabel(routeQuote)}</strong>
+                    <div className="route-mode-grid">
+                      {modeEstimates.map((estimate) => (
+                        <div className="route-mode-card" key={estimate.mode}>
+                          <span>{modeLabel(estimate.mode)}</span>
+                          {estimate.available ? (
+                            <strong>{formatDuration(estimate.durationSeconds)} · {formatDistance(estimate.distanceMeters)}</strong>
+                          ) : (
+                            <strong>Niedostępna</strong>
+                          )}
+                        </div>
+                      ))}
+                      {modesLoading && modeEstimates.length === 1 && (
+                        <div className="route-mode-card route-mode-card--loading">Liczenie roweru i pieszo…</div>
+                      )}
+                    </div>
+                    {routeQuote.stops?.length > 0 && <small>Trasa obejmuje {routeQuote.stops.length} {routeQuote.stops.length === 1 ? 'przystanek' : 'przystanki/przystanków'} w podanej kolejności.</small>}
+                    {modeComparison?.nonDrivingBetaWarningRequired && (
+                      <small>Trasy piesze i rowerowe Google są w wersji beta i mogą nie uwzględniać wszystkich chodników, ścieżek lub warunków terenowych.</small>
                     )}
-                  </div>
-                  {routeQuote.stops?.length > 0 && <small>Trasa obejmuje {routeQuote.stops.length} {routeQuote.stops.length === 1 ? 'przystanek' : 'przystanki/przystanków'} w podanej kolejności.</small>}
-                  {modeComparison?.nonDrivingBetaWarningRequired && (
-                    <small>Trasy piesze i rowerowe Google są w wersji beta i mogą nie uwzględniać wszystkich chodników, ścieżek lub warunków terenowych.</small>
-                  )}
-                  {routeQuote.provider === 'DETERMINISTIC_DEV' && <small>Tryb deweloperski — prawdziwe ETA Google pojawi się po konfiguracji Routes API.</small>}
-                </>
-              )}
-              {routeError && <span className="form-message form-message--error">{routeError}</span>}
-            </div>
-          </>
-        )}
+                    {routeQuote.provider === 'DETERMINISTIC_DEV' && <small>Tryb deweloperski — prawdziwe ETA Google pojawi się po konfiguracji Routes API.</small>}
+                  </>
+                )}
+                {routeError && <span className="form-message form-message--error">{routeError}</span>}
+              </div>
+            </>
+          )}
 
-        <label className="field create-job-form__wide">
-          <span>Tytuł</span>
-          <input name="title" value={form.title} onChange={updateField} minLength={3} maxLength={160} placeholder={fulfillmentMode === 'ON_SITE' ? 'np. Zmontuj szafę w mieszkaniu' : 'np. Odbierz dwie paczki po drodze i dowieź do B'} required />
-        </label>
-        <label className="field create-job-form__wide">
-          <span>Opis</span>
-          <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder={fulfillmentMode === 'ON_SITE' ? 'Opisz dokładnie, co trzeba zrobić na miejscu i jakie narzędzia mogą być potrzebne.' : 'Opisz co trzeba odebrać lub zrobić w każdym punkcie i wszystkie ważne szczegóły.'} required />
-        </label>
-        <label className="field">
-          <span>Wynagrodzenie / budżet</span>
-          <input name="price" type="number" value={form.price} onChange={updateField} min="0.01" step="0.01" placeholder="25.00" required />
-          <small>Ta kwota zostanie zablokowana w escrow przy publikacji zlecenia.</small>
-        </label>
+          <label className="field create-job-form__wide">
+            <span>Tytuł</span>
+            <input name="title" value={form.title} onChange={updateField} minLength={3} maxLength={160} placeholder={fulfillmentMode === 'ON_SITE' ? 'np. Zmontuj szafę w mieszkaniu' : 'np. Odbierz dwie paczki po drodze i dowieź do B'} required />
+          </label>
+          <label className="field create-job-form__wide">
+            <span>Opis</span>
+            <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder={fulfillmentMode === 'ON_SITE' ? 'Opisz dokładnie, co trzeba zrobić na miejscu i jakie narzędzia mogą być potrzebne.' : 'Opisz co trzeba odebrać lub zrobić w każdym punkcie i wszystkie ważne szczegóły.'} required />
+          </label>
+          <label className="field">
+            <span>Wynagrodzenie / budżet</span>
+            <input name="price" type="number" value={form.price} onChange={updateField} min="0.01" step="0.01" placeholder="25.00" required />
+            <small>Najpierw użyjemy dostępnego salda. Jeśli go zabraknie, zapłacisz tylko brakującą kwotę przez Stripe.</small>
+          </label>
 
-        <div className="create-job-form__wide">
-          <JobAssignmentModePicker
-            assignmentMode={form.assignmentMode}
-            priceNegotiationEnabled={form.priceNegotiationEnabled}
-            price={form.price}
-            disabled={submitting}
-            onModeChange={updateAssignmentMode}
-            onNegotiationChange={updatePriceNegotiationEnabled}
-          />
-        </div>
+          <div className="create-job-form__wide">
+            <JobAssignmentModePicker
+              assignmentMode={form.assignmentMode}
+              priceNegotiationEnabled={form.priceNegotiationEnabled}
+              price={form.price}
+              disabled={submitting}
+              onModeChange={updateAssignmentMode}
+              onNegotiationChange={updatePriceNegotiationEnabled}
+            />
+          </div>
 
-        <div className="create-job-form__wide create-job-form__actions">
-          <span className="create-job-form__privacy">{fulfillmentMode === 'ON_SITE'
-            ? 'Dokładny adres jest chroniony. Publiczne ogłoszenie pokazuje tylko obszar.'
-            : 'Dokładne A, przystanki i B są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.'}</span>
-          <button className="button button--primary" type="submit" disabled={submitting || routing || !selectedCategory || !locationReady}>
-            {submitting ? 'Publikowanie…' : 'Opublikuj zlecenie'}
-          </button>
-        </div>
-        {error && <div className="form-message form-message--error create-job-form__wide">{error}</div>}
-      </form>
+          <div className="create-job-form__wide create-job-form__actions">
+            <span className="create-job-form__privacy">{fulfillmentMode === 'ON_SITE'
+              ? 'Dokładny adres jest chroniony. Publiczne ogłoszenie pokazuje tylko obszar.'
+              : 'Dokładne A, przystanki i B są chronione. Publiczne ogłoszenie nie zawiera współrzędnych ani numerów adresów.'}</span>
+            <button className="button button--primary" type="submit" disabled={submitting || routing || !selectedCategory || !locationReady}>
+              {submitting ? 'Sprawdzamy finansowanie…' : 'Opublikuj zlecenie'}
+            </button>
+          </div>
+          {info && <div className="form-message form-message--success create-job-form__wide">{info}</div>}
+          {error && <div className="form-message form-message--error create-job-form__wide">{error}</div>}
+        </form>
+      )}
     </main>
   )
 }
