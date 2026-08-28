@@ -140,7 +140,9 @@ ESCROW_LOCK=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT type || ':' || amount || ':' || balance_after FROM wallet_transactions WHERE operation_key='escrow:${JOB_ID}:lock';" | tr -d '[:space:]')
 test "$ESCROW_LOCK" = "ESCROW_LOCK:-70.00:0.00"
 
-PUBLIC_JOB=$(curl --fail --silent --show-error "$api/jobs/$JOB_ID")
+PUBLIC_JOB=$(curl --fail --silent --show-error \
+  -H "Authorization: Bearer $TOKEN" \
+  "$api/jobs/$JOB_ID")
 echo "$PUBLIC_JOB" | grep -q '"status":"OPEN"'
 echo "$PUBLIC_JOB" | grep -q 'Publication fully funded smoke'
 
