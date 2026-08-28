@@ -15,6 +15,7 @@ import java.util.HexFormat;
 public class AttachmentFilePolicy {
 
     private static final int MAX_FILENAME_LENGTH = 160;
+    private static final int DATABASE_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
     private final int maxFileSizeBytes;
     private final int maxAttachmentsPerJob;
@@ -23,8 +24,8 @@ public class AttachmentFilePolicy {
             @Value("${dofast.attachments.max-file-size-bytes:10485760}") int maxFileSizeBytes,
             @Value("${dofast.attachments.max-per-job:12}") int maxAttachmentsPerJob
     ) {
-        if (maxFileSizeBytes <= 0 || maxFileSizeBytes >= Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("Attachment max file size is invalid");
+        if (maxFileSizeBytes <= 0 || maxFileSizeBytes > DATABASE_MAX_FILE_SIZE_BYTES) {
+            throw new IllegalArgumentException("Attachment max file size must be between 1 and 10485760 bytes");
         }
         if (maxAttachmentsPerJob <= 0 || maxAttachmentsPerJob > 100) {
             throw new IllegalArgumentException("Attachment count limit is invalid");
