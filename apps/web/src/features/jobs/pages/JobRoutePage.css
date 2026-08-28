@@ -14,8 +14,12 @@
 .live-tracking-metrics small { color: #737986; }
 .live-tracking-metrics strong { font-size: 1.15rem; }
 .live-tracking-note { margin: 0; color: #656b77; }
+.live-tracking-arrived { display: grid; gap: 5px; padding: 15px; border: 1px solid #cfe6d6; border-radius: 14px; background: #f4fbf6; color: #315b3e; }
+.live-tracking-arrived strong { color: #205132; }
+.live-tracking-arrived span { font-size: 0.9rem; line-height: 1.55; }
 .live-tracking-worker-status { display: grid; gap: 5px; padding: 14px; border-radius: 14px; background: rgba(127, 127, 127, 0.08); }
 .live-tracking-worker-status span { color: #656b77; font-size: 0.9rem; line-height: 1.5; }
+.live-tracking-worker-status .button { width: fit-content; margin-top: 7px; }
 .job-route-map { width: 100%; min-height: 540px; border-radius: 20px; overflow: hidden; background: rgba(127, 127, 127, 0.08); }
 .job-route-map-fallback { line-height: 1.6; }
 @media (max-width: 760px) {
@@ -23,5 +27,6 @@
   .job-route-summary__metrics { text-align: left; }
   .live-tracking-card__heading { align-items: flex-start; flex-direction: column; }
   .live-tracking-metrics { grid-template-columns: 1fr; }
+  .live-tracking-worker-status .button { width: 100%; }
   .job-route-map { min-height: 390px; }
 }
