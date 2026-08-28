@@ -88,6 +88,20 @@ function PublicProfilePage() {
           </div>
         </div>
 
+        {profile.serviceCategories?.length > 0 && (
+          <div className="trust-profile__specializations">
+            <span>Specjalizacje usług</span>
+            <div className="trust-profile__specialization-list">
+              {profile.serviceCategories.map((category) => (
+                <div className="trust-profile__specialization" key={category.categoryId}>
+                  <strong>{category.name}</strong>
+                  <small>{category.parentCategoryName}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="trust-profile__stats">
           <div>
             <span>Ocena</span>
