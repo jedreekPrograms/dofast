@@ -15,6 +15,8 @@ final class JobResponseMapper {
                 job.getTitle(),
                 job.getDescription(),
                 job.getPrice(),
+                job.getAssignmentMode(),
+                job.isPriceNegotiationEnabled(),
                 job.getStatus(),
                 category != null ? category.getId() : null,
                 category != null ? category.getSlug() : null,
