@@ -39,6 +39,16 @@ The backend does not trust the browser-supplied MIME type or filename extension.
 
 Downloads are served with `Content-Disposition: attachment`, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
 
+## Web privacy behavior
+
+The job-details page uses only the authenticated visibility-filtered attachment endpoint. It never attempts to reconstruct hidden attachment counts or discover whether another visibility class exists.
+
+The requester can upload through the three visibility choices with a plain-language explanation of each boundary. The browser's `accept` filter is only a convenience; the backend magic-byte policy remains authoritative.
+
+`EXECUTION_SECRET` files are deliberately never rendered as inline image/PDF previews. A user must explicitly request a download. The web client receives the authorized response as a `Blob`, creates a short-lived object URL only for the browser download action and revokes that URL immediately afterwards. The application does not persist downloaded attachment content in local/session storage.
+
+The UI also warns that execution-secret attachments are not a general-purpose vault and must not contain payment-card data, passwords, identity documents or banking credentials.
+
 ## Storage and encryption
 
 Binary bytes are not stored in PostgreSQL. PostgreSQL keeps only authorization/audit metadata and an opaque random storage key.
@@ -62,6 +72,6 @@ Responses never include storage paths, storage keys, encryption material or SHA-
 
 ## Schema and runtime validation
 
-Flyway `V36__job_attachments.sql` creates metadata, visibility/size/hash checks and active-job indexes. The application and database hard limits both cap a file at 10 MiB.
+Flyway `V37__job_attachments.sql` creates metadata, visibility/size/hash checks and active-job indexes. `V36__tracking_destination_arrival.sql` precedes it on the current schema history. The application and database hard limits both cap a file at 10 MiB.
 
 Focused tests cover magic-byte validation, filename normalization, count/size limits, encrypted-at-rest round trips, failure with a wrong AES key, root-path confinement and lifecycle access rules. The container runtime smoke additionally verifies multipart upload, metadata privacy, encrypted bytes on the mounted volume, pre/post-assignment access, execution-secret revocation and deletion behavior.
