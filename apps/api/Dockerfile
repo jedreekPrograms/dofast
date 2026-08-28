@@ -16,7 +16,9 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system dofast \
-    && useradd --system --gid dofast --home-dir /app --shell /usr/sbin/nologin dofast
+    && useradd --system --gid dofast --home-dir /app --shell /usr/sbin/nologin dofast \
+    && mkdir -p /var/lib/dofast/attachments \
+    && chown -R dofast:dofast /var/lib/dofast
 
 COPY --from=build --chown=dofast:dofast /workspace/target/*.jar /app/app.jar
 

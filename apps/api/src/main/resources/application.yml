@@ -23,6 +23,10 @@ spring:
     enabled: true
     locations: classpath:db/migration
     validate-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: ${ATTACHMENT_MAX_FILE_SIZE:10MB}
+      max-request-size: ${ATTACHMENT_MAX_REQUEST_SIZE:11MB}
   lifecycle:
     timeout-per-shutdown-phase: 20s
 
@@ -82,3 +86,8 @@ dofast:
     min-update-interval-millis: ${TRACKING_MIN_UPDATE_INTERVAL_MILLIS:1000}
     max-sample-age-seconds: ${TRACKING_MAX_SAMPLE_AGE_SECONDS:120}
     future-tolerance-seconds: ${TRACKING_FUTURE_TOLERANCE_SECONDS:30}
+  attachments:
+    storage-root: ${ATTACHMENT_STORAGE_ROOT:./data/attachments}
+    encryption-key-base64: ${ATTACHMENT_ENCRYPTION_KEY_BASE64:ZG9mYXN0LWxvY2FsLWF0dGFjaG1lbnQta2V5LTIwMjY=}
+    max-file-size-bytes: ${ATTACHMENT_MAX_FILE_SIZE_BYTES:10485760}
+    max-per-job: ${ATTACHMENT_MAX_PER_JOB:12}
