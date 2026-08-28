@@ -28,39 +28,29 @@ function fetchProfile(userId) {
 }
 
 function UserTrustCard({ userId, roleLabel = 'Użytkownik', compact = false }) {
-  const [profile, setProfile] = useState(() => userId ? profileCache.get(userId) || null : null)
-  const [loading, setLoading] = useState(() => Boolean(userId && !profileCache.has(userId)))
-  const [failed, setFailed] = useState(false)
+  const [loaded, setLoaded] = useState(null)
+  const [failedUserId, setFailedUserId] = useState(null)
+
+  const cachedProfile = userId ? profileCache.get(userId) || null : null
+  const loadedProfile = loaded?.userId === userId ? loaded.profile : null
+  const profile = cachedProfile || loadedProfile
+  const failed = Boolean(userId && failedUserId === userId && !profile)
+  const loading = Boolean(userId && !profile && !failed)
 
   useEffect(() => {
-    if (!userId) {
-      setProfile(null)
-      setLoading(false)
-      setFailed(false)
-      return undefined
-    }
-
-    const cached = profileCache.get(userId)
-    if (cached) {
-      setProfile(cached)
-      setLoading(false)
-      setFailed(false)
+    if (!userId || profileCache.has(userId)) {
       return undefined
     }
 
     let active = true
-    setProfile(null)
-    setLoading(true)
-    setFailed(false)
     fetchProfile(userId)
       .then((response) => {
-        if (active) setProfile(response)
+        if (!active) return
+        setLoaded({ userId, profile: response })
+        setFailedUserId(null)
       })
       .catch(() => {
-        if (active) setFailed(true)
-      })
-      .finally(() => {
-        if (active) setLoading(false)
+        if (active) setFailedUserId(userId)
       })
 
     return () => { active = false }
