@@ -139,10 +139,12 @@ public class JobPublicationService {
         return toResponse(publicationRepository.save(publication));
     }
 
+    @Transactional
     public JobPublicationResponse get(Long publicationId, User currentUser) {
-        JobPublication publication = publicationRepository.findById(publicationId)
+        JobPublication publication = publicationRepository.findByIdForUpdate(publicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Publikacja nie istnieje"));
         assertOwner(publication, currentUser);
+        expireIfNecessary(publication, LocalDateTime.now());
         return toResponse(publication);
     }
 
@@ -189,8 +191,16 @@ public class JobPublicationService {
         if (publication == null) {
             return false;
         }
+        return expireIfNecessary(publication, LocalDateTime.now());
+    }
+
+    boolean expireIfNecessary(JobPublication publication, LocalDateTime now) {
+        if (publication.getStatus() != JobPublicationStatus.PAYMENT_REQUIRED
+                || publication.getExpiresAt().isAfter(now)) {
+            return false;
+        }
         restoreReservation(publication);
-        publication.cancel(LocalDateTime.now());
+        publication.cancel(now);
         publicationRepository.save(publication);
         return true;
     }
