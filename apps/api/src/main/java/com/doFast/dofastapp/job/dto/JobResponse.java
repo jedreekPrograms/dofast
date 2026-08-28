@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.dto;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.category.FulfillmentMode;
 
 import java.math.BigDecimal;
@@ -11,6 +12,8 @@ public record JobResponse(
         String title,
         String description,
         BigDecimal price,
+        JobAssignmentMode assignmentMode,
+        boolean priceNegotiationEnabled,
         JobStatus status,
         Long categoryId,
         String categorySlug,
