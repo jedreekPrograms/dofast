@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import JobAssignmentModePicker from '../components/JobAssignmentModePicker.jsx'
 import LocationMapPicker from '../components/LocationMapPicker.jsx'
 import RouteMapPicker from '../components/RouteMapPicker.jsx'
 import { createJob, createRouteQuote, getJobCategories, getRouteModeEstimates } from '../api/jobsApi.js'
 import './CreateJobPage.css'
 
-const EMPTY_FORM = { title: '', description: '', price: '', categoryId: '' }
+const EMPTY_FORM = {
+  title: '',
+  description: '',
+  price: '',
+  categoryId: '',
+  assignmentMode: 'INSTANT',
+  priceNegotiationEnabled: false,
+}
 const MAX_STOPS = 10
 
 function CreateJobPage() {
@@ -162,6 +170,18 @@ function CreateJobPage() {
     setError('')
   }
 
+  function updateAssignmentMode(assignmentMode) {
+    setForm((current) => ({
+      ...current,
+      assignmentMode,
+      priceNegotiationEnabled: assignmentMode === 'PROPOSALS' ? current.priceNegotiationEnabled : false,
+    }))
+  }
+
+  function updatePriceNegotiationEnabled(priceNegotiationEnabled) {
+    setForm((current) => ({ ...current, priceNegotiationEnabled }))
+  }
+
   async function submit(event) {
     event.preventDefault()
     if (!selectedCategory) {
@@ -185,6 +205,8 @@ function CreateJobPage() {
         description: form.description,
         price: Number(form.price),
         categoryId: Number(form.categoryId),
+        assignmentMode: form.assignmentMode,
+        priceNegotiationEnabled: form.assignmentMode === 'PROPOSALS' && form.priceNegotiationEnabled,
       }
       if (fulfillmentMode === 'ON_SITE') payload.location = normalizePoint(location)
       else payload.routeQuoteId = routeQuote.id
@@ -303,9 +325,21 @@ function CreateJobPage() {
           <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder={fulfillmentMode === 'ON_SITE' ? 'Opisz dokładnie, co trzeba zrobić na miejscu i jakie narzędzia mogą być potrzebne.' : 'Opisz co trzeba odebrać lub zrobić w każdym punkcie i wszystkie ważne szczegóły.'} required />
         </label>
         <label className="field">
-          <span>Wynagrodzenie</span>
+          <span>Wynagrodzenie / budżet</span>
           <input name="price" type="number" value={form.price} onChange={updateField} min="0.01" step="0.01" placeholder="25.00" required />
+          <small>Ta kwota zostanie zablokowana w escrow przy publikacji zlecenia.</small>
         </label>
+
+        <div className="create-job-form__wide">
+          <JobAssignmentModePicker
+            assignmentMode={form.assignmentMode}
+            priceNegotiationEnabled={form.priceNegotiationEnabled}
+            price={form.price}
+            disabled={submitting}
+            onModeChange={updateAssignmentMode}
+            onNegotiationChange={updatePriceNegotiationEnabled}
+          />
+        </div>
 
         <div className="create-job-form__wide create-job-form__actions">
           <span className="create-job-form__privacy">{fulfillmentMode === 'ON_SITE'
