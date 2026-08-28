@@ -5,9 +5,9 @@ import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
+import com.doFast.dofastapp.job.service.JobDiscoveryService;
 import com.doFast.dofastapp.job.service.JobService;
 import com.doFast.dofastapp.job.service.JobVisibilityService;
-import com.doFast.dofastapp.job.service.NearbyJobDiscoveryService;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
@@ -38,16 +38,16 @@ import java.util.List;
 public class JobController {
 
     private final JobService jobService;
-    private final NearbyJobDiscoveryService nearbyJobDiscoveryService;
+    private final JobDiscoveryService jobDiscoveryService;
     private final JobVisibilityService jobVisibilityService;
 
     public JobController(
             JobService jobService,
-            NearbyJobDiscoveryService nearbyJobDiscoveryService,
+            JobDiscoveryService jobDiscoveryService,
             JobVisibilityService jobVisibilityService
     ) {
         this.jobService = jobService;
-        this.nearbyJobDiscoveryService = nearbyJobDiscoveryService;
+        this.jobDiscoveryService = jobDiscoveryService;
         this.jobVisibilityService = jobVisibilityService;
     }
 
@@ -64,8 +64,11 @@ public class JobController {
             @RequestParam(required = false) @DecimalMin("0.00") BigDecimal minPrice,
             @RequestParam(required = false) @DecimalMin("0.00") BigDecimal maxPrice,
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
-    ) { return jobService.getOpenJobs(query, category, minPrice, maxPrice, page, size); }
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+            @AuthenticationPrincipal User user
+    ) {
+        return jobDiscoveryService.getOpenJobs(query, category, minPrice, maxPrice, page, size, user);
+    }
 
     @GetMapping("/nearby")
     public List<NearbyJobResponse> getNearbyJobs(
@@ -73,9 +76,10 @@ public class JobController {
             @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double longitude,
             @RequestParam(defaultValue = "5000") @Min(100) @Max(50000) int radiusMeters,
             @RequestParam(required = false) @Size(max = 80) @Pattern(regexp = "[a-z0-9-]*") String category,
-            @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit
+            @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit,
+            @AuthenticationPrincipal User user
     ) {
-        return nearbyJobDiscoveryService.getNearbyJobs(latitude, longitude, radiusMeters, category, limit);
+        return jobDiscoveryService.getNearbyJobs(latitude, longitude, radiusMeters, category, limit, user);
     }
 
     @GetMapping("/{id}")
