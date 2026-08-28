@@ -40,6 +40,16 @@
   text-align: right;
 }
 
+.profile-bio-input {
+  min-height: 132px;
+  resize: vertical;
+}
+
+.profile-field-hint {
+  color: #777e89;
+  line-height: 1.45;
+}
+
 @media (max-width: 760px) {
   .account-grid {
     grid-template-columns: 1fr;

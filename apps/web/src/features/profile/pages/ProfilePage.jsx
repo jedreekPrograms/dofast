@@ -6,6 +6,8 @@ import './ProfilePage.css'
 function ProfilePage() {
   const { user, updateProfile, changePassword } = useAuth()
   const [nickname, setNickname] = useState(user.nickname)
+  const [bio, setBio] = useState(user.bio || '')
+  const [publicLocation, setPublicLocation] = useState(user.publicLocation || '')
   const [profileMessage, setProfileMessage] = useState('')
   const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '' })
   const [passwordMessage, setPasswordMessage] = useState('')
@@ -17,7 +19,10 @@ function ProfilePage() {
     setSavingProfile(true)
     setProfileMessage('')
     try {
-      await updateProfile({ nickname })
+      const updated = await updateProfile({ nickname, bio, publicLocation })
+      setNickname(updated.nickname)
+      setBio(updated.bio || '')
+      setPublicLocation(updated.publicLocation || '')
       setProfileMessage('Profil został zapisany.')
     } catch (error) {
       setProfileMessage(error.message)
@@ -47,7 +52,7 @@ function ProfilePage() {
         <div>
           <span className="eyebrow">Konto</span>
           <h1>Profil i ustawienia</h1>
-          <p>Zarządzaj podstawowymi danymi konta i bezpieczeństwem logowania.</p>
+          <p>Zarządzaj podstawowymi danymi konta, publiczną wizytówką i bezpieczeństwem logowania.</p>
         </div>
         <div className="profile-actions">
           <Link className="button button--secondary" to="/verification">Weryfikacja tożsamości</Link>
@@ -57,7 +62,7 @@ function ProfilePage() {
 
       <div className="account-grid">
         <section className="panel">
-          <h2>Dane konta</h2>
+          <h2>Dane konta i wizytówka</h2>
           <dl className="account-summary">
             <div><dt>Email</dt><dd>{user.email}</dd></div>
             <div><dt>Rola</dt><dd>{user.role === 'ADMIN' ? 'Administrator' : 'Użytkownik'}</dd></div>
@@ -67,6 +72,27 @@ function ProfilePage() {
             <label className="field">
               <span>Nazwa użytkownika</span>
               <input value={nickname} onChange={(event) => setNickname(event.target.value)} minLength={3} maxLength={80} required />
+            </label>
+            <label className="field">
+              <span>Publiczna lokalizacja <small>(opcjonalnie)</small></span>
+              <input
+                value={publicLocation}
+                onChange={(event) => setPublicLocation(event.target.value)}
+                maxLength={120}
+                placeholder="np. Wrocław i okolice"
+              />
+            </label>
+            <label className="field">
+              <span>O mnie / zakres usług <small>(opcjonalnie)</small></span>
+              <textarea
+                className="profile-bio-input"
+                value={bio}
+                onChange={(event) => setBio(event.target.value)}
+                maxLength={600}
+                rows={6}
+                placeholder="Napisz krótko, w czym się specjalizujesz i jakie masz doświadczenie."
+              />
+              <small className="profile-field-hint">Te informacje będą widoczne publicznie. {bio.length}/600</small>
             </label>
             {profileMessage && <div className="form-message">{profileMessage}</div>}
             <button className="button button--primary" type="submit" disabled={savingProfile}>Zapisz profil</button>

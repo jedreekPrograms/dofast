@@ -7,6 +7,10 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleString('pl-PL') : ''
 }
 
+function formatMemberSince(value) {
+  return value ? new Date(value).toLocaleDateString('pl-PL', { year: 'numeric', month: 'long' }) : '—'
+}
+
 function PublicProfilePage() {
   const { userId } = useParams()
   const [profile, setProfile] = useState(null)
@@ -69,7 +73,18 @@ function PublicProfilePage() {
               <h1>{profile.username}</h1>
               {profile.identityVerified && <span className="identity-badge" title="Tożsamość zweryfikowana">✓ Zweryfikowana tożsamość</span>}
             </div>
-            <p>Publiczna historia współpracy w doFast.</p>
+            <p>{profile.publicLocation || 'Publiczna historia współpracy w doFast.'}</p>
+          </div>
+        </div>
+
+        <div className="trust-profile__about">
+          <div>
+            <span>W doFast od</span>
+            <strong>{formatMemberSince(profile.memberSince)}</strong>
+          </div>
+          <div className="trust-profile__bio">
+            <span>O użytkowniku</span>
+            <p>{profile.bio || 'Ten użytkownik nie dodał jeszcze publicznego opisu.'}</p>
           </div>
         </div>
 
