@@ -97,11 +97,63 @@ public interface JobDiscoveryRepository extends Repository<Job, Long> {
                     where (ub.blocker.id = :viewerId and ub.blockedUser.id = j.createdBy.id)
                        or (ub.blocker.id = j.createdBy.id and ub.blockedUser.id = :viewerId)
               )
+            order by j.createdAt desc, j.id desc
             """)
     Page<Job> findRecommendedOpenJobs(
             @Param("status") JobStatus status,
             @Param("categoryIds") List<Long> categoryIds,
             @Param("viewerId") Long viewerId,
+            Pageable pageable
+    );
+
+    @Query(
+            value = """
+                    SELECT j.*
+                    FROM jobs j
+                    WHERE j.status = 'OPEN'
+                      AND j.category_id IN (:categoryIds)
+                      AND j.created_by_id <> :viewerId
+                      AND j.location IS NOT NULL
+                      AND ST_DWithin(
+                            j.location,
+                            CAST(ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326) AS geography),
+                            :radiusMeters
+                      )
+                      AND NOT EXISTS (
+                            SELECT 1
+                            FROM user_blocks ub
+                            WHERE (ub.blocker_id = :viewerId AND ub.blocked_user_id = j.created_by_id)
+                               OR (ub.blocker_id = j.created_by_id AND ub.blocked_user_id = :viewerId)
+                      )
+                    ORDER BY j.created_at DESC, j.id DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(*)
+                    FROM jobs j
+                    WHERE j.status = 'OPEN'
+                      AND j.category_id IN (:categoryIds)
+                      AND j.created_by_id <> :viewerId
+                      AND j.location IS NOT NULL
+                      AND ST_DWithin(
+                            j.location,
+                            CAST(ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326) AS geography),
+                            :radiusMeters
+                      )
+                      AND NOT EXISTS (
+                            SELECT 1
+                            FROM user_blocks ub
+                            WHERE (ub.blocker_id = :viewerId AND ub.blocked_user_id = j.created_by_id)
+                               OR (ub.blocker_id = j.created_by_id AND ub.blocked_user_id = :viewerId)
+                      )
+                    """,
+            nativeQuery = true
+    )
+    Page<Job> findRecommendedOpenJobsInArea(
+            @Param("categoryIds") List<Long> categoryIds,
+            @Param("viewerId") Long viewerId,
+            @Param("latitude") double latitude,
+            @Param("longitude") double longitude,
+            @Param("radiusMeters") int radiusMeters,
             Pageable pageable
     );
 

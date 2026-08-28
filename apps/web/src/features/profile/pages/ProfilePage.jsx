@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import { getJobCategories } from '../../jobs/api/jobsApi.js'
+import ServiceAreaEditor from '../components/ServiceAreaEditor.jsx'
 import { getMyServiceCategories, updateMyServiceCategories } from '../api/profileApi.js'
 import './ProfilePage.css'
 
@@ -228,6 +229,8 @@ function ProfilePage() {
             </button>
           </div>
         </section>
+
+        <ServiceAreaEditor />
       </div>
     </main>
   )
