@@ -41,7 +41,7 @@ class UserServiceCategoryServiceTest {
 
         when(jobCategoryRepository.findByIdInAndActiveTrue(List.of(2L, 3L)))
                 .thenReturn(List.of(existingCategory, addedCategory));
-        when(userServiceCategoryRepository.findAllByUser_IdOrderByCategory_SortOrderAscCategory_NameAsc(7L))
+        when(userServiceCategoryRepository.findForUser(7L))
                 .thenReturn(List.of(existingRelation), List.of(existingRelation, addedRelation));
 
         UserServiceCategoryService service = new UserServiceCategoryService(
@@ -99,8 +99,7 @@ class UserServiceCategoryServiceTest {
                 user,
                 new UpdateUserServiceCategoriesRequest(List.of(99L))
         ));
-        verify(userServiceCategoryRepository, never())
-                .findAllByUser_IdOrderByCategory_SortOrderAscCategory_NameAsc(9L);
+        verify(userServiceCategoryRepository, never()).findForUser(9L);
     }
 
     private User user(Long id) {
