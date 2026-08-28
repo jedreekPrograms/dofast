@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
+import UserTrustCard from '../../reviews/components/UserTrustCard.jsx'
 import { useRealtime } from '../../../shared/realtime/RealtimeContext.js'
 import { blockUser, getMyUserBlocks, unblockUser } from '../../userBlocks/api/userBlocksApi.js'
 import {
@@ -281,6 +282,16 @@ function ChatPage() {
                   </button>
                 </div>
               </header>
+            )}
+
+            {selectedConversation && (
+              <div className="chat-thread__trust">
+                <UserTrustCard
+                  userId={selectedConversation.otherUserId}
+                  roleLabel="Rozmawiasz z"
+                  compact
+                />
+              </div>
             )}
 
             <div className="chat-thread__messages">
