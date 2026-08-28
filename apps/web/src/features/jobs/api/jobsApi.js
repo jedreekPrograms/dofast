@@ -161,6 +161,10 @@ export function withdrawJobProposal(id, proposalId) {
   return apiRequest(`/jobs/${id}/proposals/${proposalId}`, { method: 'DELETE' })
 }
 
+export function getJobProposalAcceptanceFunding(id, proposalId, options = {}) {
+  return apiRequest(`/jobs/${id}/proposals/${proposalId}/acceptance-funding`, options)
+}
+
 export function acceptJobProposal(id, proposalId) {
   return apiRequest(`/jobs/${id}/proposals/${proposalId}/accept`, { method: 'POST' })
 }
