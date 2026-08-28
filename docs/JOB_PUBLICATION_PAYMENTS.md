@@ -25,6 +25,8 @@ The pending row stores the submitted job payload only while payment is still pos
 
 The client keeps one publication `requestId` across retries. The server combines it with the user id and stores a SHA-256 fingerprint of the submitted payload. Repeating the same request returns the same publication; using the same id for different job data is rejected.
 
+An idempotent retry also applies the publication expiry rule before returning the existing row. If the payment window elapsed between attempts, the retry restores any wallet reservation through the same idempotent release ledger operation, clears the private payload and returns the terminal `CANCELLED` state instead of a stale payable response.
+
 Creation locks the user and wallet before deciding how much balance can be reserved. Two concurrent publications therefore cannot both spend the same wallet funds. Wallet mutations continue to use unique operation keys in the normal ledger.
 
 Stripe PaymentIntent creation also uses a stable idempotency key derived from the publication id.

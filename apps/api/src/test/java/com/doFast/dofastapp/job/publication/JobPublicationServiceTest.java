@@ -131,6 +131,39 @@ class JobPublicationServiceTest {
     }
 
     @Test
+    void repeatedExpiredRequestIdRestoresReservationAndReturnsTerminalState() {
+        JobRequest job = onSiteJob("70.00");
+        JobPublication existing = pendingPublication(user, 11L, "job-publication:7:req-expired", "same-hash", "70.00", "25.00", "45.00");
+        ReflectionTestUtils.setField(existing, "expiresAt", LocalDateTime.now().minusSeconds(1));
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
+        when(objectMapper.writeValueAsString(job)).thenReturn("same-payload");
+        ReflectionTestUtils.setField(existing, "payloadHash", hashThroughServiceFixture("same-payload"));
+        when(publicationRepository.findByRequestKey("job-publication:7:req-expired")).thenReturn(Optional.of(existing));
+        when(publicationRepository.save(existing)).thenReturn(existing);
+        when(walletService.credit(
+                7L,
+                new BigDecimal("25.00"),
+                WalletTransactionType.JOB_PUBLICATION_RELEASE,
+                null,
+                "job-publication:11:release"
+        )).thenReturn(true);
+
+        var response = service.create(new CreateJobPublicationRequest("req-expired", job), user);
+
+        assertEquals(JobPublicationStatus.CANCELLED, response.status());
+        verify(walletService, times(1)).credit(
+                7L,
+                new BigDecimal("25.00"),
+                WalletTransactionType.JOB_PUBLICATION_RELEASE,
+                null,
+                "job-publication:11:release"
+        );
+        verify(walletService, never()).getBalanceForUpdate(any());
+        verify(walletService, never()).debit(any(), any(), any(), any(), anyString());
+        verify(jobService, never()).createJob(any(), any());
+    }
+
+    @Test
     void repeatedRequestIdWithDifferentPayloadIsConflict() {
         JobRequest job = onSiteJob("70.00");
         JobPublication existing = pendingPublication(user, 11L, "job-publication:7:req-conflict", "different-hash", "70.00", "25.00", "45.00");
