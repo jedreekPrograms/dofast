@@ -44,6 +44,9 @@ public class UserProfileService {
         return new UserProfileResponse(
                 user.getId(),
                 user.getNickname(),
+                user.getBio(),
+                user.getPublicLocation(),
+                user.getCreatedAt(),
                 average != null ? Math.round(average * 10.0) / 10.0 : null,
                 reviewsCount,
                 completedAsRequester,
