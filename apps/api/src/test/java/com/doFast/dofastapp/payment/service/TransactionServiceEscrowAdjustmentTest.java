@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,6 +34,27 @@ class TransactionServiceEscrowAdjustmentTest {
     @Mock private Transaction transaction;
     @Mock private Job job;
     @Mock private User payer;
+
+    @Test
+    void exposesHeldAmountWithoutMutatingLedger() {
+        when(job.getCreatedBy()).thenReturn(payer);
+        when(payer.getId()).thenReturn(7L);
+        when(transactionRepository.findByJob(job)).thenReturn(Optional.of(transaction));
+        when(transaction.getStatus()).thenReturn(TransactionStatus.HELD);
+        when(transaction.getPayer()).thenReturn(payer);
+        when(transaction.getAmount()).thenReturn(new BigDecimal("30.00"));
+        TransactionService service = new TransactionService(
+                transactionRepository,
+                walletService,
+                platformFeePolicy,
+                platformRevenueService
+        );
+
+        assertEquals(new BigDecimal("30.00"), service.getHeldAmount(job));
+
+        verify(walletService, never()).debit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString());
+        verify(walletService, never()).credit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString());
+    }
 
     @Test
     void locksOnlyTheAdditionalDeltaWhenAcceptedProposalIsHigher() {

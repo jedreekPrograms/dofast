@@ -11,6 +11,8 @@ import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.service.UserBlockService;
+import com.doFast.dofastapp.wallet.dto.WalletResponse;
+import com.doFast.dofastapp.wallet.service.WalletService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -21,7 +23,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
@@ -38,6 +42,7 @@ class JobProposalServiceTest {
     @Mock private NotificationService notificationService;
     @Mock private LiveTrackingService liveTrackingService;
     @Mock private UserBlockService userBlockService;
+    @Mock private WalletService walletService;
     @Mock private Job job;
     @Mock private User requester;
     @Mock private User worker;
@@ -109,6 +114,52 @@ class JobProposalServiceTest {
     }
 
     @Test
+    void higherProposalFundingQuoteUsesWalletBeforeStripe() {
+        JobProposalService service = service();
+        prepareProposalFundingQuote(new BigDecimal("42.00"));
+        when(transactionService.getHeldAmount(job)).thenReturn(new BigDecimal("30.00"));
+        when(walletService.getMyWallet(11L)).thenReturn(new WalletResponse(new BigDecimal("5.00")));
+
+        JobProposalAcceptanceFundingResponse response = service.getAcceptanceFunding(101L, 55L, requester);
+
+        assertEquals(new BigDecimal("30.00"), response.currentEscrowAmount());
+        assertEquals(new BigDecimal("42.00"), response.targetEscrowAmount());
+        assertEquals(new BigDecimal("5.00"), response.walletContributionAvailable());
+        assertEquals(new BigDecimal("7.00"), response.paymentShortfall());
+        assertEquals(new BigDecimal("7.00"), response.stripeChargeAmount());
+        assertTrue(response.paymentRequired());
+        assertTrue(response.onlinePaymentAvailable());
+    }
+
+    @Test
+    void proposalFundingQuoteUsesOneZlotyMinimumWithoutOverfundingEscrow() {
+        JobProposalService service = service();
+        prepareProposalFundingQuote(new BigDecimal("42.00"));
+        when(transactionService.getHeldAmount(job)).thenReturn(new BigDecimal("30.00"));
+        when(walletService.getMyWallet(11L)).thenReturn(new WalletResponse(new BigDecimal("11.50")));
+
+        JobProposalAcceptanceFundingResponse response = service.getAcceptanceFunding(101L, 55L, requester);
+
+        assertEquals(new BigDecimal("0.50"), response.paymentShortfall());
+        assertEquals(new BigDecimal("1.00"), response.stripeChargeAmount());
+        assertTrue(response.paymentRequired());
+        assertTrue(response.onlinePaymentAvailable());
+    }
+
+    @Test
+    void oversizedProposalFundingQuoteDoesNotOfferUnsupportedSingleStripePayment() {
+        JobProposalService service = service();
+        prepareProposalFundingQuote(new BigDecimal("12042.00"));
+        when(transactionService.getHeldAmount(job)).thenReturn(new BigDecimal("30.00"));
+        when(walletService.getMyWallet(11L)).thenReturn(new WalletResponse(new BigDecimal("0.00")));
+
+        JobProposalAcceptanceFundingResponse response = service.getAcceptanceFunding(101L, 55L, requester);
+
+        assertEquals(new BigDecimal("12012.00"), response.paymentShortfall());
+        assertFalse(response.onlinePaymentAvailable());
+    }
+
+    @Test
     void acceptedHigherProposalAdjustsEscrowBeforeAssigningWorker() {
         JobProposalService service = service();
         prepareOpenProposalJob();
@@ -171,7 +222,8 @@ class JobProposalServiceTest {
                 transactionService,
                 notificationService,
                 liveTrackingService,
-                userBlockService
+                userBlockService,
+                walletService
         );
     }
 
@@ -184,6 +236,21 @@ class JobProposalServiceTest {
         lenient().when(job.getPrice()).thenReturn(new BigDecimal("30.00"));
         lenient().when(job.getTitle()).thenReturn("Zakupy");
         lenient().when(requester.getId()).thenReturn(11L);
+        when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(false);
+    }
+
+    private void prepareProposalFundingQuote(BigDecimal proposalAmount) {
+        when(jobRepository.findById(101L)).thenReturn(Optional.of(job));
+        when(job.getId()).thenReturn(101L);
+        when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
+        when(job.getStatus()).thenReturn(JobStatus.OPEN);
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(requester.getId()).thenReturn(11L);
+        when(jobProposalRepository.findByIdAndJob_Id(55L, 101L)).thenReturn(Optional.of(proposal));
+        when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
+        when(proposal.getProposer()).thenReturn(worker);
+        when(proposal.getAmount()).thenReturn(proposalAmount);
+        when(proposal.getId()).thenReturn(55L);
         when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(false);
     }
 
