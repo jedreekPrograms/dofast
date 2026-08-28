@@ -96,8 +96,26 @@ Flyway `V35__job_assignment_proposals.sql`:
 - adds `assignment_mode` and `price_negotiation_enabled` to `jobs` with backward-compatible defaults and database checks;
 - creates `job_proposals` with optimistic versioning, one proposal per job/proposer, positive amount validation and indexed job/proposer lookups.
 
-## Current UI boundary
+## Web experience
 
-This backend slice intentionally keeps the existing create-job web flow on its backward-compatible `INSTANT` default. A following frontend slice will expose the requester choice between instant acceptance and proposals, optional negotiation controls, private proposal submission/selection UX and appropriate job-card actions.
+The create-job page exposes the product choice in user-facing language rather than backend enum names:
 
-The backend contract is authoritative, so a custom client cannot bypass proposal selection by calling the legacy direct-accept endpoint.
+- **Kto pierwszy, ten bierze** maps to `INSTANT`;
+- **Chcę wybrać wykonawcę** maps to `PROPOSALS`;
+- price negotiation appears as a separate checkbox only in proposal mode.
+
+The published amount is explicitly described as the amount initially held in escrow. The UI explains that accepting a higher proposal requires the missing delta to be funded first and accepting a lower proposal returns the excess.
+
+Discovery cards respect the assignment mode. Proposal jobs never render the legacy direct-accept action; they link to the private proposal flow instead and state whether price negotiation is enabled.
+
+On job details:
+
+- an eligible worker sees a form for only their own proposal;
+- fixed-price proposal jobs do not expose a price input;
+- negotiable jobs prefill the published budget but allow another positive amount;
+- a worker can see and withdraw only their own still-submitted proposal;
+- the requester sees all candidates with their public trust profiles, proposed amount and optional private message;
+- accepting a proposal updates the job immediately to the final price and normal active lifecycle;
+- remaining submitted proposals are shown as rejected after another worker is selected.
+
+The frontend never attempts to infer or display competitors' offers for workers. It relies on the server-side visibility contract of `GET /jobs/{jobId}/proposals`, so custom clients and normal UI follow the same privacy boundary.

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import ReviewDialog from '../../reviews/components/ReviewDialog.jsx'
 import UserTrustCard from '../../reviews/components/UserTrustCard.jsx'
+import JobProposalPanel from '../components/JobProposalPanel.jsx'
 import {
   acceptJob,
   approveJobCancellation,
@@ -193,7 +194,9 @@ function JobDetailsPage() {
   const isCreator = job.createdById === user?.id
   const isWorker = job.takenById === user?.id
   const isParticipant = isCreator || isWorker
-  const canAccept = job.status === 'OPEN' && !isCreator
+  const proposalMode = job.assignmentMode === 'PROPOSALS'
+  const canAccept = job.status === 'OPEN' && !isCreator && !proposalMode
+  const showProposalPanel = proposalMode && (isCreator || isWorker || job.status === 'OPEN')
   const canOpenRoute = Boolean(job.destinationLabel) && (
     isCreator || (isWorker && WORKER_ROUTE_STATUSES.has(job.status))
   )
@@ -215,6 +218,10 @@ function JobDetailsPage() {
             <span className={`status-pill status-pill--${job.status.toLowerCase()}`}>
               {STATUS_LABELS[job.status] || job.status}
             </span>
+            <span className="job-details-assignment-pill">
+              {proposalMode ? 'Zlecający wybiera wykonawcę' : 'Kto pierwszy, ten bierze'}
+            </span>
+            {proposalMode && job.priceNegotiationEnabled && <span className="job-details-assignment-pill">Cena do negocjacji</span>}
             <span>{job.createdAt ? `Opublikowano ${dateFormatter.format(new Date(job.createdAt))}` : 'Opublikowane zlecenie'}</span>
           </div>
           <h1>{job.title}</h1>
@@ -233,8 +240,15 @@ function JobDetailsPage() {
         </div>
 
         <aside className="job-details-price-card">
-          <span>Wynagrodzenie</span>
+          <span>{proposalMode ? 'Budżet / wynagrodzenie' : 'Wynagrodzenie'}</span>
           <strong>{priceFormatter.format(Number(job.price))}</strong>
+          {proposalMode && (
+            <small className="job-details-price-card__hint">
+              {job.status === 'OPEN'
+                ? (job.priceNegotiationEnabled ? 'Finalna cena zostanie ustalona po wyborze propozycji.' : 'Cena jest stała; zlecający wybiera tylko wykonawcę.')
+                : 'To finalna cena zaakceptowanej propozycji.'}
+            </small>
+          )}
           {(job.routeDistanceMeters || job.routeDurationSeconds) && (
             <div className="job-details-price-card__route">
               {job.routeDistanceMeters && <span>{formatDistance(job.routeDistanceMeters)}</span>}
@@ -253,9 +267,23 @@ function JobDetailsPage() {
           <h2>{STATUS_LABELS[job.status] || job.status}</h2>
           <p>{STATUS_DESCRIPTIONS[job.status] || 'Status zlecenia został zaktualizowany.'}</p>
 
-          {isCreator && <div className="job-details-role-note"><strong>Jesteś zlecającym.</strong> Zarządzasz tym zleceniem i potwierdzasz jego wykonanie.</div>}
+          {isCreator && (
+            <div className="job-details-role-note">
+              <strong>Jesteś zlecającym.</strong>{' '}
+              {proposalMode && job.status === 'OPEN'
+                ? 'Kandydaci mogą wysyłać prywatne propozycje. Dopiero Twój wybór przypisze wykonawcę.'
+                : 'Zarządzasz tym zleceniem i potwierdzasz jego wykonanie.'}
+            </div>
+          )}
           {isWorker && <div className="job-details-role-note"><strong>Realizujesz to zlecenie.</strong> Masz dostęp do danych wykonawczych potrzebnych do realizacji.</div>}
-          {!isParticipant && job.status === 'OPEN' && <div className="job-details-role-note"><strong>Zlecenie jest dostępne.</strong> Po przyjęciu otrzymasz dostęp do dokładnej trasy A → B.</div>}
+          {!isParticipant && job.status === 'OPEN' && (
+            <div className="job-details-role-note">
+              <strong>Zlecenie jest dostępne.</strong>{' '}
+              {proposalMode
+                ? 'Wyślij prywatną propozycję. Dokładne dane wykonawcze otrzymasz dopiero, jeśli zlecający wybierze Ciebie.'
+                : 'Po przyjęciu otrzymasz dostęp do dokładnej trasy A → B.'}
+            </div>
+          )}
 
           <div className="job-details-actions" aria-busy={Boolean(busyAction)}>
             {canAccept && (
@@ -297,6 +325,18 @@ function JobDetailsPage() {
             <UserTrustCard userId={job.takenById} roleLabel="Wykonawca" />
           </div>
         </section>
+
+        {showProposalPanel && (
+          <JobProposalPanel
+            job={job}
+            currentUserId={user?.id}
+            onJobUpdated={setJob}
+            onSuccess={(message) => {
+              setError('')
+              setSuccess(message)
+            }}
+          />
+        )}
 
         {canNegotiateCancellation && (
           <section className="job-details-panel job-details-panel--cancellation">

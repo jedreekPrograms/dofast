@@ -123,6 +123,25 @@ export function acceptJob(id) {
   return apiRequest(`/jobs/${id}/accept`, { method: 'POST' })
 }
 
+export function getJobProposals(id, options = {}) {
+  return apiRequest(`/jobs/${id}/proposals`, options)
+}
+
+export function submitJobProposal(id, payload) {
+  return apiRequest(`/jobs/${id}/proposals`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function withdrawJobProposal(id, proposalId) {
+  return apiRequest(`/jobs/${id}/proposals/${proposalId}`, { method: 'DELETE' })
+}
+
+export function acceptJobProposal(id, proposalId) {
+  return apiRequest(`/jobs/${id}/proposals/${proposalId}/accept`, { method: 'POST' })
+}
+
 export function requestJobCompletion(id) {
   return apiRequest(`/jobs/${id}/completion`, { method: 'POST' })
 }
