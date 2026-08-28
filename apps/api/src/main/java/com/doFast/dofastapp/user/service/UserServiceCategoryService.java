@@ -37,7 +37,7 @@ public class UserServiceCategoryService {
     }
 
     public List<UserServiceCategoryResponse> getForUser(Long userId) {
-        return userServiceCategoryRepository.findAllByUser_IdOrderByCategory_SortOrderAscCategory_NameAsc(userId)
+        return userServiceCategoryRepository.findForUser(userId)
                 .stream()
                 .filter(relation -> isSelectableLeaf(relation.getCategory()))
                 .map(this::toResponse)
@@ -67,8 +67,7 @@ public class UserServiceCategoryService {
 
         Map<Long, JobCategory> categoriesById = requestedCategories.stream()
                 .collect(Collectors.toMap(JobCategory::getId, Function.identity()));
-        List<UserServiceCategory> existing = userServiceCategoryRepository
-                .findAllByUser_IdOrderByCategory_SortOrderAscCategory_NameAsc(user.getId());
+        List<UserServiceCategory> existing = userServiceCategoryRepository.findForUser(user.getId());
         Set<Long> existingIds = existing.stream()
                 .map(relation -> relation.getCategory().getId())
                 .collect(Collectors.toSet());
