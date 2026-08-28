@@ -13,7 +13,6 @@ import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -112,10 +111,6 @@ class JobProposalServiceTest {
     void acceptedHigherProposalAdjustsEscrowBeforeAssigningWorker() {
         JobProposalService service = service();
         prepareOpenProposalJob();
-        when(job.isPriceNegotiationEnabled()).thenReturn(true);
-        when(job.getPrice()).thenReturn(new BigDecimal("42.00"));
-        when(job.getCreatedBy()).thenReturn(requester);
-        when(requester.getId()).thenReturn(11L);
         when(worker.getId()).thenReturn(22L);
         when(jobProposalRepository.findByIdAndJob_Id(55L, 101L)).thenReturn(Optional.of(proposal));
         when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
@@ -128,7 +123,6 @@ class JobProposalServiceTest {
                 JobProposalStatus.SUBMITTED
         )).thenReturn(List.of());
         when(jobRepository.save(job)).thenReturn(job);
-        when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(false);
 
         service.accept(101L, 55L, requester);
 
@@ -151,14 +145,11 @@ class JobProposalServiceTest {
     void failedEscrowTopUpDoesNotAssignWorkerOrAcceptProposal() {
         JobProposalService service = service();
         prepareOpenProposalJob();
-        when(job.getCreatedBy()).thenReturn(requester);
-        when(worker.getId()).thenReturn(22L);
         when(jobProposalRepository.findByIdAndJob_Id(56L, 101L)).thenReturn(Optional.of(proposal));
         when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
         when(proposal.getProposer()).thenReturn(worker);
         when(proposal.getAmount()).thenReturn(new BigDecimal("50.00"));
         when(proposal.getId()).thenReturn(56L);
-        when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(false);
         org.mockito.Mockito.doThrow(new BusinessException("Brak środków na koncie"))
                 .when(transactionService)
                 .adjustHeldAmount(job, new BigDecimal("50.00"), 56L);
