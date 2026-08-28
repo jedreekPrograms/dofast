@@ -6,6 +6,7 @@ import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.service.JobService;
+import com.doFast.dofastapp.job.service.JobVisibilityService;
 import com.doFast.dofastapp.job.service.NearbyJobDiscoveryService;
 import com.doFast.dofastapp.location.dto.LocationResponse;
 import com.doFast.dofastapp.user.entity.User;
@@ -38,10 +39,16 @@ public class JobController {
 
     private final JobService jobService;
     private final NearbyJobDiscoveryService nearbyJobDiscoveryService;
+    private final JobVisibilityService jobVisibilityService;
 
-    public JobController(JobService jobService, NearbyJobDiscoveryService nearbyJobDiscoveryService) {
+    public JobController(
+            JobService jobService,
+            NearbyJobDiscoveryService nearbyJobDiscoveryService,
+            JobVisibilityService jobVisibilityService
+    ) {
         this.jobService = jobService;
         this.nearbyJobDiscoveryService = nearbyJobDiscoveryService;
+        this.jobVisibilityService = jobVisibilityService;
     }
 
     @PostMapping
@@ -72,7 +79,10 @@ public class JobController {
     }
 
     @GetMapping("/{id}")
-    public JobResponse getJob(@PathVariable Long id) { return jobService.getJob(id); }
+    public JobResponse getJob(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        jobVisibilityService.assertCanViewPublicDetail(id, user);
+        return jobService.getJob(id);
+    }
 
     @GetMapping("/{id}/location")
     public LocationResponse getExactLocation(@PathVariable Long id, @AuthenticationPrincipal User user) {
