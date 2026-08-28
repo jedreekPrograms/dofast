@@ -1,0 +1,69 @@
+.blocked-users-page {
+  display: grid;
+  gap: 22px;
+}
+
+.blocked-users-page__notice {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid #dfe3e8;
+  border-radius: 14px;
+  background: #f8f9fb;
+  color: #5f6670;
+}
+
+.blocked-users-page__notice strong {
+  color: #20232a;
+}
+
+.blocked-users-list {
+  display: grid;
+  gap: 12px;
+}
+
+.blocked-user-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.blocked-user-card > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.blocked-user-card span {
+  color: #747b86;
+  font-size: 0.85rem;
+}
+
+.blocked-user-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.blocked-users-empty {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.blocked-users-empty h2,
+.blocked-users-empty p {
+  margin: 0;
+}
+
+@media (max-width: 680px) {
+  .blocked-user-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .blocked-user-card__actions .button {
+    flex: 1;
+    text-align: center;
+  }
+}
