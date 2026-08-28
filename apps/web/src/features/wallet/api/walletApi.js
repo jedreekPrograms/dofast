@@ -14,3 +14,24 @@ export function createWalletTopUpIntent(amount, requestId) {
     body: JSON.stringify({ amount, requestId }),
   })
 }
+
+export function getPayoutEligibility() {
+  return apiRequest('/wallet/payouts/eligibility')
+}
+
+export function getPayouts() {
+  return apiRequest('/wallet/payouts')
+}
+
+export function requestPayout(amount, requestId) {
+  return apiRequest('/wallet/payouts', {
+    method: 'POST',
+    body: JSON.stringify({ amount, requestId }),
+  })
+}
+
+export function cancelPayout(payoutId) {
+  return apiRequest(`/wallet/payouts/${payoutId}/cancel`, {
+    method: 'POST',
+  })
+}

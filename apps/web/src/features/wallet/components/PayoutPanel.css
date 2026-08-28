@@ -1,0 +1,221 @@
+.wallet-payout {
+  display: grid;
+  gap: 18px;
+}
+
+.wallet-payout__heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.wallet-payout__heading > div {
+  display: grid;
+  gap: 6px;
+}
+
+.wallet-payout__heading h2,
+.wallet-payout__history h2 {
+  margin: 0;
+}
+
+.wallet-payout__heading p {
+  max-width: 680px;
+  margin: 0;
+  color: #737b87;
+  line-height: 1.55;
+}
+
+.wallet-payout__notice {
+  padding: 13px 14px;
+  border: 1px solid #dfe3e9;
+  border-radius: 12px;
+  background: #f7f8fa;
+  color: #59616d;
+  line-height: 1.5;
+}
+
+.wallet-payout__notice a {
+  color: #1f2937;
+  font-weight: 800;
+}
+
+.wallet-payout__notice--sandbox {
+  border-style: dashed;
+  background: #fff8e8;
+  color: #755c23;
+}
+
+.wallet-payout__summary {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f7f8fa;
+}
+
+.wallet-payout__summary > div {
+  display: grid;
+  gap: 5px;
+}
+
+.wallet-payout__summary span,
+.wallet-payout__summary small {
+  color: #737b87;
+}
+
+.wallet-payout__summary strong {
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.wallet-payout__form {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+
+.wallet-payout__form label {
+  display: grid;
+  gap: 7px;
+  flex: 1;
+  max-width: 360px;
+  color: #555d69;
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
+.wallet-payout__form label > div {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #dfe3e9;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.wallet-payout__form input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #20252d;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.wallet-payout__form label > div > span {
+  padding: 0 13px;
+  color: #7c8490;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.wallet-payout__form button {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.wallet-payout__form button:disabled,
+.wallet-payout__row-status button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.wallet-payout__history {
+  display: grid;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.wallet-payout__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid #eceef1;
+}
+
+.wallet-payout__row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.wallet-payout__row span {
+  color: #858b95;
+  font-size: 0.84rem;
+}
+
+.wallet-payout__row-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wallet-payout__row-status button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #dfe3e9;
+  border-radius: 10px;
+  background: #fff;
+  color: #343a44;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.wallet-payout__status {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #f1f3f6;
+  color: #59616d !important;
+  font-weight: 800;
+}
+
+.wallet-payout__status--paid {
+  background: #eef8f1;
+  color: #27633a !important;
+}
+
+.wallet-payout__status--failed,
+.wallet-payout__status--cancelled {
+  background: #fff1f1;
+  color: #8f3535 !important;
+}
+
+.wallet-payout__status--review_required {
+  background: #fff8e8;
+  color: #755c23 !important;
+}
+
+@media (max-width: 700px) {
+  .wallet-payout__heading,
+  .wallet-payout__summary,
+  .wallet-payout__form,
+  .wallet-payout__row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wallet-payout__form label {
+    max-width: none;
+  }
+
+  .wallet-payout__form button {
+    width: 100%;
+  }
+
+  .wallet-payout__row-status {
+    justify-content: space-between;
+  }
+}
