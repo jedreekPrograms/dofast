@@ -200,9 +200,16 @@ function JobPublicationPaymentPanel({ publication, onPublished, onReset }) {
       )}
 
       {!STRIPE_PUBLISHABLE_KEY && current.status === 'PAYMENT_REQUIRED' && (
-        <div className="job-publication-payment__note job-publication-payment__note--error">
-          Brakuje <code>VITE_STRIPE_PUBLISHABLE_KEY</code>. Publikacja pozostaje prywatna, a środki z portfela są tylko zarezerwowane do czasu anulowania lub wygaśnięcia.
-        </div>
+        <>
+          <div className="job-publication-payment__note job-publication-payment__note--error">
+            Brakuje <code>VITE_STRIPE_PUBLISHABLE_KEY</code>. Publikacja pozostaje prywatna, a środki z portfela są tylko zarezerwowane do czasu anulowania lub wygaśnięcia.
+          </div>
+          <div className="job-publication-payment__actions">
+            <button type="button" className="button button--secondary" onClick={cancel} disabled={cancelling || checking}>
+              {cancelling ? 'Anulowanie…' : 'Anuluj i zwolnij środki'}
+            </button>
+          </div>
+        </>
       )}
 
       {current.status === 'PAYMENT_REQUIRED' && STRIPE_PUBLISHABLE_KEY && (
@@ -229,7 +236,7 @@ function JobPublicationPaymentPanel({ publication, onPublished, onReset }) {
       )}
 
       {terminalWithoutJob && (
-        <button type="button" className="button button--primary" onClick={() => onReset('Możesz ponownie przygotować publikację z aktualnym saldem.') }>
+        <button type="button" className="button button--primary" onClick={() => onReset('Możesz ponownie przygotować publikację z aktualnym saldem.')}>
           Wróć do formularza
         </button>
       )}
