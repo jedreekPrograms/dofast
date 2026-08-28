@@ -3,6 +3,7 @@ package com.doFast.dofastapp.location.tracking.controller;
 import com.doFast.dofastapp.location.tracking.dto.LiveLocationUpdateRequest;
 import com.doFast.dofastapp.location.tracking.dto.LiveTrackingResponse;
 import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
+import com.doFast.dofastapp.location.tracking.service.TrackingCheckpointGuard;
 import com.doFast.dofastapp.location.tracking.service.TrackingSampleFreshnessValidator;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
@@ -21,13 +22,16 @@ public class LiveTrackingController {
 
     private final LiveTrackingService liveTrackingService;
     private final TrackingSampleFreshnessValidator sampleFreshnessValidator;
+    private final TrackingCheckpointGuard checkpointGuard;
 
     public LiveTrackingController(
             LiveTrackingService liveTrackingService,
-            TrackingSampleFreshnessValidator sampleFreshnessValidator
+            TrackingSampleFreshnessValidator sampleFreshnessValidator,
+            TrackingCheckpointGuard checkpointGuard
     ) {
         this.liveTrackingService = liveTrackingService;
         this.sampleFreshnessValidator = sampleFreshnessValidator;
+        this.checkpointGuard = checkpointGuard;
     }
 
     @GetMapping
@@ -53,6 +57,7 @@ public class LiveTrackingController {
             @PathVariable Long jobId,
             @AuthenticationPrincipal User user
     ) {
+        checkpointGuard.validate(jobId, user);
         return liveTrackingService.confirmCheckpoint(jobId, user);
     }
 
@@ -61,6 +66,7 @@ public class LiveTrackingController {
             @PathVariable Long jobId,
             @AuthenticationPrincipal User user
     ) {
+        checkpointGuard.validate(jobId, user);
         return liveTrackingService.confirmPickup(jobId, user);
     }
 }
