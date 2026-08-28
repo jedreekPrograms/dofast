@@ -20,6 +20,7 @@ import SavedSearchesPage from '../features/jobs/pages/SavedSearchesPage.jsx'
 import NotificationsPage from '../features/notifications/pages/NotificationsPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import PublicProfilePage from '../features/reviews/pages/PublicProfilePage.jsx'
+import BlockedUsersPage from '../features/userBlocks/pages/BlockedUsersPage.jsx'
 import VerificationPage from '../features/verification/pages/VerificationPage.jsx'
 import WalletPage from '../features/wallet/pages/WalletPage.jsx'
 import AppShell from '../shared/components/AppShell.jsx'
@@ -39,6 +40,7 @@ function App() {
             <Route path="/saved-jobs" element={<SavedJobsPage />} />
             <Route path="/saved-searches" element={<SavedSearchesPage />} />
             <Route path="/my-reports" element={<MyJobReportsPage />} />
+            <Route path="/blocked-users" element={<BlockedUsersPage />} />
             <Route path="/jobs/new" element={<CreateJobPage />} />
             <Route path="/jobs/:jobId" element={<JobDetailsPage />} />
             <Route path="/jobs/:jobId/route" element={<JobExecutionPage />} />

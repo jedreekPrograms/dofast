@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import { useRealtime } from '../../../shared/realtime/RealtimeContext.js'
+import { blockUser, getMyUserBlocks, unblockUser } from '../../userBlocks/api/userBlocksApi.js'
 import {
   getChatHistory,
   getConversations,
@@ -31,15 +32,21 @@ function ChatPage() {
   const [selectedJobId, setSelectedJobId] = useState(requestedJobId)
   const [history, setHistory] = useState(null)
   const [draft, setDraft] = useState('')
+  const [blockedUserIds, setBlockedUserIds] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [sending, setSending] = useState(false)
+  const [blockUpdating, setBlockUpdating] = useState(false)
   const [error, setError] = useState('')
 
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.jobId === selectedJobId) || null,
     [conversations, selectedJobId],
   )
+
+  const selectedBlockedByMe = selectedConversation
+    ? blockedUserIds.has(selectedConversation.otherUserId)
+    : false
 
   const loadConversations = useCallback(async () => {
     try {
@@ -62,6 +69,18 @@ function ChatPage() {
     const interval = window.setInterval(loadConversations, 20000)
     return () => window.clearInterval(interval)
   }, [loadConversations])
+
+  useEffect(() => {
+    let active = true
+    getMyUserBlocks()
+      .then((blocks) => {
+        if (active) setBlockedUserIds(new Set(blocks.map((block) => block.userId)))
+      })
+      .catch(() => {
+        // Chat remains usable if the private block-list status cannot be hydrated.
+      })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     if (!selectedJobId) {
@@ -145,7 +164,7 @@ function ChatPage() {
   async function handleSubmit(event) {
     event.preventDefault()
     const content = draft.trim()
-    if (!content || !selectedJobId || sending) return
+    if (!content || !selectedJobId || sending || selectedBlockedByMe) return
 
     setSending(true)
     setError('')
@@ -163,9 +182,35 @@ function ChatPage() {
           : conversation
       )))
     } catch (requestError) {
-      setError(requestError.message || 'Nie udało się wysłać wiadomości.')
+      setError(requestError.message || 'Nie udało się wysłać wiadomości. Interakcja z tym użytkownikiem może być niedostępna.')
     } finally {
       setSending(false)
+    }
+  }
+
+  async function handleToggleBlock() {
+    if (!selectedConversation || blockUpdating) return
+    const otherUserId = selectedConversation.otherUserId
+
+    setBlockUpdating(true)
+    setError('')
+    try {
+      if (selectedBlockedByMe) {
+        await unblockUser(otherUserId)
+        setBlockedUserIds((current) => {
+          const next = new Set(current)
+          next.delete(otherUserId)
+          return next
+        })
+      } else {
+        await blockUser(otherUserId)
+        setBlockedUserIds((current) => new Set(current).add(otherUserId))
+        setDraft('')
+      }
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się zmienić blokady użytkownika.')
+    } finally {
+      setBlockUpdating(false)
     }
   }
 
@@ -216,13 +261,25 @@ function ChatPage() {
           <div className="chat-thread">
             {selectedConversation && (
               <header className="chat-thread__header">
-                <div>
+                <div className="chat-thread__identity">
                   <strong>{selectedConversation.otherUserNickname}</strong>
                   <span>{selectedConversation.jobTitle}</span>
                 </div>
-                <span className={`status-pill status-pill--${selectedConversation.jobStatus.toLowerCase()}`}>
-                  {STATUS_LABELS[selectedConversation.jobStatus] || selectedConversation.jobStatus}
-                </span>
+                <div className="chat-thread__actions">
+                  <span className={`status-pill status-pill--${selectedConversation.jobStatus.toLowerCase()}`}>
+                    {STATUS_LABELS[selectedConversation.jobStatus] || selectedConversation.jobStatus}
+                  </span>
+                  <button
+                    className="button button--secondary chat-block-button"
+                    type="button"
+                    disabled={blockUpdating}
+                    onClick={handleToggleBlock}
+                  >
+                    {blockUpdating
+                      ? 'Zapisywanie…'
+                      : selectedBlockedByMe ? 'Odblokuj użytkownika' : 'Zablokuj użytkownika'}
+                  </button>
+                </div>
               </header>
             )}
 
@@ -250,7 +307,11 @@ function ChatPage() {
 
             {selectedConversation && (
               <form className="chat-composer" onSubmit={handleSubmit}>
-                {readOnly ? (
+                {selectedBlockedByMe ? (
+                  <div className="chat-readonly chat-readonly--blocked">
+                    Zablokowałeś tego użytkownika. Nowe wiadomości są wyłączone do czasu odblokowania; historia rozmowy pozostaje dostępna.
+                  </div>
+                ) : readOnly ? (
                   <div className="chat-readonly">To zlecenie jest zamknięte. Historia czatu pozostaje dostępna tylko do odczytu.</div>
                 ) : (
                   <>

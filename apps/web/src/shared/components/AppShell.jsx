@@ -29,6 +29,7 @@ function AppShell() {
             {user && <NavLink className={navClass} to="/saved-searches">Wyszukiwania</NavLink>}
             {user && <NavLink className={navClass} to="/jobs/new">Dodaj zlecenie</NavLink>}
             {user && <NavLink className={navClass} to="/chat">Czaty</NavLink>}
+            {user && <NavLink className={navClass} to="/blocked-users">Blokady</NavLink>}
             {user && <NavLink className={navClass} to="/disputes">Spory</NavLink>}
             {user && <NavLink className={navClass} to="/my-reports">Zgłoszenia</NavLink>}
             {user && (
