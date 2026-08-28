@@ -20,10 +20,9 @@ import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.service.WalletService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -276,7 +275,7 @@ public class JobPublicationService {
     private String serialize(JobRequest request) {
         try {
             return objectMapper.writeValueAsString(request);
-        } catch (JsonProcessingException ex) {
+        } catch (RuntimeException ex) {
             throw new IllegalStateException("Nie udało się zapisać danych publikacji", ex);
         }
     }
@@ -284,7 +283,7 @@ public class JobPublicationService {
     JobRequest deserialize(String payload) {
         try {
             return objectMapper.readValue(payload, JobRequest.class);
-        } catch (JsonProcessingException ex) {
+        } catch (RuntimeException ex) {
             throw new IllegalStateException("Nie udało się odczytać danych publikacji", ex);
         }
     }
