@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext.js'
 import ReviewDialog from '../../reviews/components/ReviewDialog.jsx'
 import UserTrustCard from '../../reviews/components/UserTrustCard.jsx'
+import JobAttachmentPanel from '../components/JobAttachmentPanel.jsx'
 import JobProposalPanel from '../components/JobProposalPanel.jsx'
 import {
   acceptJob,
@@ -325,6 +326,15 @@ function JobDetailsPage() {
             <UserTrustCard userId={job.takenById} roleLabel="Wykonawca" />
           </div>
         </section>
+
+        <JobAttachmentPanel
+          job={job}
+          currentUserId={user?.id}
+          onSuccess={(message) => {
+            setError('')
+            setSuccess(message)
+          }}
+        />
 
         {showProposalPanel && (
           <JobProposalPanel

@@ -1,4 +1,4 @@
-import { apiRequest } from '../../../shared/api/apiClient.js'
+import { apiDownload, apiRequest } from '../../../shared/api/apiClient.js'
 
 export function getJobs(filters, options = {}) {
   const params = new URLSearchParams()
@@ -140,6 +140,28 @@ export function withdrawJobProposal(id, proposalId) {
 
 export function acceptJobProposal(id, proposalId) {
   return apiRequest(`/jobs/${id}/proposals/${proposalId}/accept`, { method: 'POST' })
+}
+
+export function getJobAttachments(id, options = {}) {
+  return apiRequest(`/jobs/${id}/attachments`, options)
+}
+
+export function uploadJobAttachment(id, visibility, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const params = new URLSearchParams({ visibility })
+  return apiRequest(`/jobs/${id}/attachments?${params.toString()}`, {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export function downloadJobAttachment(id, attachmentId, options = {}) {
+  return apiDownload(`/jobs/${id}/attachments/${attachmentId}/content`, options)
+}
+
+export function deleteJobAttachment(id, attachmentId) {
+  return apiRequest(`/jobs/${id}/attachments/${attachmentId}`, { method: 'DELETE' })
 }
 
 export function requestJobCompletion(id) {

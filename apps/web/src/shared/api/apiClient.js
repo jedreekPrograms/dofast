@@ -23,11 +23,22 @@ export function clearAccessToken() {
 }
 
 export async function apiRequest(path, options = {}) {
+  const { response, payload } = await performRequest(path, options, 'json')
+  void response
+  return payload
+}
+
+export async function apiDownload(path, options = {}) {
+  const { payload } = await performRequest(path, options, 'blob')
+  return payload
+}
+
+async function performRequest(path, options, responseMode) {
   const { auth = true, headers = {}, ...fetchOptions } = options
   const requestHeaders = { ...headers }
   const token = auth ? getAccessToken() : null
 
-  if (fetchOptions.body && !requestHeaders['Content-Type']) {
+  if (shouldSetJsonContentType(fetchOptions.body) && !requestHeaders['Content-Type']) {
     requestHeaders['Content-Type'] = 'application/json'
   }
   if (token) {
@@ -39,24 +50,45 @@ export async function apiRequest(path, options = {}) {
     headers: requestHeaders,
   })
 
-  let payload = null
-  if (response.status !== 204) {
-    const text = await response.text()
-    if (text) {
-      try {
-        payload = JSON.parse(text)
-      } catch {
-        payload = text
-      }
-    }
-  }
-
   if (!response.ok) {
+    const payload = await readErrorPayload(response)
     const message = payload && typeof payload === 'object' && payload.message
       ? payload.message
       : `API request failed with status ${response.status}`
     throw new ApiError(message, response.status, payload)
   }
 
-  return payload
+  if (response.status === 204) {
+    return { response, payload: null }
+  }
+
+  if (responseMode === 'blob') {
+    return { response, payload: await response.blob() }
+  }
+
+  const text = await response.text()
+  return { response, payload: parsePayload(text) }
+}
+
+async function readErrorPayload(response) {
+  const text = await response.text()
+  return parsePayload(text)
+}
+
+function parsePayload(text) {
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+function shouldSetJsonContentType(body) {
+  if (!body) return false
+  if (typeof FormData !== 'undefined' && body instanceof FormData) return false
+  if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) return false
+  if (typeof Blob !== 'undefined' && body instanceof Blob) return false
+  if (typeof ArrayBuffer !== 'undefined' && body instanceof ArrayBuffer) return false
+  return true
 }
