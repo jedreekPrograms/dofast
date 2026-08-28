@@ -18,6 +18,7 @@ import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.repository.UserRepository;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,7 @@ public class ChatService {
     private final ChatAccessService chatAccessService;
     private final NotificationService notificationService;
     private final RealtimePublisher realtimePublisher;
+    private final UserBlockService userBlockService;
 
     public ChatService(
             ChatMessageRepository chatMessageRepository,
@@ -48,7 +50,8 @@ public class ChatService {
             UserRepository userRepository,
             ChatAccessService chatAccessService,
             NotificationService notificationService,
-            RealtimePublisher realtimePublisher
+            RealtimePublisher realtimePublisher,
+            UserBlockService userBlockService
     ) {
         this.chatMessageRepository = chatMessageRepository;
         this.chatReadStateRepository = chatReadStateRepository;
@@ -57,6 +60,7 @@ public class ChatService {
         this.chatAccessService = chatAccessService;
         this.notificationService = notificationService;
         this.realtimePublisher = realtimePublisher;
+        this.userBlockService = userBlockService;
     }
 
     @Transactional
@@ -77,12 +81,15 @@ public class ChatService {
             if (!existing.getJob().getId().equals(jobId)) {
                 throw new ConflictException("clientMessageId został już użyty dla innego zlecenia");
             }
-            chatAccessService.requireParticipant(jobId, sender);
+            Job job = chatAccessService.requireParticipant(jobId, sender);
+            User recipient = chatAccessService.otherParticipant(job, sender);
+            requireInteractionAllowed(sender, recipient);
             return toResponse(existing);
         }
 
         Job job = chatAccessService.requireSendable(jobId, sender);
         User recipient = chatAccessService.otherParticipant(job, sender);
+        requireInteractionAllowed(sender, recipient);
 
         ChatMessage saved = chatMessageRepository.save(
                 new ChatMessage(job, sender, normalizedContent, clientMessageId)
@@ -207,6 +214,12 @@ public class ChatService {
                 ),
                 sortAt
         );
+    }
+
+    private void requireInteractionAllowed(User first, User second) {
+        if (userBlockService.isInteractionBlocked(first, second)) {
+            throw new ForbiddenOperationException("Wiadomość nie może zostać wysłana między zablokowanymi użytkownikami");
+        }
     }
 
     private ChatMessageResponse toResponse(ChatMessage message) {

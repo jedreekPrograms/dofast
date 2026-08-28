@@ -16,6 +16,8 @@ Flyway `V31__user_blocks.sql` creates `user_blocks` with foreign keys to `users`
 
 ## Interaction enforcement
 
-`UserBlockService.isInteractionBlocked(first, second)` provides a symmetric, server-side policy primitive: interaction is considered blocked if either side has blocked the other. This PR intentionally establishes the persistence/API boundary first. Chat, discovery/profile actions and other interaction surfaces should call this server-side policy rather than trusting client-side hidden controls.
+`UserBlockService.isInteractionBlocked(first, second)` is a symmetric, server-side policy primitive: interaction is considered blocked if either side has blocked the other.
 
-This separation keeps the migration and ownership/privacy rules atomic and testable before individual product surfaces are switched over in subsequent changes.
+Chat message delivery now enforces this policy before any message row is inserted, notification is created or realtime event is published. The same check is also applied to retries using an existing `clientMessageId`, so blocking cannot be bypassed through the idempotency path. Existing chat history remains readable for job participants; blocking prevents new direct communication rather than deleting historical evidence or changing job lifecycle state.
+
+Future discovery/profile actions and other interaction surfaces should reuse the same server-side policy instead of trusting client-side hidden controls. Blocking does not alter escrow, active job state, location access or moderation records by itself; those remain governed by their existing participant and lifecycle authorization rules.

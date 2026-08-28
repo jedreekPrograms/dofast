@@ -7,12 +7,14 @@ import com.doFast.dofastapp.chat.repository.ChatMessageRepository;
 import com.doFast.dofastapp.chat.repository.ChatReadStateRepository;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +48,7 @@ class ChatServiceTest {
     @Mock private ChatAccessService chatAccessService;
     @Mock private NotificationService notificationService;
     @Mock private RealtimePublisher realtimePublisher;
+    @Mock private UserBlockService userBlockService;
 
     private ChatService chatService;
     private User owner;
@@ -61,7 +64,8 @@ class ChatServiceTest {
                 userRepository,
                 chatAccessService,
                 notificationService,
-                realtimePublisher
+                realtimePublisher,
+                userBlockService
         );
         owner = user(1L, "owner", "owner@example.com");
         worker = user(2L, "worker", "worker@example.com");
@@ -75,6 +79,7 @@ class ChatServiceTest {
                 .thenReturn(Optional.empty());
         when(chatAccessService.requireSendable(10L, owner)).thenReturn(job);
         when(chatAccessService.otherParticipant(job, owner)).thenReturn(worker);
+        when(userBlockService.isInteractionBlocked(owner, worker)).thenReturn(false);
         when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(invocation -> {
             ChatMessage message = invocation.getArgument(0);
             ReflectionTestUtils.setField(message, "id", 100L);
@@ -99,12 +104,33 @@ class ChatServiceTest {
     }
 
     @Test
+    void blockedParticipantsCannotSendMessageOrTriggerSideEffects() {
+        UUID clientMessageId = UUID.randomUUID();
+        when(chatMessageRepository.findBySenderAndClientMessageId(owner, clientMessageId))
+                .thenReturn(Optional.empty());
+        when(chatAccessService.requireSendable(10L, owner)).thenReturn(job);
+        when(chatAccessService.otherParticipant(job, owner)).thenReturn(worker);
+        when(userBlockService.isInteractionBlocked(owner, worker)).thenReturn(true);
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> chatService.sendMessage(10L, owner, "Nie powinno przejść", clientMessageId)
+        );
+
+        verify(chatMessageRepository, never()).save(any());
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any(), any());
+        verify(realtimePublisher, never()).publishChat(any(), any());
+    }
+
+    @Test
     void duplicateClientMessageIdReturnsExistingMessageWithoutSideEffects() {
         UUID clientMessageId = UUID.randomUUID();
         ChatMessage existing = message(55L, job, owner, "Ta sama wiadomość", clientMessageId);
         when(chatMessageRepository.findBySenderAndClientMessageId(owner, clientMessageId))
                 .thenReturn(Optional.of(existing));
         when(chatAccessService.requireParticipant(10L, owner)).thenReturn(job);
+        when(chatAccessService.otherParticipant(job, owner)).thenReturn(worker);
+        when(userBlockService.isInteractionBlocked(owner, worker)).thenReturn(false);
 
         var response = chatService.sendMessage(10L, owner, "Ta sama wiadomość", clientMessageId);
 
