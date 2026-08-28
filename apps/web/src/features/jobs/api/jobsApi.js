@@ -13,6 +13,11 @@ export function getJobs(filters, options = {}) {
   return apiRequest(`/jobs?${params.toString()}`, { ...options, auth: false })
 }
 
+export function getRecommendedJobs(page = 0, size = 6, options = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  return apiRequest(`/jobs/recommended?${params.toString()}`, options)
+}
+
 export function getJobCategories(options = {}) {
   return apiRequest('/job-categories', { ...options, auth: false })
 }
