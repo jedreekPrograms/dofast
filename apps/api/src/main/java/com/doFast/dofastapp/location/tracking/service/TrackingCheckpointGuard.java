@@ -15,9 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.function.Supplier;
 
 @Service
-@Transactional(readOnly = true)
 public class TrackingCheckpointGuard {
 
     private final JobRepository jobRepository;
@@ -34,8 +34,9 @@ public class TrackingCheckpointGuard {
         this.proximityValidator = proximityValidator;
     }
 
-    public void validate(Long jobId, User currentUser) {
-        Job job = jobRepository.findById(jobId)
+    @Transactional
+    public <T> T validateAndExecute(Long jobId, User currentUser, Supplier<T> action) {
+        Job job = jobRepository.findByIdForUpdate(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
         if (!LiveTrackingAccessService.isTrackingActive(job)) {
             throw new ConflictException("Śledzenie lokalizacji nie jest aktywne dla tego zlecenia");
@@ -44,19 +45,19 @@ public class TrackingCheckpointGuard {
             throw new ForbiddenOperationException("Tylko przypisany wykonawca może potwierdzić punkt trasy");
         }
 
-        JobLiveTracking tracking = trackingRepository.findById(jobId)
+        JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało jeszcze uruchomione"));
-        if (tracking.getPhase() == TrackingPhase.TO_DESTINATION) {
-            return;
+        if (tracking.getPhase() != TrackingPhase.TO_DESTINATION) {
+            proximityValidator.validate(
+                    tracking.getCurrentLocation(),
+                    tracking.getAccuracyMeters(),
+                    tracking.getReceivedAt(),
+                    targetLocation(job, tracking),
+                    Instant.now()
+            );
         }
 
-        proximityValidator.validate(
-                tracking.getCurrentLocation(),
-                tracking.getAccuracyMeters(),
-                tracking.getReceivedAt(),
-                targetLocation(job, tracking),
-                Instant.now()
-        );
+        return action.get();
     }
 
     private Point targetLocation(Job job, JobLiveTracking tracking) {

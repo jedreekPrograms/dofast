@@ -57,8 +57,11 @@ public class LiveTrackingController {
             @PathVariable Long jobId,
             @AuthenticationPrincipal User user
     ) {
-        checkpointGuard.validate(jobId, user);
-        return liveTrackingService.confirmCheckpoint(jobId, user);
+        return checkpointGuard.validateAndExecute(
+                jobId,
+                user,
+                () -> liveTrackingService.confirmCheckpoint(jobId, user)
+        );
     }
 
     @PostMapping("/pickup")
@@ -66,7 +69,10 @@ public class LiveTrackingController {
             @PathVariable Long jobId,
             @AuthenticationPrincipal User user
     ) {
-        checkpointGuard.validate(jobId, user);
-        return liveTrackingService.confirmPickup(jobId, user);
+        return checkpointGuard.validateAndExecute(
+                jobId,
+                user,
+                () -> liveTrackingService.confirmPickup(jobId, user)
+        );
     }
 }
