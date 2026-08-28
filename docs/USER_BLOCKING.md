@@ -30,6 +30,8 @@ Saving an open job to the private shortlist also enforces the symmetric block po
 
 For authenticated non-participants, direct `GET /jobs/{id}` detail access also applies the symmetric policy. A blocked relationship is surfaced as the same neutral `Zlecenie nie istnieje` result used for a missing job, so the endpoint does not disclose which side created the block. Unauthenticated public reads retain their existing behavior, while the job owner and assigned worker retain access to their own job record so a later block cannot break an already-started lifecycle, dispute or accountability flow.
 
+Authenticated discovery now applies the same symmetric policy directly inside database queries for both paginated `GET /jobs` and geospatial `GET /jobs/nearby`. Jobs created by an account involved in either direction of a block are excluded before pagination, distance ordering and result limits are applied, so blocked rows cannot distort page totals or consume nearby result slots. Anonymous discovery keeps the existing public behavior because it has no authenticated block context.
+
 When the caller has blocked the selected chat counterpart, the web composer is disabled immediately and the draft is discarded. This is UX only: the backend remains the source of truth and rejects delivery if either participant has blocked the other, including a reverse block that is intentionally not exposed to the caller.
 
 ## Reviews after completed jobs
@@ -40,4 +42,4 @@ If either participant has blocked the other, the review is still persisted norma
 
 Existing active jobs are not cancelled merely because either participant later creates a block. Their escrow, completion/dispute lifecycle and participant-only location authorization continue to follow the dedicated job rules; blocking prevents new interaction surfaces rather than silently mutating financial or safety-critical state.
 
-Future discovery/profile actions and other interaction surfaces should reuse the same server-side policy instead of trusting client-side hidden controls. Blocking does not alter escrow, active job state, location access or moderation records by itself; those remain governed by their existing participant and lifecycle authorization rules.
+Private saved-search radius results and future profile/interaction surfaces should reuse the same server-side policy instead of trusting client-side hidden controls. Blocking does not alter escrow, active job state, location access or moderation records by itself; those remain governed by their existing participant and lifecycle authorization rules.
