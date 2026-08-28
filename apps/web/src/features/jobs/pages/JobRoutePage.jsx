@@ -40,6 +40,8 @@ function JobRoutePage() {
 
   const trackingActive = job ? ACTIVE_TRACKING_STATUSES.has(job.status) : false
   const isWorker = Boolean(user && job && job.takenById === user.id)
+  const destinationArrived = tracking?.phase === 'ARRIVED_DESTINATION'
+  const shouldShareLocation = isWorker && trackingActive && !destinationArrived
 
   const refreshJob = useCallback(async (signal) => {
     const data = await getJob(jobId, signal ? { signal } : {})
@@ -232,8 +234,9 @@ function JobRoutePage() {
   }, [route, tracking])
 
   useEffect(() => {
-    if (!isWorker || !trackingActive) {
-      setLocationPermission('idle')
+    if (!shouldShareLocation) {
+      setLocationPermission(destinationArrived && isWorker ? 'completed' : 'idle')
+      if (destinationArrived) setTrackingError('')
       return undefined
     }
     if (!navigator.geolocation) {
@@ -289,7 +292,7 @@ function JobRoutePage() {
       navigator.geolocation.clearWatch(watchId)
       sendingPositionRef.current = false
     }
-  }, [isWorker, jobId, trackingActive])
+  }, [destinationArrived, isWorker, jobId, shouldShareLocation])
 
   async function handleCheckpoint() {
     setCheckpointSubmitting(true)
@@ -347,25 +350,41 @@ function JobRoutePage() {
                 <span className={`realtime-status realtime-status--${realtimeStatus}`}>Realtime: {realtimeStatus}</span>
               </div>
 
-              <div className="live-tracking-metrics">
-                <div><small>Do następnego punktu</small><strong>{tracking?.remainingDistanceMeters ? formatDistance(tracking.remainingDistanceMeters) : '—'}</strong></div>
-                <div><small>ETA do punktu</small><strong>{tracking?.remainingDurationSeconds ? formatDuration(tracking.remainingDurationSeconds) : '—'}</strong></div>
-                <div><small>Ostatni GPS</small><strong>{tracking?.receivedAt ? formatLastUpdate(tracking.receivedAt) : 'oczekiwanie'}</strong></div>
-              </div>
+              {!destinationArrived && (
+                <div className="live-tracking-metrics">
+                  <div><small>Do następnego punktu</small><strong>{tracking?.remainingDistanceMeters ? formatDistance(tracking.remainingDistanceMeters) : '—'}</strong></div>
+                  <div><small>ETA do punktu</small><strong>{tracking?.remainingDurationSeconds ? formatDuration(tracking.remainingDurationSeconds) : '—'}</strong></div>
+                  <div><small>Ostatni GPS</small><strong>{tracking?.receivedAt ? formatLastUpdate(tracking.receivedAt) : 'oczekiwanie'}</strong></div>
+                </div>
+              )}
 
-              {!tracking?.sharingActive && <p className="live-tracking-note">Czekamy na pierwszą aktualizację GPS wykonawcy.</p>}
-              {tracking?.stale && <div className="form-message form-message--error">Pozycja wykonawcy jest nieaktualna. Ostatnia aktualizacja mogła zostać wstrzymana przez telefon lub sieć.</div>}
+              {destinationArrived && (
+                <div className="live-tracking-arrived" role="status">
+                  <strong>Trasa do punktu B została zakończona.</strong>
+                  <span>Dokładna pozycja wykonawcy i bieżące ETA zostały wyczyszczone, a dalsze udostępnianie GPS zatrzymane. Dotarcie do B nie kończy automatycznie zlecenia i nie uruchamia rozliczenia środków.</span>
+                </div>
+              )}
 
-              {isWorker && tracking?.phase !== 'TO_DESTINATION' && (
+              {!destinationArrived && !tracking?.sharingActive && <p className="live-tracking-note">Czekamy na pierwszą aktualizację GPS wykonawcy.</p>}
+              {!destinationArrived && tracking?.stale && <div className="form-message form-message--error">Pozycja wykonawcy jest nieaktualna. Ostatnia aktualizacja mogła zostać wstrzymana przez telefon lub sieć.</div>}
+
+              {isWorker && tracking && !destinationArrived && (
                 <button className="button button--primary" type="button" disabled={checkpointSubmitting} onClick={handleCheckpoint}>
-                  {checkpointSubmitting ? 'Zapisywanie…' : checkpointLabel}
+                  {checkpointSubmitting ? 'Sprawdzanie lokalizacji…' : checkpointLabel}
                 </button>
               )}
 
               {isWorker && (
                 <div className="live-tracking-worker-status">
                   <strong>{locationPermissionLabel(locationPermission)}</strong>
-                  <span>Po wykonaniu czynności w A lub na przystanku potwierdź punkt, aby ETA przeszło do kolejnego miejsca. Podczas realizacji nie zamykaj tego ekranu.</span>
+                  {destinationArrived ? (
+                    <>
+                      <span>Potwierdzenie B zamknęło wyłącznie tracking trasy. Jeśli zadanie jest wykonane, zgłoś jego wykonanie osobno — zlecający nadal musi je potwierdzić przed normalnym rozliczeniem.</span>
+                      <Link className="button button--secondary" to={`/jobs/${jobId}`}>Przejdź do szczegółów zlecenia</Link>
+                    </>
+                  ) : (
+                    <span>Po dotarciu do A, każdego przystanku lub punktu B potwierdź bieżący punkt. Serwer sprawdzi świeży GPS i odległość przed zmianą etapu trasy.</span>
+                  )}
                 </div>
               )}
               {trackingError && <div className="form-message form-message--error">{trackingError}</div>}
@@ -400,6 +419,7 @@ function trackingTarget(route, tracking) {
 }
 
 function trackingPhaseLabel(tracking) {
+  if (tracking?.phase === 'ARRIVED_DESTINATION') return 'Dotarcie do punktu B potwierdzone'
   if (tracking?.phase === 'TO_DESTINATION') return 'Kurier jedzie do punktu B'
   if (tracking?.phase === 'TO_STOP' && Number.isInteger(tracking.nextStopSequence)) {
     return `Kurier jedzie do przystanku ${tracking.nextStopSequence + 1}`
@@ -408,6 +428,7 @@ function trackingPhaseLabel(tracking) {
 }
 
 function trackingCheckpointLabel(tracking) {
+  if (tracking?.phase === 'TO_DESTINATION') return 'Potwierdź dotarcie do punktu B'
   if (tracking?.phase === 'TO_STOP' && Number.isInteger(tracking.nextStopSequence)) {
     return `Potwierdź przystanek ${tracking.nextStopSequence + 1} i jedź dalej`
   }
@@ -444,6 +465,7 @@ function formatLastUpdate(value) {
 }
 
 function locationPermissionLabel(status) {
+  if (status === 'completed') return 'Udostępnianie GPS zakończone'
   if (status === 'granted') return 'Lokalizacja jest udostępniana'
   if (status === 'requesting') return 'Czekam na zgodę na lokalizację…'
   if (status === 'denied') return 'Dostęp do lokalizacji zablokowany'
