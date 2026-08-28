@@ -28,6 +28,8 @@ Saved-search alert delivery also applies the same symmetric check after a search
 
 Saving an open job to the private shortlist also enforces the symmetric block policy before a bookmark lookup or insert. A blocked relationship therefore cannot create a new saved-job association, and the rejection remains intentionally neutral about which side created the block.
 
+For authenticated non-participants, direct `GET /jobs/{id}` detail access also applies the symmetric policy. A blocked relationship is surfaced as the same neutral `Zlecenie nie istnieje` result used for a missing job, so the endpoint does not disclose which side created the block. Unauthenticated public reads retain their existing behavior, while the job owner and assigned worker retain access to their own job record so a later block cannot break an already-started lifecycle, dispute or accountability flow.
+
 When the caller has blocked the selected chat counterpart, the web composer is disabled immediately and the draft is discarded. This is UX only: the backend remains the source of truth and rejects delivery if either participant has blocked the other, including a reverse block that is intentionally not exposed to the caller.
 
 ## Reviews after completed jobs
