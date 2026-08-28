@@ -9,6 +9,7 @@ import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.service.JobService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,7 @@ class SavedJobServiceTest {
     @Mock private SavedJobRepository savedJobRepository;
     @Mock private JobRepository jobRepository;
     @Mock private JobService jobService;
+    @Mock private UserBlockService userBlockService;
 
     private SavedJobService service;
     private User user;
@@ -42,7 +44,7 @@ class SavedJobServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SavedJobService(savedJobRepository, jobRepository, jobService);
+        service = new SavedJobService(savedJobRepository, jobRepository, jobService, userBlockService);
         user = new User("user@example.com", "User");
         ReflectionTestUtils.setField(user, "id", 7L);
         job = new Job();
@@ -87,6 +89,20 @@ class SavedJobServiceTest {
         when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
 
         assertThrows(ForbiddenOperationException.class, () -> service.save(11L, user));
+        verify(savedJobRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void saveRejectsJobAcrossUserBlock() {
+        User owner = new User("owner@example.com", "Owner");
+        ReflectionTestUtils.setField(owner, "id", 8L);
+        job.setCreatedBy(owner);
+        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(userBlockService.isInteractionBlocked(owner, user)).thenReturn(true);
+
+        assertThrows(ForbiddenOperationException.class, () -> service.save(11L, user));
+
+        verify(savedJobRepository, never()).existsByUser_IdAndJob_Id(7L, 11L);
         verify(savedJobRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 

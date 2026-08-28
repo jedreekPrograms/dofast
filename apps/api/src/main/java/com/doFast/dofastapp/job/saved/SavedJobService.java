@@ -10,6 +10,7 @@ import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.service.JobService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -25,15 +26,18 @@ public class SavedJobService {
     private final SavedJobRepository savedJobRepository;
     private final JobRepository jobRepository;
     private final JobService jobService;
+    private final UserBlockService userBlockService;
 
     public SavedJobService(
             SavedJobRepository savedJobRepository,
             JobRepository jobRepository,
-            JobService jobService
+            JobService jobService,
+            UserBlockService userBlockService
     ) {
         this.savedJobRepository = savedJobRepository;
         this.jobRepository = jobRepository;
         this.jobService = jobService;
+        this.userBlockService = userBlockService;
     }
 
     @Transactional
@@ -45,6 +49,9 @@ public class SavedJobService {
         }
         if (sameUser(job.getCreatedBy(), user)) {
             throw new ForbiddenOperationException("Nie możesz zapisać własnego zlecenia");
+        }
+        if (userBlockService.isInteractionBlocked(job.getCreatedBy(), user)) {
+            throw new ForbiddenOperationException("Nie możesz zapisać tego zlecenia");
         }
         if (!savedJobRepository.existsByUser_IdAndJob_Id(user.getId(), jobId)) {
             savedJobRepository.save(new SavedJob(user, job));
