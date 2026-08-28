@@ -23,7 +23,9 @@ function JobCard({ job, showSaveAction = true, initialSaved = false, onSavedChan
   const [reportOpen, setReportOpen] = useState(false)
   const [reported, setReported] = useState(false)
   const [error, setError] = useState('')
-  const canAccept = user && job.createdById !== user.id && job.status === 'OPEN'
+  const proposalMode = job.assignmentMode === 'PROPOSALS'
+  const canAccept = user && job.createdById !== user.id && job.status === 'OPEN' && !proposalMode
+  const canPropose = user && job.createdById !== user.id && job.status === 'OPEN' && proposalMode
   const canSave = showSaveAction && user && job.createdById !== user.id && job.status === 'OPEN'
   const canReport = user && job.createdById !== user.id
 
@@ -89,6 +91,13 @@ function JobCard({ job, showSaveAction = true, initialSaved = false, onSavedChan
 
       <p className="job-card__description">{job.description}</p>
 
+      {proposalMode && (
+        <div className="job-card__route">
+          <strong>Zlecający wybiera wykonawcę</strong>
+          <span>{job.priceNegotiationEnabled ? 'możesz zaproponować własną cenę' : 'wynagrodzenie jest stałe'}</span>
+        </div>
+      )}
+
       {(job.routeDistanceMeters || job.routeDurationSeconds) && (
         <div className="job-card__route">
           <strong>{formatDistance(job.routeDistanceMeters)}</strong>
@@ -114,6 +123,7 @@ function JobCard({ job, showSaveAction = true, initialSaved = false, onSavedChan
             {accepting ? 'Przyjmowanie…' : 'Przyjmij zlecenie'}
           </button>
         )}
+        {canPropose && <Link className="button button--primary" to={`/jobs/${job.id}`}>Wyślij propozycję</Link>}
         {canReport && (
           <button
             className="button button--secondary"
@@ -124,14 +134,14 @@ function JobCard({ job, showSaveAction = true, initialSaved = false, onSavedChan
             {reported ? 'Zgłoszono' : 'Zgłoś ofertę'}
           </button>
         )}
-        {!user && <Link className="button button--secondary" to="/login">Zaloguj się, aby przyjąć</Link>}
+        {!user && <Link className="button button--secondary" to="/login">{proposalMode ? 'Zaloguj się, aby złożyć propozycję' : 'Zaloguj się, aby przyjąć'}</Link>}
         {error && <span className="job-card__error">{error}</span>}
       </div>
 
       <footer className="job-card__footer">
         <span>{job.createdAt ? dateFormatter.format(new Date(job.createdAt)) : 'Nowe zlecenie'}</span>
         <Link to={`/users/${job.createdById}`}>Profil zlecającego</Link>
-        <span className="job-card__status">Otwarte</span>
+        <span className="job-card__status">{proposalMode ? 'Propozycje' : 'Otwarte'}</span>
       </footer>
 
       {reportOpen && (
