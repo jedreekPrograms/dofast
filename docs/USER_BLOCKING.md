@@ -22,6 +22,10 @@ Flyway `V31__user_blocks.sql` creates `user_blocks` with foreign keys to `users`
 
 Chat message delivery enforces this policy before any message row is inserted, notification is created or realtime event is published. The same check is also applied to retries using an existing `clientMessageId`, so blocking cannot be bypassed through the idempotency path. Existing chat history remains readable for job participants; blocking prevents new direct communication rather than deleting historical evidence or changing job lifecycle state.
 
+Accepting an open job also enforces the symmetric block policy before the worker is assigned. A blocked relationship therefore cannot start a new job relationship, initialize live tracking or create the `JOB_ACCEPTED` notification. The rejection message is intentionally neutral and does not disclose which side created the block.
+
 When the caller has blocked the selected chat counterpart, the web composer is disabled immediately and the draft is discarded. This is UX only: the backend remains the source of truth and rejects delivery if either participant has blocked the other, including a reverse block that is intentionally not exposed to the caller.
+
+Existing active jobs are not cancelled merely because either participant later creates a block. Their escrow, completion/dispute lifecycle and participant-only location authorization continue to follow the dedicated job rules; blocking prevents new interaction surfaces rather than silently mutating financial or safety-critical state.
 
 Future discovery/profile actions and other interaction surfaces should reuse the same server-side policy instead of trusting client-side hidden controls. Blocking does not alter escrow, active job state, location access or moderation records by itself; those remain governed by their existing participant and lifecycle authorization rules.

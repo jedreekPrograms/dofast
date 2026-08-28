@@ -29,7 +29,9 @@ import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.locationtech.jts.geom.Point;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -51,7 +53,9 @@ public class JobService {
     private final RouteQuoteService routeQuoteService;
     private final LiveTrackingService liveTrackingService;
     private final JobPublicationOutboxRepository jobPublicationOutboxRepository;
+    private final UserBlockService userBlockService;
 
+    @Autowired
     public JobService(
             JobRepository jobRepository,
             JobCategoryRepository jobCategoryRepository,
@@ -59,7 +63,8 @@ public class JobService {
             NotificationService notificationService,
             RouteQuoteService routeQuoteService,
             LiveTrackingService liveTrackingService,
-            JobPublicationOutboxRepository jobPublicationOutboxRepository
+            JobPublicationOutboxRepository jobPublicationOutboxRepository,
+            UserBlockService userBlockService
     ) {
         this.jobRepository = jobRepository;
         this.jobCategoryRepository = jobCategoryRepository;
@@ -68,6 +73,28 @@ public class JobService {
         this.routeQuoteService = routeQuoteService;
         this.liveTrackingService = liveTrackingService;
         this.jobPublicationOutboxRepository = jobPublicationOutboxRepository;
+        this.userBlockService = userBlockService;
+    }
+
+    JobService(
+            JobRepository jobRepository,
+            JobCategoryRepository jobCategoryRepository,
+            TransactionService transactionService,
+            NotificationService notificationService,
+            RouteQuoteService routeQuoteService,
+            LiveTrackingService liveTrackingService,
+            JobPublicationOutboxRepository jobPublicationOutboxRepository
+    ) {
+        this(
+                jobRepository,
+                jobCategoryRepository,
+                transactionService,
+                notificationService,
+                routeQuoteService,
+                liveTrackingService,
+                jobPublicationOutboxRepository,
+                null
+        );
     }
 
     @Transactional
@@ -181,6 +208,9 @@ public class JobService {
         Job job = getJobForUpdate(jobId);
         if (job.getStatus() != JobStatus.OPEN) throw new ConflictException("Zlecenie nie jest już dostępne");
         if (sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Nie możesz przyjąć własnego zlecenia");
+        if (userBlockService != null && userBlockService.isInteractionBlocked(job.getCreatedBy(), currentUser)) {
+            throw new ForbiddenOperationException("Nie możesz przyjąć tego zlecenia");
+        }
         job.assignTo(currentUser, LocalDateTime.now());
         Job saved = jobRepository.save(job);
         if (usesLiveTracking(saved)) {
