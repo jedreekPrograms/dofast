@@ -1,0 +1,238 @@
+.job-attachment-panel {
+  grid-column: 1 / -1;
+}
+
+.job-attachment-panel__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.job-attachment-panel__heading h2 {
+  margin-bottom: 0;
+}
+
+.job-attachment-panel__count {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #f0f2f5;
+  color: #5f6671;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.job-attachment-panel__intro {
+  margin-top: 10px !important;
+}
+
+.job-attachment-upload {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #e0e3e8;
+  border-radius: 14px;
+  background: #fafbfc;
+}
+
+.job-attachment-upload fieldset {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.job-attachment-upload legend {
+  color: #30343c;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.job-attachment-visibility-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.job-attachment-visibility {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #dde1e7;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.job-attachment-visibility--selected {
+  border-color: #414854;
+  box-shadow: inset 0 0 0 1px #414854;
+}
+
+.job-attachment-visibility input {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+.job-attachment-visibility > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.job-attachment-visibility strong {
+  color: #2a2e37;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.job-attachment-visibility small {
+  color: #737a85;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.job-attachment-secret-warning {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 1px solid #ebd8ae;
+  border-radius: 12px;
+  background: #fffaf0;
+  color: #6c5a31;
+  line-height: 1.45;
+}
+
+.job-attachment-secret-warning strong {
+  color: #5b471d;
+}
+
+.job-attachment-secret-warning span {
+  font-size: 0.86rem;
+}
+
+.job-attachment-upload__file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.job-attachment-upload__file-row .button {
+  min-height: 44px;
+}
+
+.job-attachment-panel__locked-note {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f6f7f9;
+  color: #646b76;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.job-attachment-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.job-attachment-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #e0e3e8;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.job-attachment-card--secret {
+  border-color: #e8d8b7;
+  background: #fffdf8;
+}
+
+.job-attachment-card__icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 11px;
+  background: #f0f2f5;
+  color: #4e5560;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.job-attachment-card--secret .job-attachment-card__icon {
+  background: #f8efd9;
+  color: #74591e;
+}
+
+.job-attachment-card__body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.job-attachment-card__body > strong {
+  overflow: hidden;
+  color: #292d36;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-attachment-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  color: #777e89;
+  font-size: 0.8rem;
+}
+
+.job-attachment-card__secret-note {
+  color: #79612c;
+  line-height: 1.4;
+}
+
+.job-attachment-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .job-attachment-visibility-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .job-attachment-upload__file-row,
+  .job-attachment-card {
+    grid-template-columns: 1fr;
+  }
+
+  .job-attachment-card__icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .job-attachment-card__actions {
+    justify-content: stretch;
+  }
+
+  .job-attachment-card__actions .button,
+  .job-attachment-upload__file-row .button {
+    width: 100%;
+  }
+}
