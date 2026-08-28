@@ -23,14 +23,9 @@ public class JobPublicationPaymentIntentService {
     public static final String PURPOSE = "JOB_PUBLICATION";
 
     private final JobPublicationRepository publicationRepository;
-    private final JobPublicationService publicationService;
 
-    public JobPublicationPaymentIntentService(
-            JobPublicationRepository publicationRepository,
-            JobPublicationService publicationService
-    ) {
+    public JobPublicationPaymentIntentService(JobPublicationRepository publicationRepository) {
         this.publicationRepository = publicationRepository;
-        this.publicationService = publicationService;
     }
 
     public CreatePaymentIntentResponse create(Long publicationId, User currentUser) {
@@ -40,8 +35,7 @@ public class JobPublicationPaymentIntentService {
         if (publication.getStatus() != JobPublicationStatus.PAYMENT_REQUIRED) {
             throw new ConflictException("Ta publikacja nie oczekuje już na płatność");
         }
-        LocalDateTime now = LocalDateTime.now();
-        if (publicationService.expireIfNecessary(publication, now)) {
+        if (!publication.getExpiresAt().isAfter(LocalDateTime.now())) {
             throw new ConflictException("Czas na opłacenie publikacji wygasł");
         }
 
