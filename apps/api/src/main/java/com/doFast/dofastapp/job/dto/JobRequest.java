@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.job.dto;
 
+import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -36,12 +37,18 @@ public class JobRequest {
     @Valid
     private RoutePointRequest location;
 
+    private JobAssignmentMode assignmentMode = JobAssignmentMode.INSTANT;
+
+    private boolean priceNegotiationEnabled;
+
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public BigDecimal getPrice() { return price; }
     public Long getCategoryId() { return categoryId; }
     public UUID getRouteQuoteId() { return routeQuoteId; }
     public RoutePointRequest getLocation() { return location; }
+    public JobAssignmentMode getAssignmentMode() { return assignmentMode; }
+    public boolean isPriceNegotiationEnabled() { return priceNegotiationEnabled; }
 
     public void setTitle(String title) { this.title = title; }
     public void setDescription(String description) { this.description = description; }
@@ -49,4 +56,6 @@ public class JobRequest {
     public void setCategoryId(Long categoryId) { this.categoryId = categoryId; }
     public void setRouteQuoteId(UUID routeQuoteId) { this.routeQuoteId = routeQuoteId; }
     public void setLocation(RoutePointRequest location) { this.location = location; }
+    public void setAssignmentMode(JobAssignmentMode assignmentMode) { this.assignmentMode = assignmentMode; }
+    public void setPriceNegotiationEnabled(boolean priceNegotiationEnabled) { this.priceNegotiationEnabled = priceNegotiationEnabled; }
 }

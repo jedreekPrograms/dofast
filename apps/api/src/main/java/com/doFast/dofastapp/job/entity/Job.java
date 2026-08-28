@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.entity;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.user.entity.User;
@@ -60,6 +61,13 @@ public class Job {
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal price;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "assignment_mode", nullable = false, length = 20)
+    private JobAssignmentMode assignmentMode = JobAssignmentMode.INSTANT;
+
+    @Column(name = "price_negotiation_enabled", nullable = false)
+    private boolean priceNegotiationEnabled;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
@@ -147,6 +155,9 @@ public class Job {
         if (createdAt == null) {
             createdAt = now;
         }
+        if (assignmentMode == null) {
+            assignmentMode = JobAssignmentMode.INSTANT;
+        }
         updatedAt = now;
     }
 
@@ -193,6 +204,8 @@ public class Job {
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public BigDecimal getPrice() { return price; }
+    public JobAssignmentMode getAssignmentMode() { return assignmentMode; }
+    public boolean isPriceNegotiationEnabled() { return priceNegotiationEnabled; }
     public JobStatus getStatus() { return status; }
     public JobCategory getCategory() { return category; }
     public Point getLocation() { return location; }
@@ -220,6 +233,8 @@ public class Job {
     public void setTitle(String title) { this.title = title; }
     public void setDescription(String description) { this.description = description; }
     public void setPrice(BigDecimal price) { this.price = price; }
+    public void setAssignmentMode(JobAssignmentMode assignmentMode) { this.assignmentMode = assignmentMode; }
+    public void setPriceNegotiationEnabled(boolean priceNegotiationEnabled) { this.priceNegotiationEnabled = priceNegotiationEnabled; }
     public void setStatus(JobStatus status) { this.status = status; }
     public void setCategory(JobCategory category) { this.category = category; }
     public void setLocation(Point location) { this.location = location; }

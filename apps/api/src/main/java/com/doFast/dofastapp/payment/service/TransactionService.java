@@ -12,6 +12,7 @@ import com.doFast.dofastapp.wallet.service.WalletService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -52,6 +53,51 @@ public class TransactionService {
 
         Transaction transaction = new Transaction();
         transaction.initializeHeld(job, payer, job.getPrice(), LocalDateTime.now());
+        transactionRepository.save(transaction);
+    }
+
+    public void adjustHeldAmount(Job job, BigDecimal newAmount, Long proposalId) {
+        if (newAmount == null || newAmount.signum() <= 0) {
+            throw new BusinessException("Finalna kwota escrow musi być dodatnia");
+        }
+        if (proposalId == null) {
+            throw new IllegalArgumentException("Proposal id is required for escrow adjustment");
+        }
+
+        Transaction transaction = getTransactionForUpdate(job);
+        if (transaction.getStatus() != TransactionStatus.HELD) {
+            throw new ConflictException("Środki escrow nie są już zablokowane");
+        }
+        if (!sameUser(transaction.getPayer(), job.getCreatedBy())) {
+            throw new ConflictException("Escrow należy do innego płatnika");
+        }
+
+        int comparison = newAmount.compareTo(transaction.getAmount());
+        if (comparison == 0) {
+            return;
+        }
+
+        if (comparison > 0) {
+            BigDecimal delta = newAmount.subtract(transaction.getAmount());
+            walletService.debit(
+                    transaction.getPayer().getId(),
+                    delta,
+                    WalletTransactionType.ESCROW_ADJUSTMENT_LOCK,
+                    job.getId(),
+                    proposalAdjustmentOperationKey(job, proposalId, "lock")
+            );
+        } else {
+            BigDecimal delta = transaction.getAmount().subtract(newAmount);
+            walletService.credit(
+                    transaction.getPayer().getId(),
+                    delta,
+                    WalletTransactionType.ESCROW_ADJUSTMENT_REFUND,
+                    job.getId(),
+                    proposalAdjustmentOperationKey(job, proposalId, "refund")
+            );
+        }
+
+        transaction.adjustHeldAmount(newAmount);
         transactionRepository.save(transaction);
     }
 
@@ -133,6 +179,13 @@ public class TransactionService {
             throw new IllegalArgumentException("Job must be persisted before escrow mutation");
         }
         return "escrow:" + job.getId() + ":" + action;
+    }
+
+    private String proposalAdjustmentOperationKey(Job job, Long proposalId, String action) {
+        if (job.getId() == null) {
+            throw new IllegalArgumentException("Job must be persisted before escrow mutation");
+        }
+        return "escrow:" + job.getId() + ":proposal:" + proposalId + ":adjust:" + action;
     }
 
     private boolean sameUser(User first, User second) {

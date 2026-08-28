@@ -6,6 +6,8 @@ import './WalletPage.css'
 const TYPE_LABELS = {
   TOP_UP: 'Wpłata',
   ESCROW_LOCK: 'Blokada środków',
+  ESCROW_ADJUSTMENT_LOCK: 'Dopłata do escrow',
+  ESCROW_ADJUSTMENT_REFUND: 'Zwrot różnicy escrow',
   ESCROW_RELEASE: 'Wypłata za zlecenie',
   WITHDRAW: 'Wypłata z portfela',
   REFUND: 'Zwrot środków',

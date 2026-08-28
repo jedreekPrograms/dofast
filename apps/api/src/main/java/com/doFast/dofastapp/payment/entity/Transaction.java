@@ -87,6 +87,16 @@ public class Transaction {
         this.payee = null;
     }
 
+    public void adjustHeldAmount(BigDecimal amount) {
+        if (status != TransactionStatus.HELD) {
+            throw new IllegalStateException("Only held escrow can change amount");
+        }
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Escrow amount must be positive");
+        }
+        this.amount = amount;
+    }
+
     public void releaseTo(User payee, LocalDateTime at) {
         this.payee = payee;
         this.status = TransactionStatus.RELEASED;
