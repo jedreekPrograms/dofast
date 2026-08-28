@@ -19,17 +19,20 @@ public class UserProfileService {
     private final ReviewRepository reviewRepository;
     private final JobRepository jobRepository;
     private final VerificationService verificationService;
+    private final UserServiceCategoryService userServiceCategoryService;
 
     public UserProfileService(
             UserRepository userRepository,
             ReviewRepository reviewRepository,
             JobRepository jobRepository,
-            VerificationService verificationService
+            VerificationService verificationService,
+            UserServiceCategoryService userServiceCategoryService
     ) {
         this.userRepository = userRepository;
         this.reviewRepository = reviewRepository;
         this.jobRepository = jobRepository;
         this.verificationService = verificationService;
+        this.userServiceCategoryService = userServiceCategoryService;
     }
 
     public UserProfileResponse getProfile(Long userId) {
@@ -52,7 +55,8 @@ public class UserProfileService {
                 completedAsRequester,
                 completedAsWorker,
                 completedAsRequester + completedAsWorker,
-                verificationService.isVerified(userId)
+                verificationService.isVerified(userId),
+                userServiceCategoryService.getForUser(userId)
         );
     }
 }
