@@ -99,6 +99,8 @@ jobs:
         run: bash .github/scripts/on-site-job-smoke.sh
       - name: Verify nearby PostGIS category filtering
         run: bash .github/scripts/nearby-category-smoke.sh
+      - name: Verify encrypted job attachments and lifecycle privacy
+        run: bash .github/scripts/job-attachments-smoke.sh
       - name: Start web gateway
         run: docker compose up -d --no-build web
       - name: Verify web container and API gateway
