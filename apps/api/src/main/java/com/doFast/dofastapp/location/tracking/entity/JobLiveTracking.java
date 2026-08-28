@@ -126,6 +126,19 @@ public class JobLiveTracking {
         clearEstimate();
     }
 
+    public void arriveAtDestination(Instant now) {
+        this.phase = TrackingPhase.ARRIVED_DESTINATION;
+        this.nextStopSequence = null;
+        currentLocation = null;
+        accuracyMeters = null;
+        headingDegrees = null;
+        speedMetersPerSecond = null;
+        capturedAt = null;
+        receivedAt = now;
+        sharingStoppedAt = now;
+        clearEstimate();
+    }
+
     public void applyEstimate(RouteProviderResult estimate, Point etaOrigin, Instant computedAt) {
         this.remainingDistanceMeters = estimate.distanceMeters();
         this.remainingDurationSeconds = estimate.durationSeconds();
