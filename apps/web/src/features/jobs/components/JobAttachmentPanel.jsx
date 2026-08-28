@@ -124,7 +124,7 @@ function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
     setBusyAction(`download-${attachment.id}`)
     setError('')
     try {
-      const blob = await downloadJobAttachment(job.id, attachment.id)
+      const blob = await downloadJobAttachment(job.id, attachment.id, { cache: 'no-store' })
       triggerPrivateDownload(blob, attachment.originalFilename)
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się pobrać załącznika.')
@@ -156,7 +156,9 @@ function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
           <span className="eyebrow">Materiały do zlecenia</span>
           <h2>Załączniki</h2>
         </div>
-        <span className="job-attachment-panel__count">{attachments.length} / 12</span>
+        <span className="job-attachment-panel__count">
+          {isCreator ? `${attachments.length} / 12` : `${attachments.length} dostępnych`}
+        </span>
       </div>
 
       <p className="job-attachment-panel__intro">
