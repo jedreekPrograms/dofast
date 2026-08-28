@@ -9,6 +9,8 @@ public record UserResponse(
         Long id,
         String email,
         String nickname,
+        String bio,
+        String publicLocation,
         UserRole role,
         UserStatus status,
         LocalDateTime createdAt
