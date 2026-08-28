@@ -27,6 +27,11 @@ public interface VerificationCaseRepository extends JpaRepository<VerificationCa
     @Query("select verification from VerificationCase verification where verification.id = :id")
     Optional<VerificationCase> findByIdForUpdate(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"user", "reviewedBy"})
+    @Query("select verification from VerificationCase verification where verification.user.id = :userId")
+    Optional<VerificationCase> findByUserIdForUpdate(@Param("userId") Long userId);
+
     @EntityGraph(attributePaths = {"user", "reviewedBy"})
     Page<VerificationCase> findByStatus(VerificationStatus status, Pageable pageable);
 
