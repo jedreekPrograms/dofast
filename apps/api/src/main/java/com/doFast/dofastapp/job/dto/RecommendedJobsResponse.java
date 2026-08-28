@@ -4,5 +4,6 @@ import com.doFast.dofastapp.common.dto.PageResponse;
 
 public record RecommendedJobsResponse(
         PageResponse<JobResponse> jobs,
-        int specializationCount
+        int specializationCount,
+        Integer serviceAreaRadiusKm
 ) {}
