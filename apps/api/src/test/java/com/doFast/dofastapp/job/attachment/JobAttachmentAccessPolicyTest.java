@@ -68,7 +68,6 @@ class JobAttachmentAccessPolicyTest {
     void participantAttachmentRemainsAvailableToAssignedWorkerHistorically() {
         JobAttachmentAccessPolicy policy = new JobAttachmentAccessPolicy(userBlockService);
         prepareWorkerAttachment(JobAttachmentVisibility.PARTICIPANTS);
-        when(job.getStatus()).thenReturn(JobStatus.DONE);
 
         assertTrue(policy.canRead(attachment, worker));
     }
