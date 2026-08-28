@@ -4,11 +4,11 @@ import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 
-final class JobResponseMapper {
+public final class JobResponseMapper {
 
     private JobResponseMapper() {}
 
-    static JobResponse toResponse(Job job) {
+    public static JobResponse toResponse(Job job) {
         JobCategory category = job.getCategory();
         return new JobResponse(
                 job.getId(),
