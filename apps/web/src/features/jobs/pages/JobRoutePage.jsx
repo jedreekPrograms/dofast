@@ -87,7 +87,7 @@ function JobRoutePage() {
     async function refreshTracking() {
       try {
         const data = await getLiveTracking(jobId)
-        if (mounted) setTracking(data)
+        if (mounted) setTracking((current) => preferTerminalTracking(current, data))
       } catch (requestError) {
         if (mounted && [403, 409, 404].includes(requestError.status)) setTracking(null)
       }
@@ -95,7 +95,7 @@ function JobRoutePage() {
 
     refreshTracking()
     const unsubscribe = subscribe(`/topic/tracking/${jobId}`, (message) => {
-      if (mounted) setTracking(message)
+      if (mounted) setTracking((current) => preferTerminalTracking(current, message))
     })
     const interval = window.setInterval(refreshTracking, 10000)
     return () => {
@@ -268,7 +268,7 @@ function JobRoutePage() {
             capturedAt: new Date(position.timestamp).toISOString(),
           })
           if (!stopped) {
-            setTracking(response)
+            setTracking((current) => preferTerminalTracking(current, response))
             setTrackingError('')
           }
         } catch (requestError) {
@@ -298,7 +298,8 @@ function JobRoutePage() {
     setCheckpointSubmitting(true)
     setTrackingError('')
     try {
-      setTracking(await confirmRouteCheckpoint(jobId))
+      const response = await confirmRouteCheckpoint(jobId)
+      setTracking((current) => preferTerminalTracking(current, response))
     } catch (requestError) {
       setTrackingError(requestError.message || 'Nie udało się potwierdzić punktu trasy.')
     } finally {
@@ -433,6 +434,13 @@ function trackingCheckpointLabel(tracking) {
     return `Potwierdź przystanek ${tracking.nextStopSequence + 1} i jedź dalej`
   }
   return 'Potwierdź punkt A i jedź dalej'
+}
+
+function preferTerminalTracking(current, next) {
+  if (current?.phase === 'ARRIVED_DESTINATION' && next?.phase !== 'ARRIVED_DESTINATION') {
+    return current
+  }
+  return next
 }
 
 function point(value) {
