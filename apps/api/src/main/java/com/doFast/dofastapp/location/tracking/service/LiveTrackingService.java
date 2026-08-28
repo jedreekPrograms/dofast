@@ -122,7 +122,12 @@ public class LiveTrackingService {
             assertWorkerAndActive(job, currentUser);
             JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(jobId)
                     .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało uruchomione"));
+            if (tracking.getPhase() == TrackingPhase.ARRIVED_DESTINATION) {
+                throw new ConflictException("Dotarcie do miejsca docelowego zostało już potwierdzone");
+            }
             if (tracking.getPhase() == TrackingPhase.TO_DESTINATION) {
+                tracking.arriveAtDestination(now);
+                trackingRepository.save(tracking);
                 return context(job, tracking, false, now);
             }
             advanceTarget(job, tracking, now);
@@ -161,6 +166,9 @@ public class LiveTrackingService {
 
         JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(jobId)
                 .orElseGet(() -> JobLiveTracking.start(jobId, job.getTakenBy(), now));
+        if (tracking.getPhase() == TrackingPhase.ARRIVED_DESTINATION) {
+            throw new ConflictException("Udostępnianie lokalizacji zakończyło się po dotarciu do celu");
+        }
         if (tracking.getCapturedAt() != null && !request.capturedAt().isAfter(tracking.getCapturedAt())) {
             throw new ConflictException("Nowsza lokalizacja wykonawcy została już zapisana");
         }
@@ -229,6 +237,7 @@ public class LiveTrackingService {
             case TO_ORIGIN -> job.getLocation();
             case TO_STOP -> routeStop(job, requiredStopSequence(tracking)).getLocation();
             case TO_DESTINATION -> job.getDestinationLocation();
+            case ARRIVED_DESTINATION -> null;
         };
         RouteCoordinate current = currentPoint == null ? null : coordinate(currentPoint);
         RouteCoordinate target = targetPoint == null ? null : coordinate(targetPoint);
