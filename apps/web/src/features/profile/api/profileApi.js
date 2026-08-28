@@ -10,3 +10,18 @@ export function updateMyServiceCategories(categoryIds) {
     body: JSON.stringify({ categoryIds }),
   })
 }
+
+export function getMyServiceArea(options = {}) {
+  return apiRequest('/users/me/service-area', options)
+}
+
+export function updateMyServiceArea(payload) {
+  return apiRequest('/users/me/service-area', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function clearMyServiceArea() {
+  return apiRequest('/users/me/service-area', { method: 'DELETE' })
+}
