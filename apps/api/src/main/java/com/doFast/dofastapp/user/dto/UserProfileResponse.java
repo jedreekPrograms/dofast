@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record UserProfileResponse(
         Long userId,
@@ -13,5 +14,6 @@ public record UserProfileResponse(
         long completedJobsAsRequester,
         long completedJobsAsWorker,
         long completedJobsTotal,
-        boolean identityVerified
+        boolean identityVerified,
+        List<UserServiceCategoryResponse> serviceCategories
 ) {}
