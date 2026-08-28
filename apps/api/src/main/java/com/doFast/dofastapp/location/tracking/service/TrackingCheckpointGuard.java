@@ -47,15 +47,17 @@ public class TrackingCheckpointGuard {
 
         JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało jeszcze uruchomione"));
-        if (tracking.getPhase() != TrackingPhase.TO_DESTINATION) {
-            proximityValidator.validate(
-                    tracking.getCurrentLocation(),
-                    tracking.getAccuracyMeters(),
-                    tracking.getReceivedAt(),
-                    targetLocation(job, tracking),
-                    Instant.now()
-            );
+        if (tracking.getPhase() == TrackingPhase.ARRIVED_DESTINATION) {
+            throw new ConflictException("Dotarcie do miejsca docelowego zostało już potwierdzone");
         }
+
+        proximityValidator.validate(
+                tracking.getCurrentLocation(),
+                tracking.getAccuracyMeters(),
+                tracking.getReceivedAt(),
+                targetLocation(job, tracking),
+                Instant.now()
+        );
 
         return action.get();
     }
@@ -63,6 +65,9 @@ public class TrackingCheckpointGuard {
     private Point targetLocation(Job job, JobLiveTracking tracking) {
         if (tracking.getPhase() == TrackingPhase.TO_ORIGIN) {
             return job.getLocation();
+        }
+        if (tracking.getPhase() == TrackingPhase.TO_DESTINATION) {
+            return job.getDestinationLocation();
         }
         Integer sequence = tracking.getNextStopSequence();
         if (sequence == null) {
