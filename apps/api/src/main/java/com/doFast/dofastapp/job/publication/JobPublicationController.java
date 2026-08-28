@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/jobs/publications")
 public class JobPublicationController {
@@ -37,6 +39,11 @@ public class JobPublicationController {
             @AuthenticationPrincipal User user
     ) {
         return publicationService.create(request, user);
+    }
+
+    @GetMapping("/pending")
+    public List<JobPublicationResponse> getPending(@AuthenticationPrincipal User user) {
+        return publicationService.getRecoverable(user);
     }
 
     @GetMapping("/{id}")
