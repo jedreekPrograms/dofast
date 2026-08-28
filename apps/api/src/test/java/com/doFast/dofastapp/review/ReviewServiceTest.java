@@ -13,6 +13,7 @@ import com.doFast.dofastapp.review.repository.ReviewRepository;
 import com.doFast.dofastapp.review.service.ReviewService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -37,6 +39,7 @@ class ReviewServiceTest {
     @Mock private JobRepository jobRepository;
     @Mock private UserRepository userRepository;
     @Mock private NotificationService notificationService;
+    @Mock private UserBlockService userBlockService;
 
     private ReviewService reviewService;
     private User requester;
@@ -44,7 +47,13 @@ class ReviewServiceTest {
 
     @BeforeEach
     void setUp() {
-        reviewService = new ReviewService(reviewRepository, jobRepository, userRepository, notificationService);
+        reviewService = new ReviewService(
+                reviewRepository,
+                jobRepository,
+                userRepository,
+                notificationService,
+                userBlockService
+        );
         requester = user(1L, "requester");
         worker = user(2L, "worker");
     }
@@ -73,6 +82,26 @@ class ReviewServiceTest {
                 eq(job),
                 eq(null)
         );
+    }
+
+    @Test
+    void blockedParticipantsKeepReviewAccountabilityWithoutDirectNotification() {
+        Job job = job(JobStatus.DONE);
+        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(reviewRepository.findByJobAndReviewer(job, requester)).thenReturn(Optional.empty());
+        when(reviewRepository.saveAndFlush(any(Review.class))).thenAnswer(invocation -> {
+            Review review = invocation.getArgument(0);
+            ReflectionTestUtils.setField(review, "id", 102L);
+            return review;
+        });
+        when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(true);
+
+        var response = reviewService.addReview(request(10L, 2, "Ocena po zakończonej transakcji"), requester);
+
+        assertEquals(worker.getId(), response.reviewedId());
+        assertEquals(2, response.rating());
+        verify(reviewRepository).saveAndFlush(any(Review.class));
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any(), any());
     }
 
     @Test
