@@ -1,3 +1,4 @@
+import PlatformFeePreview from '../../payments/components/PlatformFeePreview.jsx'
 import './JobAssignmentModePicker.css'
 
 function JobAssignmentModePicker({
@@ -44,6 +45,8 @@ function JobAssignmentModePicker({
           </span>
         </label>
       </div>
+
+      <PlatformFeePreview amount={price} />
 
       {proposalMode && (
         <div className="job-assignment-picker__proposal-settings">

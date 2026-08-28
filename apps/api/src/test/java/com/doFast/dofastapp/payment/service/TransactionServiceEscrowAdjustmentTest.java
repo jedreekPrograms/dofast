@@ -4,6 +4,8 @@ import com.doFast.dofastapp.common.enums.TransactionStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.payment.entity.Transaction;
+import com.doFast.dofastapp.payment.fee.PlatformFeePolicy;
+import com.doFast.dofastapp.payment.fee.PlatformRevenueService;
 import com.doFast.dofastapp.payment.repository.TransactionRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
@@ -26,6 +28,8 @@ class TransactionServiceEscrowAdjustmentTest {
 
     @Mock private TransactionRepository transactionRepository;
     @Mock private WalletService walletService;
+    @Mock private PlatformFeePolicy platformFeePolicy;
+    @Mock private PlatformRevenueService platformRevenueService;
     @Mock private Transaction transaction;
     @Mock private Job job;
     @Mock private User payer;
@@ -92,6 +96,11 @@ class TransactionServiceEscrowAdjustmentTest {
         when(transaction.getStatus()).thenReturn(TransactionStatus.HELD);
         when(transaction.getPayer()).thenReturn(payer);
         when(transaction.getAmount()).thenReturn(new BigDecimal(amount));
-        return new TransactionService(transactionRepository, walletService);
+        return new TransactionService(
+                transactionRepository,
+                walletService,
+                platformFeePolicy,
+                platformRevenueService
+        );
     }
 }

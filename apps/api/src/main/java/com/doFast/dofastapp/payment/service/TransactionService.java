@@ -5,6 +5,9 @@ import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.payment.entity.Transaction;
+import com.doFast.dofastapp.payment.fee.PlatformFeePolicy;
+import com.doFast.dofastapp.payment.fee.PlatformFeeQuote;
+import com.doFast.dofastapp.payment.fee.PlatformRevenueService;
 import com.doFast.dofastapp.payment.repository.TransactionRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
@@ -22,10 +25,19 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final WalletService walletService;
+    private final PlatformFeePolicy platformFeePolicy;
+    private final PlatformRevenueService platformRevenueService;
 
-    public TransactionService(TransactionRepository transactionRepository, WalletService walletService) {
+    public TransactionService(
+            TransactionRepository transactionRepository,
+            WalletService walletService,
+            PlatformFeePolicy platformFeePolicy,
+            PlatformRevenueService platformRevenueService
+    ) {
         this.transactionRepository = transactionRepository;
         this.walletService = walletService;
+        this.platformFeePolicy = platformFeePolicy;
+        this.platformRevenueService = platformRevenueService;
     }
 
     public void holdMoney(Job job) {
@@ -52,7 +64,13 @@ public class TransactionService {
         }
 
         Transaction transaction = new Transaction();
-        transaction.initializeHeld(job, payer, job.getPrice(), LocalDateTime.now());
+        transaction.initializeHeld(
+                job,
+                payer,
+                job.getPrice(),
+                platformFeePolicy.currentBasisPoints(),
+                LocalDateTime.now()
+        );
         transactionRepository.save(transaction);
     }
 
@@ -114,9 +132,13 @@ public class TransactionService {
             throw new ConflictException("Środki escrow nie są już zablokowane");
         }
 
+        PlatformFeeQuote quote = platformFeePolicy.quote(
+                transaction.getAmount(),
+                transaction.getPlatformFeeBasisPoints()
+        );
         boolean credited = walletService.credit(
                 payee.getId(),
-                transaction.getAmount(),
+                quote.workerPayoutAmount(),
                 WalletTransactionType.ESCROW_RELEASE,
                 job.getId(),
                 escrowOperationKey(job, "release")
@@ -125,7 +147,13 @@ public class TransactionService {
             throw new ConflictException("Wykryto niespójny stan wypłaty escrow");
         }
 
-        transaction.releaseTo(payee, LocalDateTime.now());
+        platformRevenueService.recordPlatformFee(transaction, job, quote.platformFeeAmount());
+        transaction.releaseTo(
+                payee,
+                quote.platformFeeAmount(),
+                quote.workerPayoutAmount(),
+                LocalDateTime.now()
+        );
         transactionRepository.save(transaction);
     }
 

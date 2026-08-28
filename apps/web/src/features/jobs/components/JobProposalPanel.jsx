@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import PlatformFeePreview from '../../payments/components/PlatformFeePreview.jsx'
 import UserTrustCard from '../../reviews/components/UserTrustCard.jsx'
 import {
   acceptJobProposal,
@@ -188,6 +189,12 @@ function JobProposalPanel({ job, currentUserId, onJobUpdated, onSuccess }) {
             </div>
           )}
 
+          <PlatformFeePreview
+            amount={job.priceNegotiationEnabled ? amount : job.price}
+            jobId={job.id}
+            compact
+          />
+
           <label className="field">
             <span>Wiadomość do zlecającego <small>(opcjonalnie)</small></span>
             <textarea
@@ -286,6 +293,7 @@ function OwnProposalCard({ proposal, job, isWorker, busyAction, onWithdraw }) {
             {STATUS_LABELS[proposal.status] || proposal.status}
           </span>
         </div>
+        <PlatformFeePreview amount={proposal.amount} jobId={job.id} compact />
         {proposal.message && <p>{proposal.message}</p>}
         <small>Wysłano {dateFormatter.format(new Date(proposal.createdAt))}</small>
 

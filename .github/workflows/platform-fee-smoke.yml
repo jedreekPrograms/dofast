@@ -1,40 +1,34 @@
-name: Payments ledger smoke
+name: Platform fee settlement smoke
 
 on:
   push:
     branches: [master]
     paths:
-      - ".github/workflows/payments-ledger-smoke.yml"
-      - ".github/scripts/payments-ledger-smoke.sh"
+      - ".github/workflows/platform-fee-smoke.yml"
+      - ".github/scripts/platform-fee-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
-      - "apps/api/src/main/java/com/doFast/dofastapp/location/routing/**"
-      - "apps/api/src/main/java/com/doFast/dofastapp/dispute/**"
-      - "apps/api/src/main/resources/db/migration/V9__payments_and_ledger_hardening.sql"
       - "apps/api/src/main/resources/db/migration/V38__platform_fee_settlement.sql"
   pull_request:
     branches: [master]
     paths:
-      - ".github/workflows/payments-ledger-smoke.yml"
-      - ".github/scripts/payments-ledger-smoke.sh"
+      - ".github/workflows/platform-fee-smoke.yml"
+      - ".github/scripts/platform-fee-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
-      - "apps/api/src/main/java/com/doFast/dofastapp/location/routing/**"
-      - "apps/api/src/main/java/com/doFast/dofastapp/dispute/**"
-      - "apps/api/src/main/resources/db/migration/V9__payments_and_ledger_hardening.sql"
       - "apps/api/src/main/resources/db/migration/V38__platform_fee_settlement.sql"
 
 permissions:
   contents: read
 
 concurrency:
-  group: payments-ledger-${{ github.ref }}
+  group: platform-fee-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  payments-ledger-smoke:
+  platform-fee-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,12 +37,10 @@ jobs:
         shell: bash
         run: |
           cp .env.example .env
-          sed -i 's/^ADMIN_BOOTSTRAP_EMAIL=.*/ADMIN_BOOTSTRAP_EMAIL=admin-ledger@example.com/' .env
-          sed -i 's/^ADMIN_BOOTSTRAP_PASSWORD=.*/ADMIN_BOOTSTRAP_PASSWORD=AdminLedgerPass123!/' .env
-          sed -i 's/^ADMIN_BOOTSTRAP_NICKNAME=.*/ADMIN_BOOTSTRAP_NICKNAME=Ledger Admin/' .env
-          # This workflow isolates wallet concurrency/idempotency and preserves its historical gross-release assertions.
-          # The dedicated Platform fee settlement smoke exercises the production 1% gross/fee/net path.
-          sed -i 's/^PLATFORM_FEE_BASIS_POINTS=.*/PLATFORM_FEE_BASIS_POINTS=0/' .env
+          sed -i 's/^ADMIN_BOOTSTRAP_EMAIL=.*/ADMIN_BOOTSTRAP_EMAIL=admin-fee@example.com/' .env
+          sed -i 's/^ADMIN_BOOTSTRAP_PASSWORD=.*/ADMIN_BOOTSTRAP_PASSWORD=AdminFeePass123!/' .env
+          sed -i 's/^ADMIN_BOOTSTRAP_NICKNAME=.*/ADMIN_BOOTSTRAP_NICKNAME=Fee Admin/' .env
+          sed -i 's/^PLATFORM_FEE_BASIS_POINTS=.*/PLATFORM_FEE_BASIS_POINTS=100/' .env
 
       - name: Build API with transient registry retry
         shell: bash
@@ -81,8 +73,8 @@ jobs:
           docker compose logs db api
           exit 1
 
-      - name: Verify concurrent debit, escrow release, refund and reconciliation
-        run: bash .github/scripts/payments-ledger-smoke.sh
+      - name: Verify gross, fee, worker payout and reconciliation
+        run: bash .github/scripts/platform-fee-smoke.sh
 
       - name: Diagnostics
         if: failure()

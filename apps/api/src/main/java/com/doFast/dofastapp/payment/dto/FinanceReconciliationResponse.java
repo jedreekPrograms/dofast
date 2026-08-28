@@ -8,8 +8,10 @@ public record FinanceReconciliationResponse(
         long walletBalanceMismatches,
         long ledgerSequenceMismatches,
         long stripeLedgerMismatches,
+        long platformRevenueMismatches,
         long heldEscrowCount,
         BigDecimal heldEscrowAmount,
+        BigDecimal platformFeeRevenueAmount,
         long processedStripePayments,
         LocalDateTime checkedAt
 ) {}

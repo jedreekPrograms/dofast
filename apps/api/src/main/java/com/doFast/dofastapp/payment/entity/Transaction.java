@@ -60,6 +60,15 @@ public class Transaction {
     @Column(nullable = false, length = 32)
     private TransactionStatus status;
 
+    @Column(name = "platform_fee_basis_points", nullable = false)
+    private int platformFeeBasisPoints;
+
+    @Column(name = "platform_fee_amount", precision = 19, scale = 2)
+    private BigDecimal platformFeeAmount;
+
+    @Column(name = "payee_amount", precision = 19, scale = 2)
+    private BigDecimal payeeAmount;
+
     @Column(name = "held_at", nullable = false)
     private LocalDateTime heldAt;
 
@@ -74,14 +83,29 @@ public class Transaction {
     public User getPayee() { return payee; }
     public BigDecimal getAmount() { return amount; }
     public TransactionStatus getStatus() { return status; }
+    public int getPlatformFeeBasisPoints() { return platformFeeBasisPoints; }
+    public BigDecimal getPlatformFeeAmount() { return platformFeeAmount; }
+    public BigDecimal getPayeeAmount() { return payeeAmount; }
     public LocalDateTime getHeldAt() { return heldAt; }
     public LocalDateTime getResolvedAt() { return resolvedAt; }
 
-    public void initializeHeld(Job job, User payer, BigDecimal amount, LocalDateTime at) {
+    public void initializeHeld(
+            Job job,
+            User payer,
+            BigDecimal amount,
+            int platformFeeBasisPoints,
+            LocalDateTime at
+    ) {
+        if (platformFeeBasisPoints < 0 || platformFeeBasisPoints > 1000) {
+            throw new IllegalArgumentException("Platform fee basis points are invalid");
+        }
         this.job = job;
         this.payer = payer;
         this.amount = amount;
         this.status = TransactionStatus.HELD;
+        this.platformFeeBasisPoints = platformFeeBasisPoints;
+        this.platformFeeAmount = null;
+        this.payeeAmount = null;
         this.heldAt = at;
         this.resolvedAt = null;
         this.payee = null;
@@ -97,14 +121,33 @@ public class Transaction {
         this.amount = amount;
     }
 
-    public void releaseTo(User payee, LocalDateTime at) {
+    public void releaseTo(
+            User payee,
+            BigDecimal platformFeeAmount,
+            BigDecimal payeeAmount,
+            LocalDateTime at
+    ) {
+        if (status != TransactionStatus.HELD) {
+            throw new IllegalStateException("Only held escrow can be released");
+        }
+        if (payee == null || platformFeeAmount == null || payeeAmount == null) {
+            throw new IllegalArgumentException("Settlement breakdown is required");
+        }
+        if (platformFeeAmount.signum() < 0 || payeeAmount.signum() <= 0
+                || platformFeeAmount.add(payeeAmount).compareTo(amount) != 0) {
+            throw new IllegalArgumentException("Settlement breakdown does not match escrow amount");
+        }
         this.payee = payee;
+        this.platformFeeAmount = platformFeeAmount;
+        this.payeeAmount = payeeAmount;
         this.status = TransactionStatus.RELEASED;
         this.resolvedAt = at;
     }
 
     public void refund(LocalDateTime at) {
         this.payee = null;
+        this.platformFeeAmount = null;
+        this.payeeAmount = null;
         this.status = TransactionStatus.REFUNDED;
         this.resolvedAt = at;
     }
