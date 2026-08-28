@@ -77,54 +77,8 @@ jobs:
         run: docker compose build api web
       - name: Start PostgreSQL and API
         run: docker compose up -d --no-build db api
-      - name: Verify API health
-        shell: bash
-        run: |
-          for attempt in {1..45}; do
-            if curl --fail --silent http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose ps
-          docker compose logs db api
-          exit 1
-      - name: Verify public job discovery without text query
-        run: bash .github/scripts/job-discovery-smoke.sh
-      - name: Verify accounts, routing, chat, disputes and escrow
-        run: bash .github/scripts/runtime-smoke.sh
-      - name: Verify multi-stop routing and tracking
-        run: bash .github/scripts/multi-stop-routing-smoke.sh
-      - name: Verify on-site jobs and exact-location privacy
-        run: bash .github/scripts/on-site-job-smoke.sh
-      - name: Verify nearby PostGIS category filtering
-        run: bash .github/scripts/nearby-category-smoke.sh
-      - name: Verify encrypted job attachments and lifecycle privacy
-        run: bash .github/scripts/job-attachments-smoke.sh
-      - name: Start web gateway
-        run: docker compose up -d --no-build web
-      - name: Verify web container and API gateway
-        shell: bash
-        run: |
-          for attempt in {1..30}; do
-            status=$(docker inspect --format='{{.State.Health.Status}}' dofast-web-1)
-            if test "$status" = "healthy"; then
-              break
-            fi
-            if test "$status" = "unhealthy"; then
-              docker inspect dofast-web-1 --format '{{range .State.Health.Log}}{{println .Output}}{{end}}'
-              exit 1
-            fi
-            sleep 2
-          done
-          test "$(docker inspect --format='{{.State.Health.Status}}' dofast-web-1)" = "healthy"
-          curl --fail --silent http://localhost:5173/health | grep -qx 'ok'
-          curl --fail --silent http://localhost:5173/api/actuator/health | grep -q '"status":"UP"'
-      - name: Print service diagnostics on failure
-        if: failure()
-        run: |
-          docker compose ps || true
-          docker compose logs db api web || true
-      - name: Cleanup
-        if: always()
-        run: docker compose down --remove-orphans
+      - namYNˆ™\šYHTHX[ˆÚ[ˆ˜\Úˆ[ˆˆ›Üˆ][\[ˆÌK‹_NÈÂˆYˆİ\›KY˜Z[K\Ú[[‹ËÛØØ[ÜİØXİX]Ü‹ÚX[Ü™\\H	Èœİ]\Èˆ•T‰ÎÈ[‚ˆ^]ˆšBˆÛY\‚ˆÛ™BˆØÚÙ\ˆÛÛ\ÜÙHÂˆØÚÙ\ˆÛÛ\ÜÙHÙÜÈˆ\Bˆ^]BˆH˜[YNˆ™\šYHX›XÈ›Øˆ\ØÛİ™\HÚ]İ]^]Y\Bˆ[ˆ˜\Ú™Ú]X‹ÜØÜš\ËÚ›Ø‹Y\ØÛİ™\K\Û[ÚÙKœÚˆH˜[YNˆ™\šYHXØÛİ[Ë›İ][™ËÚ]\Ü]\È[™\ØÜ›İÂˆ[ˆ˜\Ú™Ú]X‹ÜØÜš\ËÜ[[YK\Û[ÚÙKœÚˆH˜[YNˆ™\šYH][K\İÜ›İ][™È[™˜XÚÚ[™Âˆ[ˆ˜\Ú™Ú]X‹ÜØÜš\ËÛ][K\İÜ\›İ][™Ë\Û[ÚÙKœÚˆH˜[YNˆ™\šYHÛ‹\Ú]H›ØœÈ[™^Xİ[ØØ][Ûˆš]˜XŞBˆ[ˆ˜\Ú™Ú]X‹ÜØÜš\ËÛÛ‹\Ú]KZ›Ø‹\Û[ÚÙKœÚˆH˜[YNˆ™\šYH™YÛİX]Y›ÜÜØ[XØÙ\[˜ÙH[™[™Âˆ[ˆ˜\Ú™Ú]X‹ÜØÜš\ËÜ›ÜÜØ[XXØÙ\[˜ÙKY[™[™Ë\Û[ÚÙKœÚˆH˜[YNˆ™\šYH™X\˜HÜİÒTÈØ]YÛÜHš[\š[™Âˆ[ˆ˜\Ú™Ú]X‹ÜØÜš\ËÛ™X\˜KXØ]YÛÜK\Û[ÚÙKœÚˆH˜[YNˆ™\šYH[˜Ü\Y›Øˆ]XÚY[È[™Y™XŞXÛHš]˜XŞBˆ[ˆ˜\Ú™Ú]X‹ÜØÜš\ËÚ›Ø‹X]XÚY[Ë\Û[ÚÙKœÚˆH˜[YNˆİ\ÙXˆØ]]Ø^Bˆ[ˆØÚÙ\ˆÛÛ\ÜÙH\YK[›ËXZ[ÙX‚ˆH˜[YNˆ™\šYHÙXˆÛÛZ[™\ˆ[™THØ]]Ø^BˆÚ[ˆ˜\Úˆ[ˆˆ›Üˆ][\[ˆÌK‹ŒÌNÈÂˆİ]\ÏI
+ØÚÙ\ˆ[œÜXİKY›Ü›X]IŞŞË”İ]K’X[”İ]\ß_IÈÙ˜\İ]ÙX‹LJBˆYˆ\İ‰İ]\ÈˆHšX[HÈ[‚ˆœ™XZÂˆšBˆYˆ\İ‰İ]\ÈˆH[šX[HÈ[‚ˆØÚÙ\ˆ[œÜXİÙ˜\İ]ÙX‹LHKY›Ü›X]	ŞŞÜ˜[™ÙH”İ]K’X[“Ùß_^ŞÜš[ˆ“İ]]_^ŞÙ[™_IÂˆ^]BˆšBˆÛY\‚ˆÛ™Bˆ\İ‰
+ØÚÙ\ˆ[œÜXİKY›Ü›X]IŞŞË”İ]K’X[”İ]\ß_IÈÙ˜\İ]ÙX‹LJHˆHšX[H‚ˆİ\›KY˜Z[K\Ú[[‹ËÛØØ[ÜİLMÌËÚX[Ü™\\^	ÛÚÉÂˆİ\›KY˜Z[K\Ú[[‹ËÛØØ[ÜİLMÌËØ\KØXİX]Ü‹ÚX[Ü™\\H	Èœİ]\Èˆ•T‰ÂˆH˜[YNˆš[Ù\šXÙHXYÛ›ÜİXÜÈÛˆ˜Z[\™BˆYˆ˜Z[\™J
+Bˆ[ˆˆØÚÙ\ˆÛÛ\ÜÙHÈYBˆØÚÙ\ˆÛÛ\ÜÙHÙÜÈˆ\HÙXˆYBˆH˜[YNˆÛX[\ˆYˆ[Ø^\Ê
+Bˆ[ˆØÚÙ\ˆÛÛ\ÜÙHİÛˆK\™[[İ™K[Üœ[œÂ
