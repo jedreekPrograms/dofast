@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import PlatformFeePreview from '../../payments/components/PlatformFeePreview.jsx'
 import UserTrustCard from '../../reviews/components/UserTrustCard.jsx'
+import ProposalAcceptancePaymentPanel from './ProposalAcceptancePaymentPanel.jsx'
 import {
   acceptJobProposal,
+  getJobProposalAcceptanceFunding,
   getJobProposals,
   submitJobProposal,
   withdrawJobProposal,
@@ -26,6 +28,8 @@ const dateFormatter = new Intl.DateTimeFormat('pl-PL', {
   timeStyle: 'short',
 })
 
+const sleep = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+
 function JobProposalPanel({ job, currentUserId, onJobUpdated, onSuccess }) {
   const isCreator = job.createdById === currentUserId
   const isWorker = job.takenById === currentUserId
@@ -35,6 +39,8 @@ function JobProposalPanel({ job, currentUserId, onJobUpdated, onSuccess }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [amount, setAmount] = useState(String(job.price ?? ''))
+  const [fundingSelection, setFundingSelection] = useState(null)
+  const [settlingFunding, setSettlingFunding] = useState(false)
 
   const ownProposal = useMemo(() => {
     if (isCreator) return null
@@ -112,22 +118,65 @@ function JobProposalPanel({ job, currentUserId, onJobUpdated, onSuccess }) {
     }
   }
 
+  function applyAcceptedProposal(proposalId, accepted) {
+    setProposals((current) => current.map((proposal) => {
+      if (proposal.id === proposalId) return accepted.proposal
+      if (proposal.status === 'SUBMITTED') return { ...proposal, status: 'REJECTED' }
+      return proposal
+    }))
+    onJobUpdated?.(accepted.job)
+    setFundingSelection(null)
+    onSuccess?.('Wykonawca został wybrany, a escrow dopasowane do zaakceptowanej ceny.')
+  }
+
+  async function acceptFundedProposal(proposalId) {
+    const accepted = await acceptJobProposal(job.id, proposalId)
+    applyAcceptedProposal(proposalId, accepted)
+  }
+
   async function handleAccept(proposalId) {
     setBusyAction(`accept-${proposalId}`)
     setError('')
     try {
-      const accepted = await acceptJobProposal(job.id, proposalId)
-      setProposals((current) => current.map((proposal) => {
-        if (proposal.id === proposalId) return accepted.proposal
-        if (proposal.status === 'SUBMITTED') return { ...proposal, status: 'REJECTED' }
-        return proposal
-      }))
-      onJobUpdated?.(accepted.job)
-      onSuccess?.('Wykonawca został wybrany, a escrow dopasowane do zaakceptowanej ceny.')
+      const funding = await getJobProposalAcceptanceFunding(job.id, proposalId)
+      if (!funding.paymentRequired) {
+        await acceptFundedProposal(proposalId)
+        return
+      }
+      setFundingSelection({ proposalId, funding })
     } catch (requestError) {
-      setError(requestError.message || 'Nie udało się zaakceptować propozycji.')
+      setError(requestError.message || 'Nie udało się przygotować wyboru propozycji.')
     } finally {
       setBusyAction('')
+    }
+  }
+
+  async function handlePaymentSubmitted() {
+    if (!fundingSelection) return
+    const { proposalId } = fundingSelection
+    setSettlingFunding(true)
+    setError('')
+
+    try {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (attempt > 0) await sleep(750)
+        const funding = await getJobProposalAcceptanceFunding(job.id, proposalId)
+        if (!funding.paymentRequired) {
+          setBusyAction(`accept-${proposalId}`)
+          await acceptFundedProposal(proposalId)
+          return
+        }
+        setFundingSelection({ proposalId, funding })
+      }
+
+      setFundingSelection(null)
+      setError('Stripe nadal rozlicza płatność. Gdy środki pojawią się w portfelu, kliknij ponownie „Wybierz”. Nie pobierzemy pieniędzy do escrow bez ponownej walidacji propozycji.')
+    } catch (requestError) {
+      setFundingSelection(null)
+      setError(`${requestError.message || 'Nie udało się dokończyć wyboru propozycji.'} Jeśli płatność Stripe została przyjęta, środki pozostają bezpiecznie w Twoim portfelu.`)
+    } finally {
+      setBusyAction('')
+      setSettlingFunding(false)
     }
   }
 
@@ -160,9 +209,24 @@ function JobProposalPanel({ job, currentUserId, onJobUpdated, onSuccess }) {
           job={job}
           proposals={proposals}
           busyAction={busyAction}
+          fundingActive={Boolean(fundingSelection) || settlingFunding}
           onAccept={handleAccept}
           onRefresh={() => loadProposals()}
         />
+      )}
+
+      {!loading && isCreator && fundingSelection && !settlingFunding && (
+        <ProposalAcceptancePaymentPanel
+          funding={fundingSelection.funding}
+          onPaymentSubmitted={handlePaymentSubmitted}
+          onCancel={() => setFundingSelection(null)}
+        />
+      )}
+
+      {!loading && isCreator && settlingFunding && (
+        <div className="proposal-acceptance-payment__settling" role="status">
+          Stripe potwierdził płatność. Czekamy na podpisany webhook, po czym ponownie sprawdzimy saldo i spróbujemy wybrać wykonawcę…
+        </div>
       )}
 
       {!loading && !isCreator && job.status === 'OPEN' && !ownProposal && (
@@ -230,7 +294,7 @@ function JobProposalPanel({ job, currentUserId, onJobUpdated, onSuccess }) {
   )
 }
 
-function CreatorProposalList({ job, proposals, busyAction, onAccept, onRefresh }) {
+function CreatorProposalList({ job, proposals, busyAction, fundingActive, onAccept, onRefresh }) {
   const activeCount = proposals.filter((proposal) => proposal.status === 'SUBMITTED').length
 
   return (
@@ -238,7 +302,7 @@ function CreatorProposalList({ job, proposals, busyAction, onAccept, onRefresh }
       <div className="job-proposal-list__toolbar">
         <span>{activeCount} {activeCount === 1 ? 'aktywna propozycja' : 'aktywnych propozycji'}</span>
         {job.status === 'OPEN' && (
-          <button className="button button--secondary" type="button" disabled={Boolean(busyAction)} onClick={onRefresh}>
+          <button className="button button--secondary" type="button" disabled={Boolean(busyAction) || fundingActive} onClick={onRefresh}>
             Odśwież
           </button>
         )}
@@ -267,10 +331,10 @@ function CreatorProposalList({ job, proposals, busyAction, onAccept, onRefresh }
               <button
                 className="button button--primary"
                 type="button"
-                disabled={Boolean(busyAction)}
+                disabled={Boolean(busyAction) || fundingActive}
                 onClick={() => onAccept(proposal.id)}
               >
-                {busyAction === `accept-${proposal.id}` ? 'Wybieranie…' : `Wybierz za ${priceFormatter.format(Number(proposal.amount))}`}
+                {busyAction === `accept-${proposal.id}` ? 'Sprawdzanie finansowania…' : `Wybierz za ${priceFormatter.format(Number(proposal.amount))}`}
               </button>
             )}
           </div>

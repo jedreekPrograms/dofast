@@ -74,6 +74,19 @@ public class TransactionService {
         transactionRepository.save(transaction);
     }
 
+    @Transactional(readOnly = true)
+    public BigDecimal getHeldAmount(Job job) {
+        Transaction transaction = transactionRepository.findByJob(job)
+                .orElseThrow(() -> new BusinessException("Brak transakcji escrow"));
+        if (transaction.getStatus() != TransactionStatus.HELD) {
+            throw new ConflictException("Środki escrow nie są już zablokowane");
+        }
+        if (!sameUser(transaction.getPayer(), job.getCreatedBy())) {
+            throw new ConflictException("Escrow należy do innego płatnika");
+        }
+        return transaction.getAmount();
+    }
+
     public void adjustHeldAmount(Job job, BigDecimal newAmount, Long proposalId) {
         if (newAmount == null || newAmount.signum() <= 0) {
             throw new BusinessException("Finalna kwota escrow musi być dodatnia");

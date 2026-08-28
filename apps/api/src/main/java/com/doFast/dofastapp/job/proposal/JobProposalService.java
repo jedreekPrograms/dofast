@@ -16,6 +16,7 @@ import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.service.UserBlockService;
+import com.doFast.dofastapp.wallet.service.WalletService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,12 +28,18 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class JobProposalService {
 
+    private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
+    private static final BigDecimal MIN_ONLINE_PAYMENT = new BigDecimal("1.00");
+    private static final BigDecimal MAX_ONLINE_PAYMENT = new BigDecimal("10000.00");
+    private static final String CURRENCY = "PLN";
+
     private final JobRepository jobRepository;
     private final JobProposalRepository jobProposalRepository;
     private final TransactionService transactionService;
     private final NotificationService notificationService;
     private final LiveTrackingService liveTrackingService;
     private final UserBlockService userBlockService;
+    private final WalletService walletService;
 
     public JobProposalService(
             JobRepository jobRepository,
@@ -40,7 +47,8 @@ public class JobProposalService {
             TransactionService transactionService,
             NotificationService notificationService,
             LiveTrackingService liveTrackingService,
-            UserBlockService userBlockService
+            UserBlockService userBlockService,
+            WalletService walletService
     ) {
         this.jobRepository = jobRepository;
         this.jobProposalRepository = jobProposalRepository;
@@ -48,6 +56,7 @@ public class JobProposalService {
         this.notificationService = notificationService;
         this.liveTrackingService = liveTrackingService;
         this.userBlockService = userBlockService;
+        this.walletService = walletService;
     }
 
     @Transactional
@@ -100,6 +109,42 @@ public class JobProposalService {
                 .toList();
     }
 
+    public JobProposalAcceptanceFundingResponse getAcceptanceFunding(
+            Long jobId,
+            Long proposalId,
+            User requester
+    ) {
+        Job job = getJob(jobId);
+        assertProposalJob(job);
+        assertRequesterCanSelect(job, requester);
+
+        JobProposal proposal = getProposal(jobId, proposalId);
+        assertProposalCanBeSelected(job, proposal);
+
+        BigDecimal currentEscrowAmount = transactionService.getHeldAmount(job);
+        BigDecimal additionalRequired = proposal.getAmount().subtract(currentEscrowAmount).max(ZERO_MONEY);
+        BigDecimal walletBalance = walletService.getMyWallet(requester.getId()).getBalance();
+        BigDecimal walletContribution = additionalRequired.min(walletBalance);
+        BigDecimal paymentShortfall = additionalRequired.subtract(walletContribution);
+        boolean paymentRequired = paymentShortfall.signum() > 0;
+        BigDecimal stripeChargeAmount = paymentRequired
+                ? paymentShortfall.max(MIN_ONLINE_PAYMENT)
+                : ZERO_MONEY;
+
+        return new JobProposalAcceptanceFundingResponse(
+                job.getId(),
+                proposal.getId(),
+                currentEscrowAmount,
+                proposal.getAmount(),
+                walletContribution,
+                paymentShortfall,
+                stripeChargeAmount,
+                CURRENCY,
+                paymentRequired,
+                !paymentRequired || stripeChargeAmount.compareTo(MAX_ONLINE_PAYMENT) <= 0
+        );
+    }
+
     @Transactional
     public void withdraw(Long jobId, Long proposalId, User proposer) {
         Job job = getJobForUpdate(jobId);
@@ -123,24 +168,14 @@ public class JobProposalService {
     public AcceptedJobProposalResponse accept(Long jobId, Long proposalId, User requester) {
         Job job = getJobForUpdate(jobId);
         assertProposalJob(job);
-        if (!sameUser(job.getCreatedBy(), requester)) {
-            throw new ForbiddenOperationException("Tylko zleceniodawca może wybrać propozycję");
-        }
-        if (job.getStatus() != JobStatus.OPEN) {
-            throw new ConflictException("Zlecenie nie jest już otwarte");
-        }
+        assertRequesterCanSelect(job, requester);
 
         JobProposal proposal = getProposal(jobId, proposalId);
-        if (proposal.getStatus() != JobProposalStatus.SUBMITTED) {
-            throw new ConflictException("Propozycja nie jest już aktywna");
-        }
+        assertProposalCanBeSelected(job, proposal);
         User worker = proposal.getProposer();
-        if (userBlockService.isInteractionBlocked(job.getCreatedBy(), worker)) {
-            throw new ForbiddenOperationException("Nie możesz zaakceptować tej propozycji");
-        }
 
         // The original published budget is already held. Adjust the held escrow first;
-        // if the requester lacks the delta, the whole transaction rolls back and the job stays OPEN.
+        // if the requester still lacks the delta, the whole transaction rolls back and the job stays OPEN.
         transactionService.adjustHeldAmount(job, proposal.getAmount(), proposal.getId());
         job.setPrice(proposal.getAmount());
         job.assignTo(worker, LocalDateTime.now());
@@ -174,6 +209,24 @@ public class JobProposalService {
                 JobResponseMapper.toResponse(savedJob),
                 toResponse(proposal)
         );
+    }
+
+    private void assertRequesterCanSelect(Job job, User requester) {
+        if (!sameUser(job.getCreatedBy(), requester)) {
+            throw new ForbiddenOperationException("Tylko zleceniodawca może wybrać propozycję");
+        }
+        if (job.getStatus() != JobStatus.OPEN) {
+            throw new ConflictException("Zlecenie nie jest już otwarte");
+        }
+    }
+
+    private void assertProposalCanBeSelected(Job job, JobProposal proposal) {
+        if (proposal.getStatus() != JobProposalStatus.SUBMITTED) {
+            throw new ConflictException("Propozycja nie jest już aktywna");
+        }
+        if (userBlockService.isInteractionBlocked(job.getCreatedBy(), proposal.getProposer())) {
+            throw new ForbiddenOperationException("Nie możesz zaakceptować tej propozycji");
+        }
     }
 
     private BigDecimal resolveAmount(Job job, BigDecimal requestedAmount) {

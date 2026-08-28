@@ -43,6 +43,15 @@ public class JobProposalController {
         return jobProposalService.listVisible(jobId, user);
     }
 
+    @GetMapping("/{proposalId}/acceptance-funding")
+    public JobProposalAcceptanceFundingResponse getAcceptanceFunding(
+            @PathVariable Long jobId,
+            @PathVariable Long proposalId,
+            @AuthenticationPrincipal User user
+    ) {
+        return jobProposalService.getAcceptanceFunding(jobId, proposalId, user);
+    }
+
     @DeleteMapping("/{proposalId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void withdraw(

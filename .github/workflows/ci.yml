@@ -97,6 +97,8 @@ jobs:
         run: bash .github/scripts/multi-stop-routing-smoke.sh
       - name: Verify on-site jobs and exact-location privacy
         run: bash .github/scripts/on-site-job-smoke.sh
+      - name: Verify negotiated proposal acceptance funding
+        run: bash .github/scripts/proposal-acceptance-funding-smoke.sh
       - name: Verify nearby PostGIS category filtering
         run: bash .github/scripts/nearby-category-smoke.sh
       - name: Verify encrypted job attachments and lifecycle privacy
