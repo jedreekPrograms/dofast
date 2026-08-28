@@ -126,6 +126,10 @@ export function createJobPublication(job, requestId) {
   })
 }
 
+export function getPendingJobPublications(options = {}) {
+  return apiRequest('/jobs/publications/pending', options)
+}
+
 export function getJobPublication(id, options = {}) {
   return apiRequest(`/jobs/publications/${id}`, options)
 }

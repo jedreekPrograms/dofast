@@ -7,11 +7,18 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface JobPublicationRepository extends JpaRepository<JobPublication, Long> {
 
     Optional<JobPublication> findByRequestKey(String requestKey);
+
+    List<JobPublication> findAllByUser_IdAndStatusAndExpiresAtAfterOrderByCreatedAtDescIdDesc(
+            Long userId,
+            JobPublicationStatus status,
+            LocalDateTime expiresAt
+    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select publication from JobPublication publication join fetch publication.user where publication.id = :id")

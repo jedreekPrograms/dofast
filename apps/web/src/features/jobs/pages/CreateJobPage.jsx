@@ -4,7 +4,7 @@ import JobAssignmentModePicker from '../components/JobAssignmentModePicker.jsx'
 import JobPublicationPaymentPanel from '../components/JobPublicationPaymentPanel.jsx'
 import LocationMapPicker from '../components/LocationMapPicker.jsx'
 import RouteMapPicker from '../components/RouteMapPicker.jsx'
-import { createJobPublication, createRouteQuote, getJobCategories, getRouteModeEstimates } from '../api/jobsApi.js'
+import { createJobPublication, createRouteQuote, getJobCategories, getPendingJobPublications, getRouteModeEstimates } from '../api/jobsApi.js'
 import './CreateJobPage.css'
 
 const EMPTY_FORM = {
@@ -41,6 +41,20 @@ function CreateJobPage() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [routeError, setRouteError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getPendingJobPublications({ signal: controller.signal })
+      .then((pending) => {
+        if (pending?.length > 0) setPublication(pending[0])
+      })
+      .catch((requestError) => {
+        if (requestError.name !== 'AbortError') {
+          setError(requestError.message || 'Nie udało się sprawdzić rozpoczętej publikacji.')
+        }
+      })
+    return () => controller.abort()
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()

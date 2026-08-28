@@ -31,6 +31,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
@@ -143,6 +144,21 @@ public class JobPublicationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Publikacja nie istnieje"));
         assertOwner(publication, currentUser);
         return toResponse(publication);
+    }
+
+    public List<JobPublicationResponse> getRecoverable(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby wznowić publikację");
+        }
+        return publicationRepository
+                .findAllByUser_IdAndStatusAndExpiresAtAfterOrderByCreatedAtDescIdDesc(
+                        currentUser.getId(),
+                        JobPublicationStatus.PAYMENT_REQUIRED,
+                        LocalDateTime.now()
+                )
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional
