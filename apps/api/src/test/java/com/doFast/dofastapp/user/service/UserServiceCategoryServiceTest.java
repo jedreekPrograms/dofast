@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -59,9 +60,9 @@ class UserServiceCategoryServiceTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Iterable<UserServiceCategory>> addedCaptor = ArgumentCaptor.forClass(Iterable.class);
         verify(userServiceCategoryRepository).saveAll(addedCaptor.capture());
-        List<UserServiceCategory> added = ((Iterable<UserServiceCategory>) addedCaptor.getValue()) instanceof List<UserServiceCategory> list
-                ? list
-                : java.util.stream.StreamSupport.stream(addedCaptor.getValue().spliterator(), false).toList();
+        List<UserServiceCategory> added = StreamSupport
+                .stream(addedCaptor.getValue().spliterator(), false)
+                .toList();
         assertEquals(1, added.size());
         assertEquals(3L, added.getFirst().getCategory().getId());
     }
