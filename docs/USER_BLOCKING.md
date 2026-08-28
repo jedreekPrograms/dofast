@@ -30,6 +30,12 @@ Saving an open job to the private shortlist also enforces the symmetric block po
 
 When the caller has blocked the selected chat counterpart, the web composer is disabled immediately and the draft is discarded. This is UX only: the backend remains the source of truth and rejects delivery if either participant has blocked the other, including a reverse block that is intentionally not exposed to the caller.
 
+## Reviews after completed jobs
+
+Blocking does not remove review eligibility for a completed job and does not hide or delete an existing review. Reviews are part of the accountability record of a transaction that already happened, so either participant can still submit an otherwise eligible review even if a block was created later.
+
+If either participant has blocked the other, the review is still persisted normally but the direct `REVIEW_RECEIVED` notification is suppressed. This keeps the marketplace accountability signal while ensuring a block does not reopen a new notification/contact channel between the accounts.
+
 Existing active jobs are not cancelled merely because either participant later creates a block. Their escrow, completion/dispute lifecycle and participant-only location authorization continue to follow the dedicated job rules; blocking prevents new interaction surfaces rather than silently mutating financial or safety-critical state.
 
 Future discovery/profile actions and other interaction surfaces should reuse the same server-side policy instead of trusting client-side hidden controls. Blocking does not alter escrow, active job state, location access or moderation records by itself; those remain governed by their existing participant and lifecycle authorization rules.

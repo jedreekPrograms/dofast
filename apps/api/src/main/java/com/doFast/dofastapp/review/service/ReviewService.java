@@ -16,6 +16,7 @@ import com.doFast.dofastapp.review.entity.Review;
 import com.doFast.dofastapp.review.repository.ReviewRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,17 +34,20 @@ public class ReviewService {
     private final JobRepository jobRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final UserBlockService userBlockService;
 
     public ReviewService(
             ReviewRepository reviewRepository,
             JobRepository jobRepository,
             UserRepository userRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            UserBlockService userBlockService
     ) {
         this.reviewRepository = reviewRepository;
         this.jobRepository = jobRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.userBlockService = userBlockService;
     }
 
     @Transactional
@@ -76,14 +80,20 @@ public class ReviewService {
             throw new ConflictException("Wystawiłeś już opinię za to zlecenie");
         }
 
-        notificationService.notify(
-                reviewed,
-                NotificationType.REVIEW_RECEIVED,
-                "Nowa opinia",
-                reviewer.getNickname() + " wystawił(a) Ci ocenę " + saved.getRating() + "/5.",
-                job,
-                null
-        );
+        // A block created after a completed transaction must not erase marketplace accountability
+        // or give either participant a way to suppress an otherwise eligible review. The review is
+        // therefore persisted normally, while the direct REVIEW_RECEIVED notification is suppressed
+        // so blocking still prevents a new notification channel between the two accounts.
+        if (!userBlockService.isInteractionBlocked(reviewer, reviewed)) {
+            notificationService.notify(
+                    reviewed,
+                    NotificationType.REVIEW_RECEIVED,
+                    "Nowa opinia",
+                    reviewer.getNickname() + " wystawił(a) Ci ocenę " + saved.getRating() + "/5.",
+                    job,
+                    null
+            );
+        }
 
         return toResponse(saved);
     }
