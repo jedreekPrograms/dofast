@@ -6,6 +6,7 @@ import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
+import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.category.FulfillmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
@@ -105,10 +106,19 @@ public class JobService {
             throw new BusinessException("Wybierz konkretną podkategorię usługi");
         }
 
+        JobAssignmentMode assignmentMode = request.getAssignmentMode() == null
+                ? JobAssignmentMode.INSTANT
+                : request.getAssignmentMode();
+        if (assignmentMode == JobAssignmentMode.INSTANT && request.isPriceNegotiationEnabled()) {
+            throw new BusinessException("Negocjacja ceny jest dostępna tylko dla zleceń z propozycjami");
+        }
+
         Job job = new Job();
         job.setTitle(request.getTitle().trim());
         job.setDescription(request.getDescription().trim());
         job.setPrice(request.getPrice());
+        job.setAssignmentMode(assignmentMode);
+        job.setPriceNegotiationEnabled(request.isPriceNegotiationEnabled());
         job.setStatus(JobStatus.OPEN);
         job.setCategory(category);
         job.setCreatedBy(user);
@@ -207,6 +217,9 @@ public class JobService {
     public JobResponse acceptJob(Long jobId, User currentUser) {
         Job job = getJobForUpdate(jobId);
         if (job.getStatus() != JobStatus.OPEN) throw new ConflictException("Zlecenie nie jest już dostępne");
+        if (job.getAssignmentMode() != JobAssignmentMode.INSTANT) {
+            throw new ConflictException("To zlecenie wymaga wyboru wykonawcy spośród propozycji");
+        }
         if (sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Nie możesz przyjąć własnego zlecenia");
         if (userBlockService != null && userBlockService.isInteractionBlocked(job.getCreatedBy(), currentUser)) {
             throw new ForbiddenOperationException("Nie możesz przyjąć tego zlecenia");
@@ -395,17 +408,6 @@ public class JobService {
     }
 
     private JobResponse toResponse(Job job) {
-        JobCategory category = job.getCategory();
-        return new JobResponse(
-                job.getId(), job.getTitle(), job.getDescription(), job.getPrice(), job.getStatus(),
-                category != null ? category.getId() : null,
-                category != null ? category.getSlug() : null,
-                category != null ? category.getName() : null,
-                category != null ? category.getFulfillmentMode() : null,
-                job.getLocationLabel(), job.getDestinationLabel(), job.getRouteDistanceMeters(), job.getRouteDurationSeconds(),
-                job.getCreatedBy().getId(), job.getTakenBy() != null ? job.getTakenBy().getId() : null,
-                job.getCreatedAt(), job.getUpdatedAt(), job.getTakenAt(), job.getCompletionRequestedAt(),
-                job.getCompletedAt(), job.getCancelledAt()
-        );
+        return JobResponseMapper.toResponse(job);
     }
 }
