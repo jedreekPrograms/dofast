@@ -67,6 +67,10 @@ public class StripeRefundRequestService {
         if (!CURRENCY.equalsIgnoreCase(payment.getCurrency())) {
             throw new BusinessException("Zwroty do oryginalnej metody są obsługiwane tylko dla PLN");
         }
+        if (!"TOP_UP".equals(payment.getSettlementPurpose())
+                && !"JOB_PUBLICATION".equals(payment.getSettlementPurpose())) {
+            throw new ConflictException("Ten typ płatności Stripe nie obsługuje zwrotu do oryginalnej metody");
+        }
         if (disputeRepository.findByStripePaymentIntentId(paymentIntentId).isPresent()) {
             throw new ConflictException("Płatność ma lub miała dispute Stripe i nie może zostać dodatkowo zwrócona");
         }
@@ -120,6 +124,17 @@ public class StripeRefundRequestService {
                 || request.getNextAttemptAt().isAfter(now)) {
             return null;
         }
+
+        if (disputeRepository.findByStripePaymentIntentId(request.getStripePaymentIntentId()).isPresent()) {
+            if (request.getAttemptCount() == 0 && request.getStripeRefundId() == null) {
+                request.cancelBeforeFirstDispatch("payment_disputed", now);
+                restoreWalletIfProviderRejected(request);
+            } else {
+                request.markReviewRequired("payment_disputed_during_refund", now);
+            }
+            return null;
+        }
+
         request.startDispatch(now);
         return new StripeRefundDispatchCommand(
                 request.getId(),

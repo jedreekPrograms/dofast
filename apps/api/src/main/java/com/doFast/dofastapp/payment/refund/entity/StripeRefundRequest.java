@@ -147,6 +147,17 @@ public class StripeRefundRequest {
         updatedAt = now;
     }
 
+    public void cancelBeforeFirstDispatch(String failureReason, LocalDateTime now) {
+        if (status != StripeRefundStatus.REQUESTED || attemptCount != 0 || stripeRefundId != null) {
+            throw new IllegalStateException("Refund can only be canceled locally before its first provider attempt");
+        }
+        status = StripeRefundStatus.CANCELED;
+        this.failureReason = normalizeFailure(failureReason);
+        nextAttemptAt = null;
+        resolvedAt = now;
+        updatedAt = now;
+    }
+
     public void markReviewRequired(String failureReason, LocalDateTime now) {
         if (status != StripeRefundStatus.DISPATCHING && status != StripeRefundStatus.REQUESTED) {
             return;
