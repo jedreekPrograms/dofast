@@ -58,7 +58,7 @@ class JobPublicationPaymentIntentCoordinatorTest {
     }
 
     @Test
-    void releasesExpiredReservationBeforeRejectingPaymentIntentCreation() {
+    void releasesExpiredReservationSourcesBeforeRejectingPaymentIntentCreation() {
         LocalDateTime now = LocalDateTime.now();
         JobPublication publication = new JobPublication();
         publication.initializePaymentRequired(
@@ -77,24 +77,26 @@ class JobPublicationPaymentIntentCoordinatorTest {
         ReflectionTestUtils.setField(publication, "id", 10L);
 
         when(publicationRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(publication));
-        when(walletService.credit(
+        when(walletService.creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.JOB_PUBLICATION_RELEASE,
                 null,
-                "job-publication:10:release"
+                "job-publication:10:release",
+                "job-publication:7:req-expired:reserve"
         )).thenReturn(true);
 
         assertThrows(ConflictException.class, () -> coordinator.create(10L, user));
 
         assertEquals(JobPublicationStatus.CANCELLED, publication.getStatus());
         assertEquals(null, publication.getRequestPayload());
-        verify(walletService).credit(
+        verify(walletService).creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.JOB_PUBLICATION_RELEASE,
                 null,
-                "job-publication:10:release"
+                "job-publication:10:release",
+                "job-publication:7:req-expired:reserve"
         );
         verify(publicationRepository).save(publication);
         verify(paymentIntentService, never()).create(10L, user);

@@ -145,7 +145,7 @@ class JobPublicationServiceTest {
     }
 
     @Test
-    void repeatedExpiredRequestIdRestoresReservationAndReturnsTerminalState() {
+    void repeatedExpiredRequestIdRestoresOriginalSourcesAndReturnsTerminalState() {
         JobRequest job = onSiteJob("70.00");
         JobPublication existing = pendingPublication(user, 11L, "job-publication:7:req-expired", "same-hash", "70.00", "25.00", "45.00");
         ReflectionTestUtils.setField(existing, "expiresAt", LocalDateTime.now().minusSeconds(1));
@@ -154,23 +154,25 @@ class JobPublicationServiceTest {
         ReflectionTestUtils.setField(existing, "payloadHash", hashThroughServiceFixture("same-payload"));
         when(publicationRepository.findByRequestKey("job-publication:7:req-expired")).thenReturn(Optional.of(existing));
         when(publicationRepository.save(existing)).thenReturn(existing);
-        when(walletService.credit(
+        when(walletService.creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.JOB_PUBLICATION_RELEASE,
                 null,
-                "job-publication:11:release"
+                "job-publication:11:release",
+                "job-publication:7:req-expired:reserve"
         )).thenReturn(true);
 
         var response = service.create(new CreateJobPublicationRequest("req-expired", job), user);
 
         assertEquals(JobPublicationStatus.CANCELLED, response.status());
-        verify(walletService, times(1)).credit(
+        verify(walletService, times(1)).creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.JOB_PUBLICATION_RELEASE,
                 null,
-                "job-publication:11:release"
+                "job-publication:11:release",
+                "job-publication:7:req-expired:reserve"
         );
         verify(walletService, never()).getBalanceForUpdate(any());
         verify(walletService, never()).debit(any(), any(), any(), any(), anyString());
@@ -193,16 +195,17 @@ class JobPublicationServiceTest {
     }
 
     @Test
-    void cancelRestoresReservationExactlyOnce() {
+    void cancelRestoresReservationSourcesExactlyOnce() {
         JobPublication publication = pendingPublication(user, 11L, "job-publication:7:req-cancel", "hash", "70.00", "25.00", "45.00");
         when(publicationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(publication));
         when(publicationRepository.save(publication)).thenReturn(publication);
-        when(walletService.credit(
+        when(walletService.creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.JOB_PUBLICATION_RELEASE,
                 null,
-                "job-publication:11:release"
+                "job-publication:11:release",
+                "job-publication:7:req-cancel:reserve"
         )).thenReturn(true);
 
         var first = service.cancel(11L, user);
@@ -210,12 +213,13 @@ class JobPublicationServiceTest {
 
         assertEquals(JobPublicationStatus.CANCELLED, first.status());
         assertEquals(JobPublicationStatus.CANCELLED, second.status());
-        verify(walletService, times(1)).credit(
+        verify(walletService, times(1)).creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.JOB_PUBLICATION_RELEASE,
                 null,
-                "job-publication:11:release"
+                "job-publication:11:release",
+                "job-publication:7:req-cancel:reserve"
         );
     }
 

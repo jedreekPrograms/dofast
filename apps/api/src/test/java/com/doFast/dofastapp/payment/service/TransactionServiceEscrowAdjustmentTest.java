@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -74,17 +75,18 @@ class TransactionServiceEscrowAdjustmentTest {
     }
 
     @Test
-    void refundsOnlyTheExcessWhenAcceptedProposalIsLower() {
+    void refundsOnlyTheExcessToTheOriginalFundingSourcesWhenAcceptedProposalIsLower() {
         TransactionService service = serviceWithHeldEscrow("30.00");
 
         service.adjustHeldAmount(job, new BigDecimal("25.00"), 10L);
 
-        verify(walletService).credit(
+        verify(walletService).creditRestoringJobDebits(
                 7L,
                 new BigDecimal("5.00"),
                 WalletTransactionType.ESCROW_ADJUSTMENT_REFUND,
                 101L,
-                "escrow:101:proposal:10:adjust:refund"
+                "escrow:101:proposal:10:adjust:refund",
+                Set.of(WalletTransactionType.ESCROW_LOCK, WalletTransactionType.ESCROW_ADJUSTMENT_LOCK)
         );
         verify(transaction).adjustHeldAmount(new BigDecimal("25.00"));
         verify(transactionRepository).save(transaction);
