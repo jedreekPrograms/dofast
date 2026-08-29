@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadStripeScript, STRIPE_PUBLISHABLE_KEY } from '../../../shared/payments/stripeClient.js'
 import { createWalletTopUpIntent } from '../../wallet/api/walletApi.js'
+import { buildProposalAcceptanceReturnUrl } from '../payments/proposalAcceptanceReturn.js'
 
 const priceFormatter = new Intl.NumberFormat('pl-PL', {
   style: 'currency',
@@ -93,9 +94,14 @@ function ProposalAcceptancePaymentPanel({ funding, onPaymentSubmitted, onCancel 
     setSubmitting(true)
     setError('')
     try {
+      const returnUrl = buildProposalAcceptanceReturnUrl(
+        window.location.origin,
+        funding.jobId,
+        funding.proposalId,
+      )
       const { error: stripeError, paymentIntent } = await stripeRef.current.confirmPayment({
         elements: elementsRef.current,
-        confirmParams: { return_url: window.location.href },
+        confirmParams: { return_url: returnUrl },
         redirect: 'if_required',
       })
       if (stripeError) {

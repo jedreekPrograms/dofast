@@ -17,6 +17,7 @@ import JobExecutionPage from '../features/jobs/pages/JobExecutionPage.jsx'
 import JobPublicationReturnPage from '../features/jobs/pages/JobPublicationReturnPage.jsx'
 import JobsPage from '../features/jobs/pages/JobsPage.jsx'
 import MyJobsPage from '../features/jobs/pages/MyJobsPage.jsx'
+import ProposalAcceptanceReturnPage from '../features/jobs/pages/ProposalAcceptanceReturnPage.jsx'
 import SavedJobsPage from '../features/jobs/pages/SavedJobsPage.jsx'
 import SavedSearchesPage from '../features/jobs/pages/SavedSearchesPage.jsx'
 import NotificationsPage from '../features/notifications/pages/NotificationsPage.jsx'
@@ -45,6 +46,7 @@ function App() {
             <Route path="/blocked-users" element={<BlockedUsersPage />} />
             <Route path="/jobs/new" element={<CreateJobPage />} />
             <Route path="/jobs/publications/:publicationId/return" element={<JobPublicationReturnPage />} />
+            <Route path="/jobs/:jobId/proposal-payment-return" element={<ProposalAcceptanceReturnPage />} />
             <Route path="/jobs/:jobId" element={<JobDetailsPage />} />
             <Route path="/jobs/:jobId/route" element={<JobExecutionPage />} />
             <Route path="/chat" element={<ChatPage />} />
