@@ -191,6 +191,17 @@ export function deleteJobAttachment(id, attachmentId) {
   return apiRequest(`/jobs/${id}/attachments/${attachmentId}`, { method: 'DELETE' })
 }
 
+export function getJobExpenseSummary(id, options = {}) {
+  return apiRequest(`/jobs/${id}/expenses`, options)
+}
+
+export function createJobExpenseClaim(id, amount, attachmentId) {
+  return apiRequest(`/jobs/${id}/expenses/claims`, {
+    method: 'POST',
+    body: JSON.stringify({ amount, attachmentId }),
+  })
+}
+
 export function requestJobCompletion(id) {
   return apiRequest(`/jobs/${id}/completion`, { method: 'POST' })
 }
