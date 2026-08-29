@@ -24,6 +24,8 @@ import java.util.Map;
 @Service
 public class StripePaymentService {
 
+    public static final String PURPOSE = "TOP_UP";
+
     private static final String CURRENCY = "PLN";
     private static final BigDecimal MIN_TOP_UP_AMOUNT = new BigDecimal("1.00");
     private static final BigDecimal MAX_TOP_UP_AMOUNT = new BigDecimal("10000.00");
@@ -48,6 +50,7 @@ public class StripePaymentService {
                 .setAmount(amountInCents)
                 .setCurrency(CURRENCY.toLowerCase(Locale.ROOT))
                 .putMetadata("userId", userId.toString())
+                .putMetadata("purpose", PURPOSE)
                 .putMetadata("topUpRequestId", normalizedRequestId)
                 .setAutomaticPaymentMethods(
                         PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
@@ -103,6 +106,7 @@ public class StripePaymentService {
         }
 
         Map<String, String> metadata = paymentIntent.getMetadata();
+        validateTopUpPurpose(metadata);
         String userIdValue = metadata != null ? metadata.get("userId") : null;
         if (userIdValue == null || userIdValue.isBlank()) {
             throw new IllegalStateException("Stripe PaymentIntent is missing userId metadata");
@@ -149,6 +153,27 @@ public class StripePaymentService {
         }
 
         return true;
+    }
+
+    private void validateTopUpPurpose(Map<String, String> metadata) {
+        String purpose = metadata != null ? metadata.get("purpose") : null;
+        String topUpRequestId = metadata != null ? metadata.get("topUpRequestId") : null;
+        String jobPublicationId = metadata != null ? metadata.get("jobPublicationId") : null;
+
+        if (PURPOSE.equals(purpose)) {
+            if (topUpRequestId == null || topUpRequestId.isBlank()) {
+                throw new IllegalStateException("Stripe top-up PaymentIntent is missing topUpRequestId metadata");
+            }
+            return;
+        }
+
+        boolean legacyTopUp = (purpose == null || purpose.isBlank())
+                && jobPublicationId == null
+                && topUpRequestId != null
+                && !topUpRequestId.isBlank();
+        if (!legacyTopUp) {
+            throw new IllegalStateException("Stripe PaymentIntent is not a wallet top-up");
+        }
     }
 
     private boolean validateExistingClaim(
