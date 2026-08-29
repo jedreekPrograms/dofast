@@ -23,9 +23,12 @@ export PAYOUT_MINIMUM_AMOUNT=5.00
 export PAYOUT_MAX_ATTEMPTS=7
 export PAYOUT_RETRY_BASE_SECONDS=30
 export PAYOUT_STALE_PROCESSING_SECONDS=600
+export PAYOUT_SUBMITTED_RECONCILIATION_SECONDS=900
 export PAYOUT_DISPATCH_INTERVAL_MS=4000
 export PAYOUT_STRIPE_CONNECT_ENABLED=false
 export PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED=false
+export PAYOUT_STRIPE_CONNECT_RECONCILIATION_ENABLED=true
+export PAYOUT_STRIPE_CONNECT_RECONCILIATION_INTERVAL_MS=45000
 export PAYOUT_STRIPE_CONNECT_COUNTRY=PL
 export PAYOUT_STRIPE_CONNECT_REFRESH_URL='https://app.example.test/wallet?stripe-connect=refresh'
 export PAYOUT_STRIPE_CONNECT_RETURN_URL='https://app.example.test/wallet?stripe-connect=return'
@@ -69,9 +72,12 @@ expected = {
     'PAYOUT_MAX_ATTEMPTS': '7',
     'PAYOUT_RETRY_BASE_SECONDS': '30',
     'PAYOUT_STALE_PROCESSING_SECONDS': '600',
+    'PAYOUT_SUBMITTED_RECONCILIATION_SECONDS': '900',
     'PAYOUT_DISPATCH_INTERVAL_MS': '4000',
     'PAYOUT_STRIPE_CONNECT_ENABLED': 'false',
     'PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED': 'false',
+    'PAYOUT_STRIPE_CONNECT_RECONCILIATION_ENABLED': 'true',
+    'PAYOUT_STRIPE_CONNECT_RECONCILIATION_INTERVAL_MS': '45000',
     'PAYOUT_STRIPE_CONNECT_COUNTRY': 'PL',
     'PAYOUT_STRIPE_CONNECT_REFRESH_URL': 'https://app.example.test/wallet?stripe-connect=refresh',
     'PAYOUT_STRIPE_CONNECT_RETURN_URL': 'https://app.example.test/wallet?stripe-connect=return',
@@ -111,4 +117,4 @@ if env -u ATTACHMENT_ENCRYPTION_KEY_BASE64 \
 fi
 rm -f /tmp/dofast-prod-compose-missing-secret.log
 
-echo 'Production Compose forwards finance/payout/tracking settings and persists encrypted attachments: OK'
+echo 'Production Compose forwards finance/payout/reconciliation/tracking settings and persists encrypted attachments: OK'
