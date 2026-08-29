@@ -29,6 +29,18 @@ Wallet balance is credited only by the server-side Stripe webhook path after sig
 
 The payment transaction claim plus wallet ledger reference keep webhook retries idempotent. A reused Stripe event or PaymentIntent with conflicting stored data is rejected instead of crediting again.
 
+## Source-of-funds policy
+
+A successful Stripe top-up creates a `STRIPE_PAYMENT` funding lot keyed by the exact PaymentIntent id. Card-funded value is spendable inside doFast but is **not withdrawable** through worker payouts. This prevents a wallet top-up from becoming a cash-out mechanism.
+
+Ordinary internal spending consumes non-withdrawable value before worker earnings whenever possible, preserving legitimate `EARNED_JOB` value for later payout.
+
+Original-method Stripe refunds are source-specific. A refund can reserve only the remaining value from the exact PaymentIntent being refunded. Money from another PaymentIntent, job earnings, legacy balance, or a platform adjustment cannot substitute for an exhausted original payment.
+
+If a provider refund fails, the wallet restoration follows the funding movement created by that refund reserve and returns the value to the same `STRIPE_PAYMENT` lot. It does not create a new generic or withdrawable balance.
+
+The canonical accounting model and operator rules are documented in `docs/WALLET_SOURCE_OF_FUNDS.md`.
+
 ## Operational checks
 
-Changes to this flow must keep the API Maven verification, frontend Node tests/lint/build, container/runtime smoke, dedicated web-container privacy smoke, and payments-ledger smoke green. No Flyway migration is required for the redirect-method change because it does not alter persisted schema or ledger semantics.
+Changes to this flow must keep the API Maven verification, frontend Node tests/lint/build, container/runtime smoke, dedicated web-container privacy smoke, and payments-ledger smoke green. Source-of-funds changes additionally require Flyway V49, focused funding-allocation tests, payout smoke, Stripe refund/chargeback smoke, and publication-payment smoke to remain green on the exact head SHA.
