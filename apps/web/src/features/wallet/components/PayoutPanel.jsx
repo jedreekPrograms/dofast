@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   cancelPayout,
+  createPayoutOnboardingLink,
   getPayoutEligibility,
   getPayouts,
+  refreshPayoutOnboardingStatus,
   requestPayout,
 } from '../api/walletApi.js'
 import './PayoutPanel.css'
@@ -53,8 +55,44 @@ function PayoutPanel({ onWalletChanged }) {
   }, [])
 
   useEffect(() => {
-    load()
+    const returnedFromConnect = new URLSearchParams(globalThis.location?.search || '').get('stripe-connect') === 'return'
+    if (!returnedFromConnect) {
+      load()
+      return
+    }
+    refreshPayoutOnboardingStatus()
+      .catch(() => undefined)
+      .finally(load)
   }, [load])
+
+  const handleRefresh = async () => {
+    setSubmitting(true)
+    setError('')
+    try {
+      if (eligibility?.recipientSetupAvailable) {
+        await refreshPayoutOnboardingStatus()
+      }
+      await load()
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się odświeżyć statusu wypłat.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleOnboarding = async () => {
+    setSubmitting(true)
+    setError('')
+    setMessage('')
+    try {
+      const response = await createPayoutOnboardingLink()
+      if (!response?.url) throw new Error('Stripe nie zwrócił adresu onboardingu.')
+      globalThis.location.assign(response.url)
+    } catch (requestError) {
+      setError(requestError.message || 'Nie udało się rozpocząć konfiguracji wypłat.')
+      setSubmitting(false)
+    }
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -113,7 +151,7 @@ function PayoutPanel({ onWalletChanged }) {
             albo anulowana przed przetwarzaniem, środki automatycznie wrócą do portfela.
           </p>
         </div>
-        <button type="button" className="wallet-refresh" onClick={load} disabled={submitting}>
+        <button type="button" className="wallet-refresh" onClick={handleRefresh} disabled={submitting}>
           Odśwież
         </button>
       </div>
@@ -127,6 +165,14 @@ function PayoutPanel({ onWalletChanged }) {
       {!eligibility?.identityVerified && (
         <div className="wallet-payout__notice">
           Wypłaty wymagają zweryfikowanej tożsamości. <Link to="/verification">Przejdź do weryfikacji</Link>.
+        </div>
+      )}
+
+      {eligibility?.identityVerified && eligibility?.recipientSetupAvailable && !eligibility?.recipientReady && (
+        <div className="wallet-payout__notice">
+          Skonfiguruj konto odbiorcy w Stripe Connect, zanim prawdziwe wypłaty zostaną włączone.
+          {' '}
+          <button type="button" onClick={handleOnboarding} disabled={submitting}>Skonfiguruj wypłaty</button>
         </div>
       )}
 

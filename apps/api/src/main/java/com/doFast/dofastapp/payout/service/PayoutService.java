@@ -42,6 +42,7 @@ public class PayoutService {
     private final WalletService walletService;
     private final PayoutProperties properties;
     private final PayoutProviderRegistry providerRegistry;
+    private final StripeConnectOnboardingService onboardingService;
 
     public PayoutService(
             PayoutRequestRepository payoutRepository,
@@ -50,7 +51,8 @@ public class PayoutService {
             VerificationCaseRepository verificationRepository,
             WalletService walletService,
             PayoutProperties properties,
-            PayoutProviderRegistry providerRegistry
+            PayoutProviderRegistry providerRegistry,
+            StripeConnectOnboardingService onboardingService
     ) {
         this.payoutRepository = payoutRepository;
         this.eventRepository = eventRepository;
@@ -59,12 +61,16 @@ public class PayoutService {
         this.walletService = walletService;
         this.properties = properties;
         this.providerRegistry = providerRegistry;
+        this.onboardingService = onboardingService;
     }
 
     public PayoutEligibilityResponse eligibility(User currentUser) {
         boolean active = currentUser.getStatus() == UserStatus.ACTIVE;
         boolean verified = verificationRepository.existsByUser_IdAndStatus(currentUser.getId(), VerificationStatus.VERIFIED);
         boolean providerAvailable = providerRegistry.isConfiguredProviderAvailable();
+        String configuredProvider = providerRegistry.configuredProviderCode();
+        boolean recipientReady = !StripeConnectOnboardingService.PROVIDER_CODE.equals(configuredProvider)
+                || onboardingService.isRecipientReady(currentUser.getId());
         BigDecimal balance = walletService.getMyWallet(currentUser.getId()).getBalance();
         return new PayoutEligibilityResponse(
                 verified,
@@ -73,7 +79,10 @@ public class PayoutService {
                 properties.minimumAmount(),
                 balance,
                 CURRENCY,
-                active && verified && providerAvailable && balance.compareTo(properties.minimumAmount()) >= 0
+                recipientReady,
+                onboardingService.setupAvailable(),
+                active && verified && providerAvailable && recipientReady
+                        && balance.compareTo(properties.minimumAmount()) >= 0
         );
     }
 
@@ -105,6 +114,10 @@ public class PayoutService {
         }
         String providerCode = providerRegistry.providerCodeForNewRequest();
         assertVerifiedForPayout(lockedUser.getId());
+        if (StripeConnectOnboardingService.PROVIDER_CODE.equals(providerCode)
+                && !onboardingService.isRecipientReady(lockedUser.getId())) {
+            throw new ForbiddenOperationException("Dokończ konfigurację konta wypłat przed zleceniem wypłaty");
+        }
 
         LocalDateTime now = LocalDateTime.now();
         PayoutRequest payout = new PayoutRequest();
