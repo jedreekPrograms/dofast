@@ -10,6 +10,7 @@ import './AdminPayoutsPage.css'
 const STATUS_LABELS = {
   REQUESTED: 'Oczekuje',
   PROCESSING: 'Przetwarzana',
+  SUBMITTED: 'Przyjęta przez providera',
   REVIEW_REQUIRED: 'Wymaga weryfikacji',
   PAID: 'Wypłacona',
   FAILED: 'Nieudana',
@@ -18,8 +19,8 @@ const STATUS_LABELS = {
 
 const EVENT_LABELS = {
   REQUESTED: 'Zlecono wypłatę',
-  PROCESSING: 'Rozpoczęto przetwarzanie',
-  PROVIDER_ACCEPTED: 'Provider przyjął wypłatę',
+  PROCESSING_STARTED: 'Rozpoczęto przetwarzanie',
+  SUBMITTED: 'Provider przyjął wypłatę',
   PAID: 'Wypłata zakończona',
   REVIEW_REQUIRED: 'Skierowano do weryfikacji',
   FAILED: 'Wypłata zakończona błędem',
@@ -147,6 +148,7 @@ function AdminPayoutsPage() {
             <option value="REVIEW_REQUIRED">Wymagają weryfikacji</option>
             <option value="REQUESTED">Oczekujące</option>
             <option value="PROCESSING">Przetwarzane</option>
+            <option value="SUBMITTED">Przyjęte przez providera</option>
             <option value="PAID">Wypłacone</option>
             <option value="FAILED">Nieudane</option>
             <option value="CANCELLED">Anulowane</option>

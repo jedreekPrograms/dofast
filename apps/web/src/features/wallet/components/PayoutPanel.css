@@ -182,6 +182,11 @@
   font-weight: 800;
 }
 
+.wallet-payout__status--submitted {
+  background: #eef5ff;
+  color: #315c91 !important;
+}
+
 .wallet-payout__status--paid {
   background: #eef8f1;
   color: #27633a !important;

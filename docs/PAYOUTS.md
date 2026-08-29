@@ -30,11 +30,15 @@ A user may cancel only a still-queued `REQUESTED` payout. Cancellation writes im
 ## State machine
 
 ```text
-REQUESTED -> PROCESSING -> PAID
+REQUESTED -> PROCESSING -> PAID          (provider confirms terminal success synchronously)
     |            |
-    |            +-> REQUESTED       (retryable provider failure)
-    |            +-> REVIEW_REQUIRED (ambiguous result / retry exhaustion)
-    |            +-> FAILED          (definitive failure + funds restored)
+    |            +-> SUBMITTED -> PAID   (provider accepted; later settlement confirms success)
+    |            |       |
+    |            |       +-------> FAILED + PAYOUT_RESTORE (later definitive failure)
+    |            |
+    |            +-> REQUESTED       (retryable provider failure before acceptance)
+    |            +-> REVIEW_REQUIRED (ambiguous result / retry exhaustion before acceptance)
+    |            +-> FAILED          (definitive pre-acceptance failure + funds restored)
     |
     +-> CANCELLED (user cancels before processing + funds restored)
 
@@ -42,15 +46,21 @@ REVIEW_REQUIRED -> REQUESTED (audited admin retry)
 REVIEW_REQUIRED -> FAILED    (audited admin decision + funds restored)
 ```
 
-An ambiguous provider result never restores funds automatically. This is intentional: returning the money while the provider might still have sent it could create a double payout. Such cases move to `REVIEW_REQUIRED` for audited operator action.
+`SUBMITTED` is intentionally non-terminal. It means a provider has accepted the payout operation and returned a durable reference, but doFast has not yet received authoritative terminal settlement. A submitted payout is never automatically retried or restored merely because settlement is slow. This prevents a second transfer from being created while the first might still reach the recipient.
+
+An ambiguous pre-acceptance provider result never restores funds automatically. Returning the money while the provider might still have sent it could create a double payout, so such cases move to `REVIEW_REQUIRED` for audited operator action.
 
 ## Provider boundary and idempotency
 
-`PayoutProvider` receives a stable provider idempotency key derived from the payout id. Retries reuse the same key. A real provider adapter must preserve that contract and map provider outcomes into success, definitive failure, retryable failure or unknown/ambiguous result.
+`PayoutProvider` receives a stable provider idempotency key derived from the payout id. Retries reuse the same key. Synchronous providers can return terminal success as before. Asynchronous providers return a durable reference with `PayoutDispatchResult.submitted(...)`; the request moves to `SUBMITTED` and retains its original wallet reservation until a terminal provider settlement is applied.
 
-The application defaults to `PAYOUT_PROVIDER=disabled` unless configured. `sandbox` is allowed only when `PAYOUT_SANDBOX_ENABLED=true`; it is for local development and CI and **never sends real money**. The web UI explicitly labels sandbox payouts as test-only.
+`PayoutProviderSettlementService` is the provider-neutral settlement boundary. It locks the payout by the unique `(provider_code, provider_reference)` pair and deduplicates provider notifications by `(provider_code, provider_event_id)`. A `PAID` settlement finalizes without another wallet debit. A definitive `FAILED` settlement restores the reserved amount through the existing idempotent `PAYOUT_RESTORE` operation. Replayed events cannot mutate money twice, and a terminal event contradicting an already terminal state is rejected rather than silently rewriting financial history.
 
-Stripe Connect recipient onboarding has a separate kill switch, `PAYOUT_STRIPE_CONNECT_ENABLED`. It creates a persistent provider-account mapping but does not itself enable money movement. This slice intentionally does **not** register `stripe-connect` as a `PayoutProvider`; setting `PAYOUT_PROVIDER=stripe-connect` therefore remains fail-closed until a live dispatch adapter is shipped and reviewed.
+The application defaults to `PAYOUT_PROVIDER=disabled` unless configured. `sandbox` is allowed only when `PAYOUT_SANDBOX_ENABLED=true`; it is for local development and CI and **never sends real money**. The sandbox provider remains synchronous so existing smoke coverage still ends directly in `PAID`.
+
+Stripe Connect recipient onboarding has a separate kill switch, `PAYOUT_STRIPE_CONNECT_ENABLED`. It creates a persistent provider-account mapping but does not itself enable money movement. This slice still does **not** register `stripe-connect` as a `PayoutProvider`; setting `PAYOUT_PROVIDER=stripe-connect` therefore remains fail-closed until the provider-specific transfer/payout adapter, signed webhook ingestion and reconciliation are shipped and reviewed.
+
+Stripe distinguishes moving platform funds to a connected account from the connected account's bank payout. Real Connect payout activity is asynchronous and must be tracked with provider events such as `payout.paid` and `payout.failed`; therefore a successful submission must not be mapped directly to doFast `PAID`.
 
 Connected-account readiness requires all of the following provider-confirmed conditions: account details submitted, payouts enabled, the `transfers` capability active, and no currently-due or past-due requirements. A transient Stripe API error does not overwrite the last successful readiness snapshot, and a future live request must obtain a fresh successful provider read before reserving wallet funds.
 
@@ -68,7 +78,8 @@ The wallet remains the source of truth for spendable balance:
 
 - `PAYOUT_RESERVE` is a negative wallet ledger entry created when the payout request is accepted;
 - `PAYOUT_RESTORE` is a positive entry created only when a queued payout is cancelled or a transfer is known to have failed;
-- a successful `PAID` payout does not add another debit because the money was already removed from available balance at reservation time.
+- `SUBMITTED` creates no wallet entry because the reservation already removed those funds from spendable balance;
+- a successful `PAID` settlement creates no second debit because the money was already removed from available balance at reservation time.
 
 The current wallet is fungible: it does not artificially mark top-ups, job earnings or escrow refunds as separate spendability buckets. Ledger entries retain provenance, while the user may cash out available balance after KYC. If regulatory/provider requirements later require source-specific withdrawal restrictions, that must be implemented as a dedicated balance-bucket/provenance model rather than inferred heuristically from transaction history.
 
@@ -76,26 +87,27 @@ The current wallet is fungible: it does not artificially mark top-ups, job earni
 
 `/admin/payouts/**` is protected by the existing admin security boundary. Admins can inspect payout state/events and act only on requests requiring review. A forced failure requires a reason and restores reserved funds through the same idempotent wallet path.
 
-The web operator console at `/admin/payouts` mirrors those backend constraints instead of inventing finance rules in the browser. It supports status filtering, paginated payout inspection, provider/failure metadata, immutable event history, audited retry, and audited final rejection with fund restoration. Retry/failure controls are rendered only for `REVIEW_REQUIRED`; the backend remains authoritative and rejects invalid transitions.
+The web operator console at `/admin/payouts` mirrors those backend constraints instead of inventing finance rules in the browser. It supports status filtering, including `SUBMITTED`, paginated payout inspection, provider/failure metadata, immutable event history, audited retry, and audited final rejection with fund restoration. Retry/failure controls are rendered only for `REVIEW_REQUIRED`; a submitted provider operation is display-only because manually retrying it could cause a duplicate payout.
 
 Provider references and internal failure information are not returned by the normal user payout DTO. They are visible only through the admin endpoint and admin-gated UI.
 
 ## Database and CI
 
-Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence and wallet payout reservation/restoration. Flyway `V44__stripe_connect_payout_recipients.sql` owns the private user-to-provider account mapping and cached readiness state.
+Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence and wallet payout reservation/restoration. Flyway `V44__stripe_connect_payout_recipients.sql` owns the private user-to-provider account mapping and cached readiness state. Flyway `V45__asynchronous_payout_settlement.sql` adds the `SUBMITTED` state, provider submission timestamp and the deduplicated `payout_provider_events` audit table.
 
 `Worker payout smoke` verifies against PostgreSQL and the explicit sandbox provider:
 
 - V44 recipient persistence is migrated even when Connect is disabled;
+- V45 async-settlement schema is present;
 - disabled Connect setup remains fail-closed and does not affect sandbox cash-out;
 - KYC rejection before verification;
 - verified payout eligibility;
 - wallet reservation;
 - idempotent client retry;
 - queued cancellation and exact fund restoration;
-- async sandbox dispatch to `PAID` with immutable audit events.
+- synchronous sandbox dispatch to `PAID` with immutable audit events and no fake `provider_submitted_at`.
 
-Unit tests additionally enforce that a future Stripe Connect payout must refresh provider readiness before it can reserve funds, that the Connect kill switch stays authoritative, and that unverified or freshly suspended users cannot provision a Connect recipient account. Frontend CI runs dependency audit, lint and production build.
+Unit tests additionally enforce `PROCESSING -> SUBMITTED` without wallet mutation, `SUBMITTED -> PAID` without a second debit, `SUBMITTED -> FAILED` with exactly one restore, provider-event replay idempotency, rejection of contradictory terminal events, fresh Stripe Connect readiness before reservation, and the onboarding/account safety gates. Frontend CI runs dependency audit, lint and production build.
 
 ## Related publish-payment flow
 
