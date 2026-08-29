@@ -1,7 +1,9 @@
 package com.doFast.dofastapp.job.attachment;
 
+import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseClaimRepository;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.service.JobVisibilityService;
 import com.doFast.dofastapp.user.entity.User;
@@ -29,6 +31,7 @@ public class JobAttachmentService {
     private final AttachmentFilePolicy filePolicy;
     private final AttachmentStorage storage;
     private final JobVisibilityService jobVisibilityService;
+    private final JobExpenseClaimRepository expenseClaimRepository;
 
     public JobAttachmentService(
             JobRepository jobRepository,
@@ -36,7 +39,8 @@ public class JobAttachmentService {
             JobAttachmentAccessPolicy accessPolicy,
             AttachmentFilePolicy filePolicy,
             AttachmentStorage storage,
-            JobVisibilityService jobVisibilityService
+            JobVisibilityService jobVisibilityService,
+            JobExpenseClaimRepository expenseClaimRepository
     ) {
         this.jobRepository = jobRepository;
         this.attachmentRepository = attachmentRepository;
@@ -44,6 +48,7 @@ public class JobAttachmentService {
         this.filePolicy = filePolicy;
         this.storage = storage;
         this.jobVisibilityService = jobVisibilityService;
+        this.expenseClaimRepository = expenseClaimRepository;
     }
 
     @Transactional
@@ -99,6 +104,9 @@ public class JobAttachmentService {
         getJobForUpdate(jobId);
         JobAttachment attachment = getAttachment(jobId, attachmentId);
         accessPolicy.assertCanDelete(attachment, user);
+        if (expenseClaimRepository.existsByAttachment_Id(attachmentId)) {
+            throw new ConflictException("Paragon użyty do rozliczenia wydatku jest dokumentem finansowym i nie może zostać usunięty");
+        }
         attachment.markDeleted(LocalDateTime.now());
         attachmentRepository.save(attachment);
         registerCommitDeletion(attachment.getStorageKey());

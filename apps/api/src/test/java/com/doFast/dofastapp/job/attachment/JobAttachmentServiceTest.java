@@ -1,6 +1,8 @@
 package com.doFast.dofastapp.job.attachment;
 
+import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseClaimRepository;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.service.JobVisibilityService;
 import com.doFast.dofastapp.user.entity.User;
@@ -16,7 +18,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,6 +33,7 @@ class JobAttachmentServiceTest {
     @Mock private AttachmentFilePolicy filePolicy;
     @Mock private AttachmentStorage storage;
     @Mock private JobVisibilityService jobVisibilityService;
+    @Mock private JobExpenseClaimRepository expenseClaimRepository;
     @Mock private Job job;
     @Mock private User creator;
     @Mock private JobAttachment attachment;
@@ -71,6 +76,21 @@ class JobAttachmentServiceTest {
         verify(jobVisibilityService).assertCanViewPublicDetail(50L, creator);
     }
 
+    @Test
+    void claimedReceiptCannotBeDeletedOrRemovedFromStorage() {
+        JobAttachmentService service = service();
+        when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
+        when(attachmentRepository.findByIdAndJob_IdAndDeletedAtIsNull(90L, 50L)).thenReturn(Optional.of(attachment));
+        when(expenseClaimRepository.existsByAttachment_Id(90L)).thenReturn(true);
+
+        assertThrows(ConflictException.class, () -> service.delete(50L, 90L, creator));
+
+        verify(accessPolicy).assertCanDelete(attachment, creator);
+        verify(attachment, never()).markDeleted(any());
+        verify(attachmentRepository, never()).save(attachment);
+        verify(storage, never()).delete(any());
+    }
+
     private JobAttachmentService service() {
         return new JobAttachmentService(
                 jobRepository,
@@ -78,7 +98,8 @@ class JobAttachmentServiceTest {
                 accessPolicy,
                 filePolicy,
                 storage,
-                jobVisibilityService
+                jobVisibilityService,
+                expenseClaimRepository
         );
     }
 }
