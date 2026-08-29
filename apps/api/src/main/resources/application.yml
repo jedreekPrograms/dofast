@@ -81,6 +81,11 @@ dofast:
     retry-base-seconds: ${PAYOUT_RETRY_BASE_SECONDS:15}
     stale-processing-seconds: ${PAYOUT_STALE_PROCESSING_SECONDS:300}
     dispatch-interval-ms: ${PAYOUT_DISPATCH_INTERVAL_MS:2000}
+    stripe-connect:
+      enabled: ${PAYOUT_STRIPE_CONNECT_ENABLED:false}
+      country: ${PAYOUT_STRIPE_CONNECT_COUNTRY:PL}
+      refresh-url: ${PAYOUT_STRIPE_CONNECT_REFRESH_URL:}
+      return-url: ${PAYOUT_STRIPE_CONNECT_RETURN_URL:}
   routing:
     provider: ${ROUTING_PROVIDER:deterministic}
     quote-ttl-minutes: ${ROUTING_QUOTE_TTL_MINUTES:15}
