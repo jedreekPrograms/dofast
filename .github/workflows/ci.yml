@@ -44,6 +44,9 @@ jobs:
       - name: Audit production dependencies
         working-directory: apps/web
         run: npm audit --omit=dev --audit-level=high
+      - name: Test
+        working-directory: apps/web
+        run: npm test
       - name: Lint
         working-directory: apps/web
         run: npm run lint

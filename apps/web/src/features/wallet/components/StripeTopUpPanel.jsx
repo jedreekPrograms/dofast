@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadStripeScript, STRIPE_PUBLISHABLE_KEY } from '../../../shared/payments/stripeClient.js'
 import { createWalletTopUpIntent } from '../api/walletApi.js'
+import { readWalletStripeReturn } from '../payments/stripeWalletReturn.js'
 
 const PRESET_AMOUNTS = [20, 50, 100, 200]
 const MIN_TOP_UP = 1
@@ -11,13 +12,6 @@ function createRequestId() {
     return `topup_${window.crypto.randomUUID()}`
   }
   return `topup_${Date.now()}_${Math.random().toString(36).slice(2)}`
-}
-
-function clearStripeReturnParams() {
-  const url = new URL(window.location.href)
-  const stripeParams = ['topup', 'payment_intent', 'payment_intent_client_secret', 'redirect_status']
-  stripeParams.forEach((key) => url.searchParams.delete(key))
-  window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`)
 }
 
 function messageForPaymentStatus(status) {
@@ -104,17 +98,29 @@ function StripeTopUpPanel({ onPaymentSettled }) {
   }, [intent?.clientSecret, showStatus])
 
   useEffect(() => {
-    if (!STRIPE_PUBLISHABLE_KEY) return undefined
+    const stripeReturn = readWalletStripeReturn(window.location.href)
+    if (!stripeReturn) return undefined
 
-    const params = new URLSearchParams(window.location.search)
-    const clientSecret = params.get('payment_intent_client_secret')
-    if (!clientSecret) return undefined
+    window.history.replaceState(
+      window.history.state,
+      document.title,
+      stripeReturn.sanitizedLocation,
+    )
+
+    if (!stripeReturn.clientSecret) {
+      showStatus('error', 'Powrót ze Stripe nie zawiera danych potrzebnych do sprawdzenia statusu płatności.')
+      return undefined
+    }
+    if (!STRIPE_PUBLISHABLE_KEY) {
+      showStatus('error', 'Nie można sprawdzić statusu płatności, ponieważ brakuje konfiguracji Stripe.')
+      return undefined
+    }
 
     let active = true
     showStatus('info', 'Sprawdzamy status płatności po powrocie ze Stripe…')
 
     loadStripeScript()
-      .then((Stripe) => Stripe(STRIPE_PUBLISHABLE_KEY).retrievePaymentIntent(clientSecret))
+      .then((Stripe) => Stripe(STRIPE_PUBLISHABLE_KEY).retrievePaymentIntent(stripeReturn.clientSecret))
       .then(({ paymentIntent, error }) => {
         if (!active) return
         if (error) {
@@ -129,9 +135,6 @@ function StripeTopUpPanel({ onPaymentSettled }) {
       })
       .catch((error) => {
         if (active) showStatus('error', error.message || 'Nie udało się sprawdzić statusu płatności.')
-      })
-      .finally(() => {
-        if (active) clearStripeReturnParams()
       })
 
     return () => { active = false }
