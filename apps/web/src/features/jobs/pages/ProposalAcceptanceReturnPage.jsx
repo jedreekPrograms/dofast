@@ -6,6 +6,8 @@ import { readProposalAcceptanceReturn } from '../payments/proposalAcceptanceRetu
 const MAX_POLL_ATTEMPTS = 40
 const POLL_INTERVAL_MS = 750
 const FAILED_REDIRECT_STATUSES = new Set(['failed', 'requires_payment_method'])
+const CHECKING_MESSAGE = 'Sprawdzamy zaksięgowanie dopłaty i ponownie weryfikujemy możliwość wyboru wykonawcy…'
+const INVALID_CONTEXT_MESSAGE = 'Nie można bezpiecznie wznowić wyboru wykonawcy, ponieważ brakuje prawidłowego kontekstu płatności. Jeśli Stripe pobrał środki, pozostają one w portfelu doFast.'
 
 function positiveInteger(value) {
   const parsed = Number(value)
@@ -20,8 +22,10 @@ function ProposalAcceptanceReturnPage() {
   const { jobId } = useParams()
   const parsedJobId = positiveInteger(jobId)
   const stripeReturn = useMemo(() => readProposalAcceptanceReturn(window.location.href), [])
-  const [phase, setPhase] = useState('checking')
-  const [message, setMessage] = useState('')
+  const proposalId = stripeReturn?.proposalId
+  const validContext = Boolean(parsedJobId && proposalId)
+  const [phase, setPhase] = useState(validContext ? 'checking' : 'error')
+  const [message, setMessage] = useState(validContext ? CHECKING_MESSAGE : INVALID_CONTEXT_MESSAGE)
   const [accepted, setAccepted] = useState(null)
   const [retryToken, setRetryToken] = useState(0)
 
@@ -35,20 +39,12 @@ function ProposalAcceptanceReturnPage() {
   }, [stripeReturn])
 
   useEffect(() => {
-    if (!parsedJobId || !stripeReturn?.proposalId) {
-      setPhase('error')
-      setMessage('Nie można bezpiecznie wznowić wyboru wykonawcy, ponieważ brakuje prawidłowego kontekstu płatności. Jeśli Stripe pobrał środki, pozostają one w portfelu doFast.')
-      return undefined
-    }
+    if (!validContext) return undefined
 
     const controller = new AbortController()
     let active = true
 
     async function recover() {
-      setPhase('checking')
-      setMessage('Sprawdzamy zaksięgowanie dopłaty i ponownie weryfikujemy możliwość wyboru wykonawcy…')
-      setAccepted(null)
-
       const redirectFailed = FAILED_REDIRECT_STATUSES.has(stripeReturn.redirectStatus)
       const maxAttempts = redirectFailed ? 1 : MAX_POLL_ATTEMPTS
 
@@ -61,13 +57,13 @@ function ProposalAcceptanceReturnPage() {
 
           const funding = await getJobProposalAcceptanceFunding(
             parsedJobId,
-            stripeReturn.proposalId,
+            proposalId,
             { signal: controller.signal },
           )
           if (!active) return
 
           if (!funding.paymentRequired) {
-            const result = await acceptJobProposal(parsedJobId, stripeReturn.proposalId)
+            const result = await acceptJobProposal(parsedJobId, proposalId)
             if (!active) return
             setAccepted(result)
             setPhase('success')
@@ -97,10 +93,16 @@ function ProposalAcceptanceReturnPage() {
       active = false
       controller.abort()
     }
-  }, [parsedJobId, retryToken, stripeReturn])
+  }, [parsedJobId, proposalId, retryToken, stripeReturn, validContext])
 
-  const proposalId = stripeReturn?.proposalId
-  const canRetry = Boolean(parsedJobId && proposalId && phase !== 'checking' && phase !== 'success')
+  const canRetry = Boolean(validContext && phase !== 'checking' && phase !== 'success')
+
+  function handleRetry() {
+    setPhase('checking')
+    setMessage(CHECKING_MESSAGE)
+    setAccepted(null)
+    setRetryToken((current) => current + 1)
+  }
 
   return (
     <main className="create-job-page">
@@ -118,7 +120,7 @@ function ProposalAcceptanceReturnPage() {
         </div>
 
         <div className={`form-message ${phase === 'success' ? 'form-message--success' : phase === 'checking' || phase === 'pending' ? '' : 'form-message--error'}`} role="status">
-          {message || 'Przygotowujemy bezpieczne wznowienie procesu…'}
+          {message}
         </div>
 
         {accepted?.job && (
@@ -130,7 +132,7 @@ function ProposalAcceptanceReturnPage() {
 
         <div className="job-publication-payment__actions">
           {canRetry && (
-            <button type="button" className="button button--primary" onClick={() => setRetryToken((current) => current + 1)}>
+            <button type="button" className="button button--primary" onClick={handleRetry}>
               Sprawdź ponownie
             </button>
           )}
