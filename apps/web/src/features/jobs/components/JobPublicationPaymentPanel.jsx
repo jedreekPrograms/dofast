@@ -187,10 +187,14 @@ function JobPublicationPaymentPanel({ publication, onPublished, onReset }) {
       </div>
 
       <div className="job-publication-payment__summary">
-        <div><span>Budżet zlecenia</span><strong>{money(current.totalAmount, current.currency)}</strong></div>
+        <div><span>Łącznie do zabezpieczenia</span><strong>{money(current.totalAmount, current.currency)}</strong></div>
         <div><span>Zarezerwowane z portfela</span><strong>{money(current.walletReservedAmount, current.currency)}</strong></div>
         <div><span>Brakuje do escrow</span><strong>{money(current.missingAmount, current.currency)}</strong></div>
         <div className="job-publication-payment__charge"><span>Płatność Stripe</span><strong>{money(current.paymentAmount, current.currency)}</strong></div>
+      </div>
+
+      <div className="job-publication-payment__note">
+        Łączna kwota obejmuje wynagrodzenie za usługę oraz ewentualny budżet zakupowy. Prowizja platformy jest rozliczana tylko od wynagrodzenia; zwrot udokumentowanych wydatków jest od niej oddzielony.
       </div>
 
       {surplus > 0 && (
