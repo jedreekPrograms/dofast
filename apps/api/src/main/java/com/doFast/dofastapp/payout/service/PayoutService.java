@@ -70,7 +70,7 @@ public class PayoutService {
         boolean providerAvailable = providerRegistry.isConfiguredProviderAvailable();
         String configuredProvider = providerRegistry.configuredProviderCode();
         boolean recipientSetupAvailable = onboardingService.setupAvailable();
-        boolean recipientReady = !recipientSetupAvailable || onboardingService.isRecipientReady(currentUser.getId());
+        boolean recipientReady = recipientSetupAvailable && onboardingService.isRecipientReady(currentUser.getId());
         boolean recipientRequired = StripeConnectOnboardingService.PROVIDER_CODE.equals(configuredProvider);
         boolean recipientRequirementSatisfied = !recipientRequired || recipientReady;
         BigDecimal balance = walletService.getMyWallet(currentUser.getId()).getBalance();
@@ -116,9 +116,11 @@ public class PayoutService {
         }
         String providerCode = providerRegistry.providerCodeForNewRequest();
         assertVerifiedForPayout(lockedUser.getId());
-        if (StripeConnectOnboardingService.PROVIDER_CODE.equals(providerCode)
-                && !onboardingService.isRecipientReady(lockedUser.getId())) {
-            throw new ForbiddenOperationException("Dokończ konfigurację konta wypłat przed zleceniem wypłaty");
+        if (StripeConnectOnboardingService.PROVIDER_CODE.equals(providerCode)) {
+            if (!onboardingService.setupAvailable()
+                    || !onboardingService.refreshAndIsRecipientReady(lockedUser)) {
+                throw new ForbiddenOperationException("Dokończ konfigurację konta wypłat przed zleceniem wypłaty");
+            }
         }
 
         LocalDateTime now = LocalDateTime.now();

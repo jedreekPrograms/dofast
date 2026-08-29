@@ -8,6 +8,7 @@ import com.doFast.dofastapp.payout.provider.StripeConnectGateway;
 import com.doFast.dofastapp.payout.repository.PayoutRecipientAccountRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserStatus;
+import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.verification.enums.VerificationStatus;
 import com.doFast.dofastapp.verification.repository.VerificationCaseRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,7 @@ class StripeConnectOnboardingServiceTest {
     @Mock private PayoutRecipientAccountRepository repository;
     @Mock private StripeConnectGateway gateway;
     @Mock private VerificationCaseRepository verificationRepository;
+    @Mock private UserRepository userRepository;
 
     private StripeConnectOnboardingService service;
 
@@ -48,13 +50,15 @@ class StripeConnectOnboardingServiceTest {
                 ),
                 repository,
                 gateway,
-                verificationRepository
+                verificationRepository,
+                userRepository
         );
     }
 
     @Test
     void verifiedUserGetsPersistentIdempotentExpressAccountAndHostedLink() {
         User user = user(7L, UserStatus.ACTIVE);
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
         when(verificationRepository.existsByUser_IdAndStatus(7L, VerificationStatus.VERIFIED)).thenReturn(true);
         when(repository.findForUpdate(7L, StripeConnectOnboardingService.PROVIDER_CODE)).thenReturn(Optional.empty());
         when(gateway.createExpressAccount(user, "PL", "dofast:stripe-connect:user:7")).thenReturn("acct_123");
@@ -74,6 +78,7 @@ class StripeConnectOnboardingServiceTest {
     @Test
     void unverifiedUserCannotProvisionExternalStripeAccount() {
         User user = user(7L, UserStatus.ACTIVE);
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
         when(verificationRepository.existsByUser_IdAndStatus(7L, VerificationStatus.VERIFIED)).thenReturn(false);
 
         assertThrows(ForbiddenOperationException.class, () -> service.createOnboardingLink(user));
@@ -83,12 +88,25 @@ class StripeConnectOnboardingServiceTest {
     }
 
     @Test
+    void freshlyLockedSuspendedUserCannotProvisionExternalStripeAccount() {
+        User principal = user(7L, UserStatus.ACTIVE);
+        User suspended = user(7L, UserStatus.SUSPENDED);
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(suspended));
+
+        assertThrows(ForbiddenOperationException.class, () -> service.createOnboardingLink(principal));
+
+        verify(verificationRepository, never()).existsByUser_IdAndStatus(any(), any());
+        verify(gateway, never()).createExpressAccount(any(), any(), any());
+    }
+
+    @Test
     void refreshPersistsAuthoritativeProviderReadiness() {
         User user = user(7L, UserStatus.ACTIVE);
         PayoutRecipientAccount account = new PayoutRecipientAccount();
         account.initialize(user, StripeConnectOnboardingService.PROVIDER_CODE, "acct_123", java.time.LocalDateTime.now().minusDays(1));
         when(repository.findForUpdate(7L, StripeConnectOnboardingService.PROVIDER_CODE)).thenReturn(Optional.of(account));
         when(gateway.retrieveState("acct_123")).thenReturn(new StripeConnectAccountState(true, true, true, false));
+        when(repository.save(account)).thenReturn(account);
 
         var response = service.refreshStatus(user);
 

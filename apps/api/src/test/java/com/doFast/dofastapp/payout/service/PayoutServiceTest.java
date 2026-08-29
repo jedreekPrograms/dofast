@@ -99,22 +99,43 @@ class PayoutServiceTest {
     }
 
     @Test
-    void stripeConnectRecipientMustBeReadyBeforeFundsAreReserved() {
+    void stripeConnectRecipientMustBeFreshlyReadyBeforeFundsAreReserved() {
         User user = user(7L, UserStatus.ACTIVE);
         VerificationCase verified = verification(user, VerificationStatus.VERIFIED);
         when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
         when(payoutRepository.findByRequestKey("payout:7:client:req-12345")).thenReturn(Optional.empty());
         when(providerRegistry.providerCodeForNewRequest()).thenReturn(StripeConnectOnboardingService.PROVIDER_CODE);
         when(verificationRepository.findByUserIdForUpdate(7L)).thenReturn(Optional.of(verified));
-        when(onboardingService.isRecipientReady(7L)).thenReturn(false);
+        when(onboardingService.setupAvailable()).thenReturn(true);
+        when(onboardingService.refreshAndIsRecipientReady(user)).thenReturn(false);
 
         assertThrows(
                 ForbiddenOperationException.class,
                 () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user)
         );
 
+        verify(onboardingService).refreshAndIsRecipientReady(user);
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
         verify(payoutRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void stripeConnectKillSwitchMustBeEnabledBeforeFundsAreReserved() {
+        User user = user(7L, UserStatus.ACTIVE);
+        VerificationCase verified = verification(user, VerificationStatus.VERIFIED);
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
+        when(payoutRepository.findByRequestKey("payout:7:client:req-12345")).thenReturn(Optional.empty());
+        when(providerRegistry.providerCodeForNewRequest()).thenReturn(StripeConnectOnboardingService.PROVIDER_CODE);
+        when(verificationRepository.findByUserIdForUpdate(7L)).thenReturn(Optional.of(verified));
+        when(onboardingService.setupAvailable()).thenReturn(false);
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user)
+        );
+
+        verify(onboardingService, never()).refreshAndIsRecipientReady(any());
+        verify(walletService, never()).debit(any(), any(), any(), any(), any());
     }
 
     @Test

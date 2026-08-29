@@ -2,6 +2,7 @@ package com.doFast.dofastapp.payout.service;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.payout.config.StripeConnectProperties;
 import com.doFast.dofastapp.payout.dto.PayoutOnboardingLinkResponse;
 import com.doFast.dofastapp.payout.dto.PayoutOnboardingStatusResponse;
@@ -11,6 +12,7 @@ import com.doFast.dofastapp.payout.provider.StripeConnectGateway;
 import com.doFast.dofastapp.payout.repository.PayoutRecipientAccountRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserStatus;
+import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.verification.enums.VerificationStatus;
 import com.doFast.dofastapp.verification.repository.VerificationCaseRepository;
 import org.springframework.stereotype.Service;
@@ -27,17 +29,20 @@ public class StripeConnectOnboardingService {
     private final PayoutRecipientAccountRepository repository;
     private final StripeConnectGateway gateway;
     private final VerificationCaseRepository verificationRepository;
+    private final UserRepository userRepository;
 
     public StripeConnectOnboardingService(
             StripeConnectProperties properties,
             PayoutRecipientAccountRepository repository,
             StripeConnectGateway gateway,
-            VerificationCaseRepository verificationRepository
+            VerificationCaseRepository verificationRepository,
+            UserRepository userRepository
     ) {
         this.properties = properties;
         this.repository = repository;
         this.gateway = gateway;
         this.verificationRepository = verificationRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional(readOnly = true)
@@ -51,28 +56,36 @@ public class StripeConnectOnboardingService {
     @Transactional
     public PayoutOnboardingStatusResponse refreshStatus(User user) {
         requireEnabled();
-        PayoutRecipientAccount account = repository.findForUpdate(user.getId(), PROVIDER_CODE).orElse(null);
-        if (account == null) return emptyAvailable();
-        StripeConnectAccountState state = gateway.retrieveState(account.getProviderAccountId());
-        account.synchronize(state.detailsSubmitted(), state.payoutsEnabled(), state.transfersEnabled(),
-                state.requirementsDue(), LocalDateTime.now());
-        repository.save(account);
-        return toResponse(account);
+        PayoutRecipientAccount account = refreshAccount(user.getId());
+        return account == null ? emptyAvailable() : toResponse(account);
+    }
+
+    @Transactional
+    public boolean refreshAndIsRecipientReady(User user) {
+        requireEnabled();
+        PayoutRecipientAccount account = refreshAccount(user.getId());
+        return account != null && account.readyForPayout();
     }
 
     @Transactional
     public PayoutOnboardingLinkResponse createOnboardingLink(User user) {
         requireEnabled();
-        requireEligibleForProvisioning(user);
-        PayoutRecipientAccount account = repository.findForUpdate(user.getId(), PROVIDER_CODE).orElse(null);
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Konfiguracja wypłat nie jest dostępna dla tego konta");
+        }
+        User lockedUser = userRepository.findByIdForUpdate(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
+        requireEligibleForProvisioning(lockedUser);
+
+        PayoutRecipientAccount account = repository.findForUpdate(lockedUser.getId(), PROVIDER_CODE).orElse(null);
         if (account == null) {
             String providerAccountId = gateway.createExpressAccount(
-                    user,
+                    lockedUser,
                     properties.country(),
-                    "dofast:stripe-connect:user:" + user.getId()
+                    "dofast:stripe-connect:user:" + lockedUser.getId()
             );
             account = new PayoutRecipientAccount();
-            account.initialize(user, PROVIDER_CODE, providerAccountId, LocalDateTime.now());
+            account.initialize(lockedUser, PROVIDER_CODE, providerAccountId, LocalDateTime.now());
             account = repository.saveAndFlush(account);
         }
         String url = gateway.createOnboardingLink(
@@ -94,12 +107,21 @@ public class StripeConnectOnboardingService {
         return properties.enabled();
     }
 
+    private PayoutRecipientAccount refreshAccount(Long userId) {
+        PayoutRecipientAccount account = repository.findForUpdate(userId, PROVIDER_CODE).orElse(null);
+        if (account == null) return null;
+        StripeConnectAccountState state = gateway.retrieveState(account.getProviderAccountId());
+        account.synchronize(state.detailsSubmitted(), state.payoutsEnabled(), state.transfersEnabled(),
+                state.requirementsDue(), LocalDateTime.now());
+        return repository.save(account);
+    }
+
     private void requireEnabled() {
         if (!properties.enabled()) throw new BusinessException("Onboarding wypłat Stripe Connect jest wyłączony");
     }
 
     private void requireEligibleForProvisioning(User user) {
-        if (user == null || user.getId() == null || user.getStatus() != UserStatus.ACTIVE) {
+        if (user.getStatus() != UserStatus.ACTIVE) {
             throw new ForbiddenOperationException("Konfiguracja wypłat nie jest dostępna dla tego konta");
         }
         if (!verificationRepository.existsByUser_IdAndStatus(user.getId(), VerificationStatus.VERIFIED)) {
