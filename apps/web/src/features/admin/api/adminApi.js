@@ -45,10 +45,10 @@ export function claimAdminDispute(disputeId) {
   })
 }
 
-export function resolveAdminDispute(disputeId, resolution, note) {
+export function resolveAdminDispute(disputeId, resolution, note, approvedExpenseAmount = null) {
   return apiRequest(`/admin/disputes/${disputeId}/resolve`, {
     method: 'POST',
-    body: JSON.stringify({ resolution, note }),
+    body: JSON.stringify({ resolution, note, approvedExpenseAmount }),
   })
 }
 
