@@ -13,6 +13,7 @@ import MyJobReportsPage from '../features/jobReports/pages/MyJobReportsPage.jsx'
 import CreateJobPage from '../features/jobs/pages/CreateJobPage.jsx'
 import JobDetailsPage from '../features/jobs/pages/JobDetailsPage.jsx'
 import JobExecutionPage from '../features/jobs/pages/JobExecutionPage.jsx'
+import JobPublicationReturnPage from '../features/jobs/pages/JobPublicationReturnPage.jsx'
 import JobsPage from '../features/jobs/pages/JobsPage.jsx'
 import MyJobsPage from '../features/jobs/pages/MyJobsPage.jsx'
 import SavedJobsPage from '../features/jobs/pages/SavedJobsPage.jsx'
@@ -42,6 +43,7 @@ function App() {
             <Route path="/my-reports" element={<MyJobReportsPage />} />
             <Route path="/blocked-users" element={<BlockedUsersPage />} />
             <Route path="/jobs/new" element={<CreateJobPage />} />
+            <Route path="/jobs/publications/:publicationId/return" element={<JobPublicationReturnPage />} />
             <Route path="/jobs/:jobId" element={<JobDetailsPage />} />
             <Route path="/jobs/:jobId/route" element={<JobExecutionPage />} />
             <Route path="/chat" element={<ChatPage />} />
