@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,26 +30,21 @@ public class WalletService {
     private final WalletRepository walletRepository;
     private final UserRepository userRepository;
     private final WalletTransactionRepository walletTransactionRepository;
+    private final WalletFundingSourceService fundingSourceService;
     private final List<WalletDebitGuard> debitGuards;
-
-    public WalletService(
-            WalletRepository walletRepository,
-            UserRepository userRepository,
-            WalletTransactionRepository walletTransactionRepository
-    ) {
-        this(walletRepository, userRepository, walletTransactionRepository, List.of());
-    }
 
     @Autowired
     public WalletService(
             WalletRepository walletRepository,
             UserRepository userRepository,
             WalletTransactionRepository walletTransactionRepository,
+            WalletFundingSourceService fundingSourceService,
             List<WalletDebitGuard> debitGuards
     ) {
         this.walletRepository = walletRepository;
         this.userRepository = userRepository;
         this.walletTransactionRepository = walletTransactionRepository;
+        this.fundingSourceService = fundingSourceService;
         this.debitGuards = List.copyOf(debitGuards);
     }
 
@@ -56,20 +52,27 @@ public class WalletService {
     public void createWalletForUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
-
         walletRepository.save(new Wallet(user));
     }
 
     public WalletResponse getMyWallet(Long userId) {
         Wallet wallet = walletRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
-
+        fundingSourceService.assertCoverage(wallet);
         return new WalletResponse(wallet.getBalance());
+    }
+
+    public BigDecimal getWithdrawableBalance(Long userId) {
+        Wallet wallet = walletRepository.findByUser_Id(userId)
+                .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
+        return fundingSourceService.withdrawableBalance(wallet);
     }
 
     @Transactional
     public BigDecimal getBalanceForUpdate(Long userId) {
-        return getWalletForUpdate(userId).getBalance();
+        Wallet wallet = getWalletForUpdate(userId);
+        fundingSourceService.assertCoverage(wallet);
+        return wallet.getBalance();
     }
 
     @Transactional
@@ -82,7 +85,22 @@ public class WalletService {
     ) {
         BigDecimal normalizedAmount = normalizePositiveAmount(amount);
         Wallet wallet = getWalletForUpdate(userId);
-        return applyChange(wallet, normalizedAmount, type, jobId, normalizeOperationKey(operationKey));
+        String normalizedOperationKey = normalizeOperationKey(operationKey);
+        fundingSourceService.assertCoverage(wallet);
+
+        if (isAlreadyApplied(wallet, type, normalizedAmount, normalizedOperationKey)) {
+            return false;
+        }
+        if (fundingSourceService.requiresExplicitRestoration(type)) {
+            throw new IllegalArgumentException("Wallet transaction type requires explicit source restoration: " + type);
+        }
+
+        WalletTransaction transaction = persistChange(
+                wallet, normalizedAmount, type, jobId, normalizedOperationKey
+        );
+        fundingSourceService.recordOriginCredit(transaction);
+        fundingSourceService.assertCoverage(wallet);
+        return true;
     }
 
     @Transactional
@@ -93,10 +111,105 @@ public class WalletService {
             Long jobId,
             String operationKey
     ) {
+        if (type == WalletTransactionType.STRIPE_REFUND_RESERVE) {
+            throw new IllegalArgumentException("Stripe refund reserve requires debitFromStripePayment");
+        }
+        return debitInternal(userId, amount, type, jobId, operationKey, null);
+    }
+
+    @Transactional
+    public boolean debitFromStripePayment(
+            Long userId,
+            BigDecimal amount,
+            WalletTransactionType type,
+            Long jobId,
+            String operationKey,
+            String stripePaymentIntentId
+    ) {
+        if (type != WalletTransactionType.STRIPE_REFUND_RESERVE) {
+            throw new IllegalArgumentException("Exact Stripe source debit is reserved for Stripe refunds");
+        }
+        return debitInternal(userId, amount, type, jobId, operationKey, stripePaymentIntentId);
+    }
+
+    @Transactional
+    public boolean creditRestoringOperation(
+            Long userId,
+            BigDecimal amount,
+            WalletTransactionType type,
+            Long jobId,
+            String operationKey,
+            String sourceOperationKey
+    ) {
+        return creditRestoration(
+                userId,
+                amount,
+                type,
+                jobId,
+                operationKey,
+                transaction -> fundingSourceService.restoreFromOperation(
+                        transaction,
+                        normalizeOperationKey(sourceOperationKey)
+                )
+        );
+    }
+
+    @Transactional
+    public boolean creditRestoringJobDebits(
+            Long userId,
+            BigDecimal amount,
+            WalletTransactionType type,
+            Long jobId,
+            String operationKey,
+            Collection<WalletTransactionType> sourceTypes
+    ) {
+        return creditRestoration(
+                userId,
+                amount,
+                type,
+                jobId,
+                operationKey,
+                transaction -> fundingSourceService.restoreFromJobDebits(transaction, jobId, sourceTypes)
+        );
+    }
+
+    @Transactional
+    public boolean creditRestoringOperationPrefix(
+            Long userId,
+            BigDecimal amount,
+            WalletTransactionType type,
+            Long jobId,
+            String operationKey,
+            WalletTransactionType sourceType,
+            String sourceOperationPrefix
+    ) {
+        return creditRestoration(
+                userId,
+                amount,
+                type,
+                jobId,
+                operationKey,
+                transaction -> fundingSourceService.restoreFromOperationPrefix(
+                        transaction,
+                        sourceType,
+                        sourceOperationPrefix
+                )
+        );
+    }
+
+    private boolean debitInternal(
+            Long userId,
+            BigDecimal amount,
+            WalletTransactionType type,
+            Long jobId,
+            String operationKey,
+            String stripePaymentIntentId
+    ) {
         BigDecimal normalizedAmount = normalizePositiveAmount(amount);
         Wallet wallet = getWalletForUpdate(userId);
         String normalizedOperationKey = normalizeOperationKey(operationKey);
         BigDecimal signedAmount = normalizedAmount.negate();
+        fundingSourceService.assertCoverage(wallet);
 
         if (isAlreadyApplied(wallet, type, signedAmount, normalizedOperationKey)) {
             return false;
@@ -110,39 +223,58 @@ public class WalletService {
             throw new BusinessException("Brak środków na koncie");
         }
 
-        persistChange(wallet, signedAmount, type, jobId, normalizedOperationKey);
+        WalletTransaction transaction = persistChange(
+                wallet, signedAmount, type, jobId, normalizedOperationKey
+        );
+        if (stripePaymentIntentId == null) {
+            fundingSourceService.consumeForDebit(transaction);
+        } else {
+            fundingSourceService.consumeFromStripePayment(transaction, stripePaymentIntentId);
+        }
+        fundingSourceService.assertCoverage(wallet);
         return true;
     }
 
-    private boolean applyChange(
-            Wallet wallet,
-            BigDecimal signedAmount,
+    private boolean creditRestoration(
+            Long userId,
+            BigDecimal amount,
             WalletTransactionType type,
             Long jobId,
-            String operationKey
+            String operationKey,
+            FundingRestoration restoration
     ) {
-        if (isAlreadyApplied(wallet, type, signedAmount, operationKey)) {
+        BigDecimal normalizedAmount = normalizePositiveAmount(amount);
+        Wallet wallet = getWalletForUpdate(userId);
+        String normalizedOperationKey = normalizeOperationKey(operationKey);
+        fundingSourceService.assertCoverage(wallet);
+
+        if (isAlreadyApplied(wallet, type, normalizedAmount, normalizedOperationKey)) {
             return false;
         }
 
-        persistChange(wallet, signedAmount, type, jobId, operationKey);
+        WalletTransaction transaction = persistChange(
+                wallet, normalizedAmount, type, jobId, normalizedOperationKey
+        );
+        restoration.restore(transaction);
+        fundingSourceService.assertCoverage(wallet);
         return true;
     }
 
-    private void persistChange(
+    private WalletTransaction persistChange(
             Wallet wallet,
             BigDecimal signedAmount,
             WalletTransactionType type,
             Long jobId,
             String operationKey
     ) {
-        BigDecimal balanceAfter = wallet.getBalance().add(signedAmount).setScale(MONEY_SCALE, RoundingMode.UNNECESSARY);
+        BigDecimal balanceAfter = wallet.getBalance().add(signedAmount)
+                .setScale(MONEY_SCALE, RoundingMode.UNNECESSARY);
         if (balanceAfter.signum() < 0) {
             throw new BusinessException("Saldo portfela nie może być ujemne");
         }
 
         wallet.setBalance(balanceAfter);
-        walletTransactionRepository.save(
+        return walletTransactionRepository.saveAndFlush(
                 new WalletTransaction(
                         wallet,
                         type,
@@ -203,5 +335,10 @@ public class WalletService {
             throw new IllegalArgumentException("Operation key is too long");
         }
         return normalized;
+    }
+
+    @FunctionalInterface
+    private interface FundingRestoration {
+        void restore(WalletTransaction transaction);
     }
 }

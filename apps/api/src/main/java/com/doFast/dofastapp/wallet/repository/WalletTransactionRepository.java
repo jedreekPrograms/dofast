@@ -2,9 +2,11 @@ package com.doFast.dofastapp.wallet.repository;
 
 import com.doFast.dofastapp.wallet.entity.Wallet;
 import com.doFast.dofastapp.wallet.entity.WalletTransaction;
+import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -13,6 +15,18 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
     List<WalletTransaction> findByWalletOrderByCreatedAtDescIdDesc(Wallet wallet);
 
     Optional<WalletTransaction> findByOperationKey(String operationKey);
+
+    List<WalletTransaction> findByWalletAndJobIdAndTypeInOrderByCreatedAtDescIdDesc(
+            Wallet wallet,
+            Long jobId,
+            Collection<WalletTransactionType> types
+    );
+
+    List<WalletTransaction> findByWalletAndTypeAndOperationKeyStartingWithOrderByCreatedAtDescIdDesc(
+            Wallet wallet,
+            WalletTransactionType type,
+            String operationKeyPrefix
+    );
 
     @Query(value = """
             SELECT COUNT(*)
