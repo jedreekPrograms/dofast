@@ -42,6 +42,12 @@ public class StripePaymentService {
         this.paymentTransactionRepository = paymentTransactionRepository;
     }
 
+    static PaymentIntentCreateParams.AutomaticPaymentMethods automaticPaymentMethods() {
+        return PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
+                .setEnabled(true)
+                .build();
+    }
+
     public CreatePaymentIntentResponse createPaymentIntent(BigDecimal amount, Long userId, String requestId) {
         BigDecimal normalizedAmount = normalizeAmount(amount);
         String normalizedRequestId = normalizeRequestId(requestId);
@@ -53,14 +59,7 @@ public class StripePaymentService {
                 .putMetadata("userId", userId.toString())
                 .putMetadata("purpose", PURPOSE)
                 .putMetadata("topUpRequestId", normalizedRequestId)
-                .setAutomaticPaymentMethods(
-                        PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
-                                .setEnabled(true)
-                                .setAllowRedirects(
-                                        PaymentIntentCreateParams.AutomaticPaymentMethods.AllowRedirects.NEVER
-                                )
-                                .build()
-                )
+                .setAutomaticPaymentMethods(automaticPaymentMethods())
                 .build();
 
         RequestOptions options = RequestOptions.builder()
