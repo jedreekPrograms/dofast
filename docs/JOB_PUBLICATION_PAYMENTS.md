@@ -76,6 +76,14 @@ Payment methods that require a browser redirect return to a publication-specific
 
 This publication-specific return route also avoids accidentally resuming a different pending publication when a requester has more than one recoverable payment attempt.
 
+## Recovery of multiple pending publications
+
+`GET /jobs/publications/pending` is owner-scoped and may legitimately return more than one recoverable attempt. The create-job page still resumes a single pending publication automatically, but the payment panel re-reads the authoritative list before initializing Stripe. If more than one attempt exists, Stripe initialization is blocked until the requester explicitly selects a publication by id, amount and expiry.
+
+Changing the selection only changes which existing private publication is displayed. It does not create another publication, reserve or release wallet funds, or mutate the ledger. The selected publication id is also the id used for PaymentIntent creation, polling, cancellation and the Stripe return URL. Cancelling one attempt refreshes the recoverable list so another pending attempt can be selected without silently creating a replacement.
+
+This guard is intentional: array order from the recovery endpoint must never decide which financial attempt receives a PaymentIntent.
+
 ## Privacy
 
 Exact on-site addresses and point-to-point route details remain private under the same rules as ordinary job creation. Before funding, the pending payload is owner-only and never returned by the publication response. After a terminal publication state, the serialized payload is removed from `job_publications`.
