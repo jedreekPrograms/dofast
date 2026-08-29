@@ -5,9 +5,11 @@ import com.doFast.dofastapp.user.entity.User;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Account;
 import com.stripe.model.AccountLink;
+import com.stripe.model.BalanceSettings;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.AccountCreateParams;
 import com.stripe.param.AccountLinkCreateParams;
+import com.stripe.param.BalanceSettingsUpdateParams;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -79,6 +81,26 @@ public class StripeConnectGateway {
             );
         } catch (StripeException ex) {
             throw new PaymentProviderException("Nie udało się odświeżyć statusu konta Stripe Connect", ex);
+        }
+    }
+
+    public void ensureManualPayoutSchedule(String accountId) {
+        BalanceSettingsUpdateParams.Payments.Payouts.Schedule schedule =
+                BalanceSettingsUpdateParams.Payments.Payouts.Schedule.builder()
+                        .setInterval(BalanceSettingsUpdateParams.Payments.Payouts.Schedule.Interval.MANUAL)
+                        .build();
+        BalanceSettingsUpdateParams params = BalanceSettingsUpdateParams.builder()
+                .setPayments(BalanceSettingsUpdateParams.Payments.builder()
+                        .setPayouts(BalanceSettingsUpdateParams.Payments.Payouts.builder()
+                                .setSchedule(schedule)
+                                .build())
+                        .build())
+                .build();
+        RequestOptions options = RequestOptions.builder().setStripeAccount(accountId).build();
+        try {
+            BalanceSettings.update(params, options);
+        } catch (StripeException ex) {
+            throw new PaymentProviderException("Nie udało się ustawić ręcznego harmonogramu wypłat Stripe Connect", ex);
         }
     }
 }

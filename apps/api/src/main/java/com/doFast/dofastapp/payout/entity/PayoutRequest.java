@@ -62,6 +62,9 @@ public class PayoutRequest {
     @Column(name = "provider_reference", length = 255)
     private String providerReference;
 
+    @Column(name = "provider_transfer_reference", length = 255)
+    private String providerTransferReference;
+
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount;
 
@@ -117,6 +120,7 @@ public class PayoutRequest {
         this.failureCode = null;
         this.lastErrorAt = null;
         this.providerReference = null;
+        this.providerTransferReference = null;
     }
 
     public void startProcessing(LocalDateTime now) {
@@ -151,6 +155,18 @@ public class PayoutRequest {
         processingStartedAt = null;
         nextAttemptAt = now;
         failureCode = null;
+    }
+
+    public void recordProviderTransferReference(String providerTransferReference) {
+        requireStatus(PayoutStatus.PROCESSING);
+        if (providerTransferReference == null || providerTransferReference.isBlank()) {
+            throw new IllegalArgumentException("Provider transfer reference is required");
+        }
+        String normalized = providerTransferReference.trim();
+        if (this.providerTransferReference != null && !this.providerTransferReference.equals(normalized)) {
+            throw new IllegalStateException("Payout already has a different provider transfer reference");
+        }
+        this.providerTransferReference = normalized;
     }
 
     public void markSubmitted(String providerReference, LocalDateTime now) {
@@ -220,6 +236,7 @@ public class PayoutRequest {
     public PayoutStatus getStatus() { return status; }
     public String getProviderCode() { return providerCode; }
     public String getProviderReference() { return providerReference; }
+    public String getProviderTransferReference() { return providerTransferReference; }
     public int getAttemptCount() { return attemptCount; }
     public LocalDateTime getRequestedAt() { return requestedAt; }
     public LocalDateTime getNextAttemptAt() { return nextAttemptAt; }
