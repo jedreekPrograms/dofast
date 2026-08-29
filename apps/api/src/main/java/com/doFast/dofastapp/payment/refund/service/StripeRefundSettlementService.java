@@ -128,13 +128,22 @@ public class StripeRefundSettlementService {
         if (request.isWalletRestored()) {
             return;
         }
-        walletService.credit(
+        walletService.creditRestoringOperation(
                 request.getUserId(),
                 request.getAmount(),
                 WalletTransactionType.STRIPE_REFUND_RESTORE,
                 null,
-                "stripe:refund:" + request.getId() + ":restore"
+                restoreOperationKey(request.getId()),
+                reserveOperationKey(request.getId())
         );
         request.markWalletRestored(now);
+    }
+
+    private String reserveOperationKey(Long requestId) {
+        return "stripe:refund:" + requestId + ":reserve";
+    }
+
+    private String restoreOperationKey(Long requestId) {
+        return "stripe:refund:" + requestId + ":restore";
     }
 }
