@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -80,6 +82,8 @@ class JobPublicationStripeSettlementServiceTest {
         assertTrue(processed);
         assertEquals(JobPublicationStatus.PUBLISHED, publication.getStatus());
         assertEquals(99L, publication.getPublishedJobId());
+        assertNotNull(publication.getPaymentReceivedAt());
+        assertNull(publication.getRecoveryReason());
         verify(publicationService).restoreReservation(publication);
         verify(jobService).createJob(jobRequest, user);
         verify(publicationRepository).save(publication);
@@ -92,7 +96,7 @@ class JobPublicationStripeSettlementServiceTest {
     }
 
     @Test
-    void latePaymentAfterCancellationCreditsPaymentButNeverRecreatesJob() {
+    void latePaymentAfterCancellationCreditsPaymentAndRecordsRecoveryOutcome() {
         JobPublication publication = pendingPublication(LocalDateTime.now().plusMinutes(5));
         publication.cancel(LocalDateTime.now());
         when(publicationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(publication));
@@ -103,12 +107,14 @@ class JobPublicationStripeSettlementServiceTest {
         assertTrue(service.processSuccessfulPayment(paymentIntent("pi_1", 4500L), "evt_late"));
 
         assertEquals(JobPublicationStatus.CANCELLED, publication.getStatus());
+        assertNotNull(publication.getPaymentReceivedAt());
+        assertEquals(JobPublicationRecoveryReason.CANCELLED_BEFORE_PAYMENT_CONFIRMED, publication.getRecoveryReason());
         verify(jobService, never()).createJob(any(), any());
         verify(publicationService, never()).restoreReservation(publication);
     }
 
     @Test
-    void paymentAfterPublicationExpiryBecomesWalletFundingWithoutPublishing() {
+    void paymentAfterPublicationExpiryBecomesWalletFundingWithExplicitReason() {
         JobPublication publication = pendingPublication(LocalDateTime.now().minusSeconds(1));
         when(publicationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(publication));
         when(stripePaymentService.processSuccessfulJobPublicationPayment(
@@ -118,6 +124,27 @@ class JobPublicationStripeSettlementServiceTest {
         assertTrue(service.processSuccessfulPayment(paymentIntent("pi_1", 4500L), "evt_expired"));
 
         assertEquals(JobPublicationStatus.PAYMENT_RECEIVED, publication.getStatus());
+        assertNotNull(publication.getPaymentReceivedAt());
+        assertEquals(JobPublicationRecoveryReason.PUBLICATION_EXPIRED, publication.getRecoveryReason());
+        verify(publicationService).restoreReservation(publication);
+        verify(jobService, never()).createJob(any(), any());
+        verify(publicationRepository).save(publication);
+    }
+
+    @Test
+    void paymentAfterCategoryBecomesUnavailableBecomesWalletFundingWithExplicitReason() {
+        JobPublication publication = pendingPublication(LocalDateTime.now().plusMinutes(5));
+        when(publicationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(publication));
+        when(stripePaymentService.processSuccessfulJobPublicationPayment(
+                any(PaymentIntent.class), eq("evt_category"), eq(11L)
+        )).thenReturn(true);
+        when(categoryRepository.findByIdAndActiveTrue(42L)).thenReturn(Optional.empty());
+
+        assertTrue(service.processSuccessfulPayment(paymentIntent("pi_1", 4500L), "evt_category"));
+
+        assertEquals(JobPublicationStatus.PAYMENT_RECEIVED, publication.getStatus());
+        assertNotNull(publication.getPaymentReceivedAt());
+        assertEquals(JobPublicationRecoveryReason.CATEGORY_UNAVAILABLE, publication.getRecoveryReason());
         verify(publicationService).restoreReservation(publication);
         verify(jobService, never()).createJob(any(), any());
         verify(publicationRepository).save(publication);
@@ -133,6 +160,8 @@ class JobPublicationStripeSettlementServiceTest {
                 () -> service.processSuccessfulPayment(paymentIntent("pi_1", 4400L), "evt_bad")
         );
 
+        assertNull(publication.getPaymentReceivedAt());
+        assertNull(publication.getRecoveryReason());
         verify(stripePaymentService, never()).processSuccessfulJobPublicationPayment(any(), any(), any());
         verify(jobService, never()).createJob(any(), any());
     }
