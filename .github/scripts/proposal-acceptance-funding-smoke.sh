@@ -46,16 +46,10 @@ CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT id FROM job_categories WHERE slug='montaz-mebli' AND fulfillment_mode='ON_SITE' AND active=TRUE;" | tr -d '[:space:]')
 test -n "$CATEGORY_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 35.00 WHERE user_id = $OWNER_ID;
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 35.00, NULL, CURRENT_TIMESTAMP, 'smoke:proposal-funding:seed:' || id, 35.00
-FROM wallets WHERE user_id = $OWNER_ID;
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 35.00 PLATFORM_ADJUSTMENT \
+  "smoke:proposal-funding:base:$OWNER_ID" \
+  "smoke:proposal-funding:seed:$OWNER_ID"
 
 JOB=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $OWNER_TOKEN" \
@@ -112,16 +106,10 @@ echo 'Insufficient acceptance rolls back without selecting worker: OK'
 
 # Simulate the already-covered signed Stripe TOP_UP result. The proposal flow must consume
 # only the exact escrow delta after the wallet credit becomes visible.
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = balance + 7.00 WHERE user_id = $OWNER_ID;
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 7.00, NULL, CURRENT_TIMESTAMP, 'smoke:proposal-funding:stripe-credit:' || id, balance
-FROM wallets WHERE user_id = $OWNER_ID;
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 7.00 STRIPE_PAYMENT \
+  "pi_proposal_funding_smoke_$OWNER_ID" \
+  "smoke:proposal-funding:stripe-credit:$OWNER_ID"
 
 FUNDED=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $OWNER_TOKEN" \
@@ -145,5 +133,12 @@ test "$FINAL_ESCROW" = "HELD:42.00"
 ADJUSTMENT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT type || ':' || amount::text || ':' || balance_after::text FROM wallet_transactions WHERE operation_key='escrow:$JOB_ID:proposal:$PROPOSAL_ID:adjust:lock';" | tr -d '[:space:]')
 test "$ADJUSTMENT" = "ESCROW_ADJUSTMENT_LOCK:-12.00:0.00"
+
+FUNDING_REMAINING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT COALESCE(sum(remaining_amount), 0)::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$OWNER_ID);" | tr -d '[:space:]')
+test "$FUNDING_REMAINING" = "0.00"
+STRIPE_WITHDRAWABLE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT withdrawable FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$OWNER_ID) AND source_type='STRIPE_PAYMENT';" | tr -d '[:space:]')
+test "$STRIPE_WITHDRAWABLE" = "f"
 
 echo 'Funded higher proposal locks exact delta and assigns worker atomically: OK'
