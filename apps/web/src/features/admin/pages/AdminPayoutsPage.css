@@ -1,0 +1,148 @@
+.admin-payouts-page {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 36px 0 64px;
+}
+
+.payout-filter {
+  display: grid;
+  gap: 6px;
+  min-width: 230px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.payout-filter select,
+.payout-review__reason textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.payout-review-list {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.payout-review {
+  display: grid;
+  gap: 18px;
+}
+
+.payout-review__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.payout-review__heading h2 {
+  margin: 4px 0;
+}
+
+.payout-review__heading p,
+.payout-review__meta span,
+.payout-review__meta time,
+.payout-audit__row span,
+.payout-audit__row p {
+  color: var(--text-muted);
+}
+
+.payout-review__meta {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+  font-size: 0.9rem;
+}
+
+.payout-review__facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.payout-review__facts > div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-subtle);
+  overflow-wrap: anywhere;
+}
+
+.payout-review__facts span,
+.payout-review__reason span {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.payout-review__decision {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.payout-review__warning {
+  line-height: 1.5;
+}
+
+.payout-review__reason {
+  display: grid;
+  gap: 6px;
+}
+
+.payout-review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.payout-audit {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.payout-audit__row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr);
+  gap: 16px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-subtle);
+}
+
+.payout-audit__row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.payout-audit__row p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 820px) {
+  .payout-review__heading {
+    display: grid;
+  }
+
+  .payout-review__meta {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .payout-review__facts,
+  .payout-audit__row {
+    grid-template-columns: 1fr;
+  }
+}

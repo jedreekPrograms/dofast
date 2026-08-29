@@ -109,3 +109,24 @@ export function enforceAdminJobReportAccount(reportId, reason = '') {
     }),
   })
 }
+
+export function getAdminPayouts({ status = '', page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (status) params.set('status', status)
+  return apiRequest(`/admin/payouts?${params.toString()}`)
+}
+
+export function getAdminPayoutEvents(payoutId) {
+  return apiRequest(`/admin/payouts/${payoutId}/events`)
+}
+
+export function retryAdminPayout(payoutId) {
+  return apiRequest(`/admin/payouts/${payoutId}/retry`, { method: 'POST' })
+}
+
+export function failAdminPayout(payoutId, reason) {
+  return apiRequest(`/admin/payouts/${payoutId}/fail`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason.trim() }),
+  })
+}
