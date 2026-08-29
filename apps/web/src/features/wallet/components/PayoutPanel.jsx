@@ -18,6 +18,7 @@ const moneyFormatter = new Intl.NumberFormat('pl-PL', {
 const STATUS_LABELS = {
   REQUESTED: 'Oczekuje',
   PROCESSING: 'Przetwarzanie',
+  SUBMITTED: 'W drodze do banku',
   REVIEW_REQUIRED: 'Wymaga weryfikacji',
   PAID: 'Wypłacono',
   FAILED: 'Nieudana',

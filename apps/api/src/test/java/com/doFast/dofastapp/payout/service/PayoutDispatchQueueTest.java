@@ -25,6 +25,8 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -131,7 +133,25 @@ class PayoutDispatchQueueTest {
     }
 
     @Test
-    void successfulProviderResultMarksPaidWithoutSecondWalletDebit() {
+    void submittedProviderResultWaitsForSettlementWithoutWalletMutation() {
+        User user = user(7L, UserStatus.ACTIVE);
+        PayoutRequest payout = payout(41L, user);
+        payout.startProcessing(LocalDateTime.now());
+        when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
+
+        queue.complete(41L, PayoutDispatchResult.submitted("provider-payout-41"));
+
+        assertEquals(PayoutStatus.SUBMITTED, payout.getStatus());
+        assertEquals("provider-payout-41", payout.getProviderReference());
+        assertNotNull(payout.getProviderSubmittedAt());
+        assertNull(payout.getResolvedAt());
+        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).debit(any(), any(), any(), any(), any());
+        verify(eventRepository).save(any());
+    }
+
+    @Test
+    void successfulSynchronousProviderResultMarksPaidWithoutSecondWalletDebit() {
         User user = user(7L, UserStatus.ACTIVE);
         PayoutRequest payout = payout(41L, user);
         payout.startProcessing(LocalDateTime.now());
@@ -141,6 +161,7 @@ class PayoutDispatchQueueTest {
 
         assertEquals(PayoutStatus.PAID, payout.getStatus());
         assertEquals("sandbox-payout-41", payout.getProviderReference());
+        assertNull(payout.getProviderSubmittedAt());
         verify(walletService, never()).credit(any(), any(), any(), any(), any());
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
     }

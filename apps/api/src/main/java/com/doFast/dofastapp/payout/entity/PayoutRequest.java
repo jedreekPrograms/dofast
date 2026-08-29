@@ -74,6 +74,9 @@ public class PayoutRequest {
     @Column(name = "processing_started_at")
     private LocalDateTime processingStartedAt;
 
+    @Column(name = "provider_submitted_at")
+    private LocalDateTime providerSubmittedAt;
+
     @Column(name = "resolved_at")
     private LocalDateTime resolvedAt;
 
@@ -109,6 +112,7 @@ public class PayoutRequest {
         this.requestedAt = now;
         this.nextAttemptAt = now;
         this.processingStartedAt = null;
+        this.providerSubmittedAt = null;
         this.resolvedAt = null;
         this.failureCode = null;
         this.lastErrorAt = null;
@@ -149,21 +153,38 @@ public class PayoutRequest {
         failureCode = null;
     }
 
+    public void markSubmitted(String providerReference, LocalDateTime now) {
+        requireStatus(PayoutStatus.PROCESSING);
+        requireProviderReference(providerReference);
+        status = PayoutStatus.SUBMITTED;
+        this.providerReference = providerReference.trim();
+        processingStartedAt = null;
+        providerSubmittedAt = now;
+        failureCode = null;
+    }
+
     public void markPaid(String providerReference, LocalDateTime now) {
         requireStatus(PayoutStatus.PROCESSING);
-        if (providerReference == null || providerReference.isBlank()) {
-            throw new IllegalArgumentException("Provider reference is required for paid payout");
-        }
+        requireProviderReference(providerReference);
         status = PayoutStatus.PAID;
-        this.providerReference = providerReference;
+        this.providerReference = providerReference.trim();
         processingStartedAt = null;
         resolvedAt = now;
         failureCode = null;
     }
 
+    public void markSubmittedPaid(LocalDateTime now) {
+        requireStatus(PayoutStatus.SUBMITTED);
+        status = PayoutStatus.PAID;
+        resolvedAt = now;
+        failureCode = null;
+    }
+
     public void markFailed(String code, LocalDateTime now) {
-        if (status != PayoutStatus.PROCESSING && status != PayoutStatus.REVIEW_REQUIRED) {
-            throw new IllegalStateException("Only processing or review-required payout can fail");
+        if (status != PayoutStatus.PROCESSING
+                && status != PayoutStatus.REVIEW_REQUIRED
+                && status != PayoutStatus.SUBMITTED) {
+            throw new IllegalStateException("Only processing, submitted or review-required payout can fail");
         }
         status = PayoutStatus.FAILED;
         processingStartedAt = null;
@@ -177,6 +198,12 @@ public class PayoutRequest {
         status = PayoutStatus.CANCELLED;
         processingStartedAt = null;
         resolvedAt = now;
+    }
+
+    private void requireProviderReference(String providerReference) {
+        if (providerReference == null || providerReference.isBlank()) {
+            throw new IllegalArgumentException("Provider reference is required for submitted payout");
+        }
     }
 
     private void requireStatus(PayoutStatus expected) {
@@ -197,6 +224,7 @@ public class PayoutRequest {
     public LocalDateTime getRequestedAt() { return requestedAt; }
     public LocalDateTime getNextAttemptAt() { return nextAttemptAt; }
     public LocalDateTime getProcessingStartedAt() { return processingStartedAt; }
+    public LocalDateTime getProviderSubmittedAt() { return providerSubmittedAt; }
     public LocalDateTime getResolvedAt() { return resolvedAt; }
     public String getFailureCode() { return failureCode; }
     public LocalDateTime getLastErrorAt() { return lastErrorAt; }

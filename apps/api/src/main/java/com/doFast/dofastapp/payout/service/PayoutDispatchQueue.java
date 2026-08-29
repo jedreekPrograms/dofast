@@ -126,10 +126,17 @@ public class PayoutDispatchQueue {
                 handleRetryableFailure(payout, "PROVIDER_REFERENCE_TOO_LONG", now);
                 return;
             }
-            payout.markPaid(reference, now);
-            payoutRepository.save(payout);
-            record(payout, PayoutEventType.PAID, PayoutEventSource.PROVIDER,
-                    "Provider potwierdził wypłatę.", now);
+            if (result.settlementPending()) {
+                payout.markSubmitted(reference, now);
+                payoutRepository.save(payout);
+                record(payout, PayoutEventType.SUBMITTED, PayoutEventSource.PROVIDER,
+                        "Provider przyjął wypłatę; środki pozostają zarezerwowane do potwierdzenia końcowego rozliczenia.", now);
+            } else {
+                payout.markPaid(reference, now);
+                payoutRepository.save(payout);
+                record(payout, PayoutEventType.PAID, PayoutEventSource.PROVIDER,
+                        "Provider synchronicznie potwierdził końcowe rozliczenie wypłaty.", now);
+            }
             return;
         }
 
