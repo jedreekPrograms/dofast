@@ -69,6 +69,8 @@ Admin dispute resolution is authoritative for the labor escrow and the expense e
 
 The approved amount cannot be negative, cannot have more than two decimal places and cannot exceed the cumulative amount of submitted claims. These checks run before wallet credits are created. The final expense escrow still obeys the conservation invariant `reimbursedAmount + refundedAmount = budgetAmount`, and the resolution event records the approved expense amount for auditability.
 
+Admin dispute detail responses additionally include `expenseSummary`: budget, claimed/reimbursed/refunded totals and immutable receipt-backed claims. This evidence is resolved through an explicit admin-only service path and is not added to participant dispute responses. The admin UI uses the summary to show the financial context before adjudication and prevents entering an exact approved amount above the current cumulative claims; backend validation remains authoritative.
+
 This separation is important commercially: a worker can be denied service compensation while still receiving reimbursement for independently verified materials, or can receive service compensation while only part of disputed receipts are accepted.
 
 ## API
@@ -80,9 +82,9 @@ Participant-only expense endpoints:
 - `GET /jobs/{jobId}/expenses` — current budget, claimed/reimbursed/refunded totals and immutable claims;
 - `POST /jobs/{jobId}/expenses/claims` — assigned worker submits `{ "amount": ..., "attachmentId": ... }` while the job is `IN_PROGRESS`.
 
-Admin dispute resolution accepts `{ "resolution": ..., "note": ..., "approvedExpenseAmount": ... }`; `approvedExpenseAmount` is optional for backward compatibility and must be omitted when resuming a job.
+Admin dispute resolution accepts `{ "resolution": ..., "note": ..., "approvedExpenseAmount": ... }`; `approvedExpenseAmount` is optional for backward compatibility and must be omitted when resuming a job. Admin dispute detail/claim/resolve responses carry the admin-only `expenseSummary` needed to adjudicate that amount safely.
 
-The receipt's storage key, encryption metadata and internal hash are never exposed by the expense API.
+The receipt's storage key, encryption metadata and internal hash are never exposed by the expense API or dispute evidence summary.
 
 ## Database invariants
 
