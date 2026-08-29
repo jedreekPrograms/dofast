@@ -48,6 +48,20 @@ public class StripeConnectMoneyMovementGateway {
         }
     }
 
+    public Payout retrieveConnectedPayout(String payoutId, String connectedAccountId) {
+        if (payoutId == null || payoutId.isBlank() || connectedAccountId == null || connectedAccountId.isBlank()) {
+            throw new IllegalArgumentException("Stripe payout and connected account ids are required");
+        }
+        try {
+            return Payout.retrieve(
+                    payoutId.trim(),
+                    RequestOptions.builder().setStripeAccount(connectedAccountId.trim()).build()
+            );
+        } catch (StripeException ex) {
+            throw new PaymentProviderException("Nie udało się odczytać wypłaty Stripe Connect", ex);
+        }
+    }
+
     public Payout createConnectedPayout(
             long amountInCents,
             String currency,
