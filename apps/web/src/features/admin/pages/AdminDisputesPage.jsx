@@ -22,6 +22,10 @@ const RESOLUTION_LABELS = {
   RESUME_JOB: 'Wznów zlecenie',
 }
 
+function formatMoney(value) {
+  return `${Number(value ?? 0).toFixed(2).replace('.', ',')} PLN`
+}
+
 function AdminDisputesPage() {
   const { user } = useAuth()
   const [pageData, setPageData] = useState(null)
@@ -129,6 +133,10 @@ function AdminDisputesPage() {
     if (!Number.isFinite(amount) || amount < 0 || amount > 99999.99) {
       throw new Error('Zatwierdzona kwota wydatków jest poza dozwolonym zakresem.')
     }
+    const claimed = Number(selected?.expenseSummary?.claimedAmount ?? 0)
+    if (amount > claimed) {
+      throw new Error(`Nie można zatwierdzić więcej niż zgłoszone ${formatMoney(claimed)}.`)
+    }
     return amount
   }
 
@@ -159,6 +167,8 @@ function AdminDisputesPage() {
   const defaultExpenseLabel = resolution === 'RELEASE_TO_WORKER'
     ? 'Domyślnie: zwróć wszystkie zgłoszone wydatki wykonawcy'
     : 'Domyślnie: nie zwracaj wydatków wykonawcy'
+
+  const expenseSummary = selected?.expenseSummary
 
   return (
     <main className="admin-disputes-page">
@@ -228,6 +238,35 @@ function AdminDisputesPage() {
 
               <div className="admin-dispute-description"><strong>Opis zgłoszenia</strong><p>{selected.dispute.description}</p></div>
 
+              {expenseSummary && (
+                <section className="admin-evidence">
+                  <div className="admin-evidence__heading">
+                    <div>
+                      <h3>Wydatki i paragony</h3>
+                      <p>Dane z prywatnego expense escrow, dostępne administratorowi wyłącznie przy obsłudze sporu.</p>
+                    </div>
+                  </div>
+                  <div className="admin-dispute-facts">
+                    <div><span>Budżet</span><strong>{formatMoney(expenseSummary.budgetAmount)}</strong></div>
+                    <div><span>Zgłoszone</span><strong>{formatMoney(expenseSummary.claimedAmount)}</strong></div>
+                    <div><span>Zwrócone wykonawcy</span><strong>{formatMoney(expenseSummary.reimbursedAmount)}</strong></div>
+                    <div><span>Zwrócone zlecającemu</span><strong>{formatMoney(expenseSummary.refundedAmount)}</strong></div>
+                  </div>
+                  {expenseSummary.claims?.length === 0 && <div className="page-state">Brak zgłoszonych wydatków.</div>}
+                  <div className="admin-evidence__messages">
+                    {expenseSummary.claims?.map((claim) => (
+                      <article className="admin-evidence-message" key={claim.id}>
+                        <div>
+                          <strong>{formatMoney(claim.amount)}</strong>
+                          <span>claim #{claim.id} · paragon #{claim.attachmentId} · wykonawca #{claim.workerId}</span>
+                        </div>
+                        <time>{new Date(claim.createdAt).toLocaleString('pl-PL')}</time>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section className="admin-evidence">
                 <div className="admin-evidence__heading">
                   <div><h3>Dowody z czatu</h3><p>Tylko wiadomości z zlecenia powiązanego z tą sprawą.</p></div>
@@ -286,7 +325,7 @@ function AdminDisputesPage() {
                             placeholder="np. 35,00"
                             required
                           />
-                          <small>Kwota nie może przekroczyć sumy zgłoszonych wydatków. Reszta budżetu wraca do zlecającego.</small>
+                          <small>Maksymalnie {formatMoney(expenseSummary?.claimedAmount)} — suma zgłoszonych wydatków. Reszta budżetu wraca do zlecającego.</small>
                         </label>
                       )}
                     </>
