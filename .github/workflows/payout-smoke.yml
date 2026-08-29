@@ -14,6 +14,7 @@ on:
       - "apps/api/src/main/resources/db/migration/V39__worker_payout_requests.sql"
       - "apps/api/src/main/resources/db/migration/V44__stripe_connect_payout_recipients.sql"
       - "apps/api/src/main/resources/db/migration/V45__asynchronous_payout_settlement.sql"
+      - "apps/api/src/main/resources/db/migration/V46__stripe_connect_payout_dispatch.sql"
       - "apps/web/src/features/wallet/**"
       - "apps/web/src/features/admin/pages/AdminPayoutsPage.jsx"
   pull_request:
@@ -29,6 +30,7 @@ on:
       - "apps/api/src/main/resources/db/migration/V39__worker_payout_requests.sql"
       - "apps/api/src/main/resources/db/migration/V44__stripe_connect_payout_recipients.sql"
       - "apps/api/src/main/resources/db/migration/V45__asynchronous_payout_settlement.sql"
+      - "apps/api/src/main/resources/db/migration/V46__stripe_connect_payout_dispatch.sql"
       - "apps/web/src/features/wallet/**"
       - "apps/web/src/features/admin/pages/AdminPayoutsPage.jsx"
 
@@ -55,6 +57,7 @@ jobs:
           sed -i 's/^PAYOUT_PROVIDER=.*/PAYOUT_PROVIDER=sandbox/' .env
           sed -i 's/^PAYOUT_SANDBOX_ENABLED=.*/PAYOUT_SANDBOX_ENABLED=true/' .env
           sed -i 's/^PAYOUT_STRIPE_CONNECT_ENABLED=.*/PAYOUT_STRIPE_CONNECT_ENABLED=false/' .env
+          sed -i 's/^PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED=.*/PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED=false/' .env
           # Keep a wide deterministic cancellation window. Production keeps the normal 2s dispatcher cadence.
           sed -i 's/^PAYOUT_DISPATCH_INTERVAL_MS=.*/PAYOUT_DISPATCH_INTERVAL_MS=15000/' .env
 

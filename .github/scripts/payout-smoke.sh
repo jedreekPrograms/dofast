@@ -42,6 +42,9 @@ test "$RECIPIENT_TABLE" = "1"
 ASYNC_COLUMNS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT count(*) FROM information_schema.columns WHERE table_name='payout_requests' AND column_name='provider_submitted_at';" | tr -d '[:space:]')
 test "$ASYNC_COLUMNS" = "1"
+TRANSFER_REFERENCE_COLUMN=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT count(*) FROM information_schema.columns WHERE table_name='payout_requests' AND column_name='provider_transfer_reference';" | tr -d '[:space:]')
+test "$TRANSFER_REFERENCE_COLUMN" = "1"
 PROVIDER_EVENTS_TABLE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='payout_provider_events';" | tr -d '[:space:]')
 test "$PROVIDER_EVENTS_TABLE" = "1"
@@ -150,6 +153,9 @@ test "$PAID" = "yes"
 PROVIDER_REFERENCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT provider_reference FROM payout_requests WHERE id=$PAYOUT_ID;" | tr -d '[:space:]')
 test "$PROVIDER_REFERENCE" = "sandbox-payout-$PAYOUT_ID"
+PROVIDER_TRANSFER_REFERENCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT COALESCE(provider_transfer_reference, '') FROM payout_requests WHERE id=$PAYOUT_ID;" | tr -d '[:space:]')
+test -z "$PROVIDER_TRANSFER_REFERENCE"
 PROVIDER_SUBMITTED_AT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT COALESCE(provider_submitted_at::text, '') FROM payout_requests WHERE id=$PAYOUT_ID;" | tr -d '[:space:]')
 test -z "$PROVIDER_SUBMITTED_AT"
