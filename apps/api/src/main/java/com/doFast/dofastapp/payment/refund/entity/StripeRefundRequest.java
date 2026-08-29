@@ -147,6 +147,17 @@ public class StripeRefundRequest {
         updatedAt = now;
     }
 
+    public void markReviewRequired(String failureReason, LocalDateTime now) {
+        if (status != StripeRefundStatus.DISPATCHING && status != StripeRefundStatus.REQUESTED) {
+            return;
+        }
+        status = StripeRefundStatus.REVIEW_REQUIRED;
+        this.failureReason = normalizeFailure(failureReason);
+        nextAttemptAt = null;
+        resolvedAt = null;
+        updatedAt = now;
+    }
+
     public boolean applyProviderEvent(
             String refundId,
             String providerStatus,

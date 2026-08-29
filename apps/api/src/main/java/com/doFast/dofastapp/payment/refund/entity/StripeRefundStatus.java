@@ -7,5 +7,6 @@ public enum StripeRefundStatus {
     REQUIRES_ACTION,
     SUCCEEDED,
     FAILED,
-    CANCELED
+    CANCELED,
+    REVIEW_REQUIRED
 }

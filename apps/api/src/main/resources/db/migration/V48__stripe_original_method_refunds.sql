@@ -30,7 +30,7 @@ CREATE TABLE stripe_refund_requests (
     ),
     CONSTRAINT chk_stripe_refund_requests_attempt CHECK (attempt_count >= 0),
     CONSTRAINT chk_stripe_refund_requests_status CHECK (
-        status IN ('REQUESTED', 'DISPATCHING', 'PENDING', 'REQUIRES_ACTION', 'SUCCEEDED', 'FAILED', 'CANCELED')
+        status IN ('REQUESTED', 'DISPATCHING', 'PENDING', 'REQUIRES_ACTION', 'SUCCEEDED', 'FAILED', 'CANCELED', 'REVIEW_REQUIRED')
     )
 );
 
