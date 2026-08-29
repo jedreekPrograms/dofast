@@ -4,6 +4,7 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
@@ -38,6 +39,7 @@ class JobAcceptanceBlockPolicyTest {
     @Mock private LiveTrackingService liveTrackingService;
     @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
     @Mock private UserBlockService userBlockService;
+    @Mock private JobExpenseService expenseService;
 
     private JobService jobService;
     private User owner;
@@ -53,7 +55,8 @@ class JobAcceptanceBlockPolicyTest {
                 routeQuoteService,
                 liveTrackingService,
                 jobPublicationOutboxRepository,
-                userBlockService
+                userBlockService,
+                expenseService
         );
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
