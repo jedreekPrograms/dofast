@@ -54,7 +54,7 @@ class JobAttachmentServiceTest {
         assertEquals("lista.png", response.originalFilename());
         assertEquals("image/png", response.mediaType());
         assertEquals(JobAttachmentVisibility.PARTICIPANTS, response.visibility());
-        verify(accessPolicy).assertCanUpload(job, creator);
+        verify(accessPolicy).assertCanUpload(job, creator, JobAttachmentVisibility.PARTICIPANTS);
         verify(filePolicy).assertCanAdd(0L);
     }
 
