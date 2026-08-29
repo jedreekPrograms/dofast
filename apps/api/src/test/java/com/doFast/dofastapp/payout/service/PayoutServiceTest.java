@@ -58,7 +58,7 @@ class PayoutServiceTest {
                 userRepository,
                 verificationRepository,
                 walletService,
-                new PayoutProperties("sandbox", true, new BigDecimal("1.00"), 5, 15, 300),
+                new PayoutProperties("sandbox", true, new BigDecimal("1.00"), 5, 15, 300, 300),
                 providerRegistry,
                 onboardingService
         );
