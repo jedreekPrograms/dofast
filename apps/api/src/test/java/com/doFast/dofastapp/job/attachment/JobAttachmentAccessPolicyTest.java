@@ -77,10 +77,14 @@ class JobAttachmentAccessPolicyTest {
         JobAttachmentAccessPolicy policy = new JobAttachmentAccessPolicy(userBlockService);
         when(job.getCreatedBy()).thenReturn(creator);
         when(creator.getId()).thenReturn(10L);
-        when(job.getStatus()).thenReturn(JobStatus.OPEN, JobStatus.IN_PROGRESS, JobStatus.COMPLETION_REQUESTED);
 
+        when(job.getStatus()).thenReturn(JobStatus.OPEN);
         assertDoesNotThrow(() -> policy.assertCanUpload(job, creator, JobAttachmentVisibility.JOB_VIEWERS));
+
+        when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
         assertDoesNotThrow(() -> policy.assertCanUpload(job, creator, JobAttachmentVisibility.EXECUTION_SECRET));
+
+        when(job.getStatus()).thenReturn(JobStatus.COMPLETION_REQUESTED);
         assertThrows(ConflictException.class,
                 () -> policy.assertCanUpload(job, creator, JobAttachmentVisibility.PARTICIPANTS));
     }
