@@ -38,7 +38,7 @@ A claim is accepted only when all of the following are true:
 5. the receipt attachment has not already been used by another claim;
 6. the new claim keeps the cumulative claimed amount within the original budget.
 
-Worker receipt uploads are intentionally constrained by the attachment policy: the assigned worker can create only `PARTICIPANTS` attachments and only while the job is `IN_PROGRESS`. Ordinary participant evidence becomes immutable after assignment, preserving the financial audit trail.
+Worker receipt uploads are intentionally constrained by the attachment policy: the assigned worker can create only `PARTICIPANTS` attachments and only while the job is `IN_PROGRESS`. Once an attachment is referenced by an expense claim, it becomes retained financial evidence: normal attachment deletion is rejected and the encrypted storage object is preserved. This prevents a worker or requester from removing the receipt after it has entered the reimbursement audit trail.
 
 Claims are immutable in this first production version. Corrections that would change reimbursement evidence should therefore go through dispute handling rather than silently rewriting history.
 
@@ -80,4 +80,4 @@ The receipt's storage key, encryption metadata and internal hash are never expos
 
 Flyway `V42__job_expense_escrow.sql` adds the job budget, one expense escrow per job and receipt-backed claims. Database checks enforce non-negative bounded amounts, allowed escrow states and terminal conservation of funds. Each attachment can back at most one expense claim.
 
-Application writes additionally use pessimistic job/expense locks and idempotent wallet operation keys. Concurrent claims for the same job therefore serialize against the same held budget, preventing cumulative claims from exceeding it.
+Application writes additionally use pessimistic job/expense locks and idempotent wallet operation keys. Concurrent claims for the same job therefore serialize against the same held budget, preventing cumulative claims from exceeding it. Claimed receipts are also protected at the attachment-service boundary so soft deletion cannot make financial evidence disappear while a claim still references it.
