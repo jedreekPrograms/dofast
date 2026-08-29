@@ -126,9 +126,15 @@ public class JobPublicationService {
 
     @Transactional
     public boolean expireOne() {
+        return expireOneAndGetId() != null;
+    }
+
+    @Transactional
+    public Long expireOneAndGetId() {
         JobPublication publication = publicationRepository.findFirstByStatusAndExpiresAtBeforeOrderByExpiresAtAscIdAsc(
                 JobPublicationStatus.PAYMENT_REQUIRED, LocalDateTime.now()).orElse(null);
-        return publication != null && expireIfNecessary(publication, LocalDateTime.now());
+        if (publication == null || !expireIfNecessary(publication, LocalDateTime.now())) return null;
+        return publication.getId();
     }
 
     boolean expireIfNecessary(JobPublication publication, LocalDateTime now) {
