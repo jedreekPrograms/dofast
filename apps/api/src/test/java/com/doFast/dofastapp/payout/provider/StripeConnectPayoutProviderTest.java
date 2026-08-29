@@ -18,7 +18,6 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -41,22 +40,19 @@ class StripeConnectPayoutProviderTest {
     void setUp() {
         provider = new StripeConnectPayoutProvider(recipientRepository, connectGateway, moneyGateway, dispatchStateService);
         command = new PayoutDispatchCommand(41L, 7L, new BigDecimal("125.00"), "PLN", "stripe-connect", "payout:41:provider", 1);
-        User user = new User();
         recipient = new PayoutRecipientAccount();
-        recipient.initialize(user, "stripe-connect", "acct_123", LocalDateTime.now());
+        recipient.initialize(new User(), "stripe-connect", "acct_123", LocalDateTime.now());
         when(recipientRepository.findByUser_IdAndProviderCode(7L, "stripe-connect")).thenReturn(Optional.of(recipient));
         when(connectGateway.retrieveState("acct_123")).thenReturn(new StripeConnectAccountState(true, true, true, false));
     }
 
     @Test
     void persistsTransferBeforeSubmittingConnectedPayout() {
-        Transfer transfer = transfer("tr_123");
-        Payout payout = payout("po_123", "pending");
         when(dispatchStateService.transferReference(41L)).thenReturn(null);
         when(moneyGateway.createTransfer(12500L, "pln", "acct_123", 41L, 7L, "payout:41:provider:transfer"))
-                .thenReturn(transfer);
+                .thenReturn(transfer("tr_123"));
         when(moneyGateway.createConnectedPayout(12500L, "pln", "acct_123", 41L, 7L, "tr_123", "payout:41:provider:payout"))
-                .thenReturn(payout);
+                .thenReturn(payout("po_123", "pending"));
 
         PayoutDispatchResult result = provider.dispatch(command);
 
@@ -74,28 +70,18 @@ class StripeConnectPayoutProviderTest {
         when(dispatchStateService.transferReference(41L)).thenReturn("tr_123");
         when(moneyGateway.retrieveTransfer("tr_123")).thenReturn(transfer("tr_123"));
         when(moneyGateway.createConnectedPayout(12500L, "pln", "acct_123", 41L, 7L, "tr_123", "payout:41:provider:payout"))
-                .thenReturn(payout("po_123", "pending"));
+                .thenReturn(payout("po_123", "failed"));
 
         PayoutDispatchResult result = provider.dispatch(command);
 
+        assertTrue(result.successful());
         assertTrue(result.settlementPending());
         verify(moneyGateway, never()).createTransfer(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(dispatchStateService, never()).recordTransferReference(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
-    }
-
-    @Test
-    void immediateFailedPayoutReclaimsTransferBeforeFundsCanBeRestored() {
-        when(dispatchStateService.transferReference(41L)).thenReturn("tr_123");
-        when(moneyGateway.retrieveTransfer("tr_123")).thenReturn(transfer("tr_123"));
-        when(moneyGateway.createConnectedPayout(12500L, "pln", "acct_123", 41L, 7L, "tr_123", "payout:41:provider:payout"))
-                .thenReturn(payout("po_failed", "failed"));
-
-        PayoutDispatchResult result = provider.dispatch(command);
-
-        assertFalse(result.successful());
-        assertFalse(result.retryable());
-        verify(moneyGateway).reverseTransfer("tr_123", 12500L, 41L, "payout:41:provider:transfer-reversal");
+        verify(moneyGateway, never()).reverseTransfer(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
     }
 
     private Transfer transfer(String id) {

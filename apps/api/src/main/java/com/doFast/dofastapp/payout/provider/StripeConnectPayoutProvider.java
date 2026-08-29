@@ -91,16 +91,9 @@ public class StripeConnectPayoutProvider implements PayoutProvider {
         );
         validatePayout(payout, amountInCents, currency, transferId, command);
 
-        if ("failed".equals(payout.getStatus()) || "canceled".equals(payout.getStatus())) {
-            moneyGateway.reverseTransfer(
-                    transferId,
-                    amountInCents,
-                    command.payoutId(),
-                    command.idempotencyKey() + ":transfer-reversal"
-            );
-            return PayoutDispatchResult.definitiveFailure("STRIPE_PAYOUT_" + payout.getStatus().toUpperCase(Locale.ROOT));
-        }
-
+        // Even if Stripe already reports a terminal-looking status here, settlement remains webhook-authoritative.
+        // Returning SUBMITTED preserves the provider reference and prevents a local wallet restore racing money
+        // that may already have left the connected account.
         return PayoutDispatchResult.submitted(payout.getId());
     }
 

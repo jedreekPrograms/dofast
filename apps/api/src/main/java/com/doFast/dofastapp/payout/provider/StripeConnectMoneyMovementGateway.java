@@ -78,10 +78,14 @@ public class StripeConnectMoneyMovementGateway {
     public void reverseTransfer(
             String transferId,
             long amountInCents,
+            String currency,
+            String connectedAccountId,
             Long payoutId,
+            Long userId,
             String idempotencyKey
     ) {
         Transfer transfer = retrieveTransfer(transferId);
+        requireMatchingTransfer(transfer, amountInCents, currency, connectedAccountId, payoutId, userId);
         long alreadyReversed = transfer.getAmountReversed() == null ? 0L : transfer.getAmountReversed();
         if (Boolean.TRUE.equals(transfer.getReversed()) || alreadyReversed >= amountInCents) {
             return;
@@ -102,6 +106,25 @@ public class StripeConnectMoneyMovementGateway {
                     );
         } catch (StripeException ex) {
             throw new PaymentProviderException("Nie udało się odzyskać środków z nieudanej wypłaty Stripe Connect", ex);
+        }
+    }
+
+    private void requireMatchingTransfer(
+            Transfer transfer,
+            long amountInCents,
+            String currency,
+            String connectedAccountId,
+            Long payoutId,
+            Long userId
+    ) {
+        if (transfer == null || transfer.getId() == null || transfer.getId().isBlank()
+                || transfer.getAmount() == null || transfer.getAmount() != amountInCents
+                || transfer.getCurrency() == null || !currency.equalsIgnoreCase(transfer.getCurrency())
+                || transfer.getDestination() == null || !connectedAccountId.equals(transfer.getDestination())
+                || transfer.getMetadata() == null
+                || !payoutId.toString().equals(transfer.getMetadata().get("dofastPayoutId"))
+                || !userId.toString().equals(transfer.getMetadata().get("dofastUserId"))) {
+            throw new IllegalStateException("Stripe Connect transfer does not match payout request");
         }
     }
 }

@@ -3,9 +3,12 @@ package com.doFast.dofastapp.payment.webhook;
 import com.doFast.dofastapp.job.publication.JobPublicationPaymentIntentService;
 import com.doFast.dofastapp.job.publication.JobPublicationStripeSettlementService;
 import com.doFast.dofastapp.payment.service.StripePaymentService;
+import com.doFast.dofastapp.payout.provider.PayoutProviderSettlementResult;
+import com.doFast.dofastapp.payout.service.StripeConnectPayoutSettlementService;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.Payout;
 import com.stripe.model.StripeObject;
 import com.stripe.net.Webhook;
 import org.slf4j.Logger;
@@ -28,15 +31,18 @@ public class StripeWebhookController {
     private final String endpointSecret;
     private final StripePaymentService stripePaymentService;
     private final JobPublicationStripeSettlementService publicationSettlementService;
+    private final StripeConnectPayoutSettlementService payoutSettlementService;
 
     public StripeWebhookController(
             @Value("${stripe.webhook.secret}") String endpointSecret,
             StripePaymentService stripePaymentService,
-            JobPublicationStripeSettlementService publicationSettlementService
+            JobPublicationStripeSettlementService publicationSettlementService,
+            StripeConnectPayoutSettlementService payoutSettlementService
     ) {
         this.endpointSecret = endpointSecret;
         this.stripePaymentService = stripePaymentService;
         this.publicationSettlementService = publicationSettlementService;
+        this.payoutSettlementService = payoutSettlementService;
     }
 
     @PostMapping
@@ -52,10 +58,18 @@ public class StripeWebhookController {
             return ResponseEntity.badRequest().body("invalid signature");
         }
 
-        if (!"payment_intent.succeeded".equals(event.getType())) {
-            return ResponseEntity.ok("ignored");
+        if ("payment_intent.succeeded".equals(event.getType())) {
+            return handleSuccessfulPayment(event);
         }
+        if ("payout.paid".equals(event.getType())
+                || "payout.failed".equals(event.getType())
+                || "payout.updated".equals(event.getType())) {
+            return handlePayoutEvent(event);
+        }
+        return ResponseEntity.ok("ignored");
+    }
 
+    private ResponseEntity<String> handleSuccessfulPayment(Event event) {
         StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
         if (!(stripeObject instanceof PaymentIntent paymentIntent)) {
             log.error("Unable to deserialize Stripe event {} of type {}", event.getId(), event.getType());
@@ -70,16 +84,30 @@ public class StripeWebhookController {
                 log.info("Stripe event {} / PaymentIntent {} was already processed", event.getId(), paymentIntent.getId());
                 return ResponseEntity.ok("already processed");
             }
-
             log.info("Processed Stripe event {} / PaymentIntent {}", event.getId(), paymentIntent.getId());
             return ResponseEntity.ok("ok");
         } catch (RuntimeException ex) {
-            log.error(
-                    "Failed to process Stripe event {} / PaymentIntent {}",
-                    event.getId(),
-                    paymentIntent.getId(),
-                    ex
-            );
+            log.error("Failed to process Stripe event {} / PaymentIntent {}", event.getId(), paymentIntent.getId(), ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
+        }
+    }
+
+    private ResponseEntity<String> handlePayoutEvent(Event event) {
+        StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
+        if (!(stripeObject instanceof Payout payout)) {
+            log.error("Unable to deserialize Stripe event {} of type {}", event.getId(), event.getType());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("unable to deserialize event");
+        }
+
+        try {
+            PayoutProviderSettlementResult result = payoutSettlementService.process(payout, event.getId(), event.getAccount());
+            if (result == null) {
+                return ResponseEntity.ok("ignored");
+            }
+            log.info("Processed Stripe Connect payout event {} / payout {} as {}", event.getId(), payout.getId(), result);
+            return ResponseEntity.ok(result == PayoutProviderSettlementResult.APPLIED ? "ok" : "already processed");
+        } catch (RuntimeException ex) {
+            log.error("Failed to process Stripe Connect payout event {} / payout {}", event.getId(), payout.getId(), ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
         }
     }
