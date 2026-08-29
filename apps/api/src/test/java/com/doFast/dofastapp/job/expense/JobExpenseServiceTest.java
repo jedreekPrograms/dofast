@@ -84,7 +84,6 @@ class JobExpenseServiceTest {
         when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
         when(job.getTakenBy()).thenReturn(worker);
         when(worker.getId()).thenReturn(23L);
-        when(receipt.getId()).thenReturn(900L);
         JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("80.00"), java.time.LocalDateTime.now());
         when(escrowRepository.findByJobIdForUpdate(73L)).thenReturn(Optional.of(escrow));
         when(attachmentRepository.findByIdAndJob_IdAndDeletedAtIsNull(900L, 73L)).thenReturn(Optional.of(receipt));
