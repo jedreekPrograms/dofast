@@ -39,16 +39,7 @@ public class JobPublicationPaymentIntentService {
             throw new ConflictException("Czas na opłacenie publikacji wygasł");
         }
 
-        long amountInCents = publication.getPaymentAmount().movePointRight(2).longValueExact();
-        PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
-                .setAmount(amountInCents)
-                .setCurrency(publication.getCurrency().toLowerCase(Locale.ROOT))
-                .putMetadata("userId", publication.getUser().getId().toString())
-                .putMetadata("purpose", PURPOSE)
-                .putMetadata("jobPublicationId", publication.getId().toString())
-                .putMetadata("topUpRequestId", "job-publication-" + publication.getId())
-                .setAutomaticPaymentMethods(automaticPaymentMethods())
-                .build();
+        PaymentIntentCreateParams params = paymentIntentParams(publication);
         RequestOptions options = RequestOptions.builder()
                 .setIdempotencyKey("dofast:job-publication:" + publication.getId())
                 .build();
@@ -74,6 +65,18 @@ public class JobPublicationPaymentIntentService {
         } catch (StripeException ex) {
             throw new PaymentProviderException("Nie udało się przygotować płatności za publikację", ex);
         }
+    }
+
+    static PaymentIntentCreateParams paymentIntentParams(JobPublication publication) {
+        long amountInCents = publication.getPaymentAmount().movePointRight(2).longValueExact();
+        return PaymentIntentCreateParams.builder()
+                .setAmount(amountInCents)
+                .setCurrency(publication.getCurrency().toLowerCase(Locale.ROOT))
+                .putMetadata("userId", publication.getUser().getId().toString())
+                .putMetadata("purpose", PURPOSE)
+                .putMetadata("jobPublicationId", publication.getId().toString())
+                .setAutomaticPaymentMethods(automaticPaymentMethods())
+                .build();
     }
 
     static PaymentIntentCreateParams.AutomaticPaymentMethods automaticPaymentMethods() {
