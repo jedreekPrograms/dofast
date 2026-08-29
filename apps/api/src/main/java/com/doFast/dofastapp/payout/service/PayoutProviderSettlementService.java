@@ -85,7 +85,7 @@ public class PayoutProviderSettlementService {
                         PayoutEventType.FUNDS_RESTORED,
                         PayoutEventSource.SYSTEM,
                         null,
-                        "Zarezerwowane środki wróciły do portfela po potwierdzonym niepowodzeniu providera.",
+                        "Dokładnie te same źródła zarezerwowanych środków wróciły do portfela.",
                         now
                 ));
             }
@@ -112,12 +112,13 @@ public class PayoutProviderSettlementService {
     }
 
     private void restoreFunds(PayoutRequest payout) {
-        boolean restored = walletService.credit(
+        boolean restored = walletService.creditRestoringOperation(
                 payout.getUser().getId(),
                 payout.getAmount(),
                 WalletTransactionType.PAYOUT_RESTORE,
                 null,
-                "payout:" + payout.getId() + ":restore"
+                "payout:" + payout.getId() + ":restore",
+                payout.getRequestKey() + ":reserve"
         );
         if (!restored) {
             throw new ConflictException("Wykryto niespójny stan zwrotu zarezerwowanej wypłaty");

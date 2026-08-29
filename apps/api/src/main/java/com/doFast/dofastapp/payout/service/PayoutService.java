@@ -73,7 +73,7 @@ public class PayoutService {
         boolean recipientReady = recipientSetupAvailable && onboardingService.isRecipientReady(currentUser.getId());
         boolean recipientRequired = StripeConnectOnboardingService.PROVIDER_CODE.equals(configuredProvider);
         boolean recipientRequirementSatisfied = !recipientRequired || recipientReady;
-        BigDecimal balance = walletService.getMyWallet(currentUser.getId()).getBalance();
+        BigDecimal balance = walletService.getWithdrawableBalance(currentUser.getId());
         return new PayoutEligibilityResponse(
                 verified,
                 providerAvailable,
@@ -140,7 +140,7 @@ public class PayoutService {
         }
 
         record(saved, PayoutEventType.REQUESTED, PayoutEventSource.USER, lockedUser,
-                "Środki zostały zarezerwowane do wypłaty.", now);
+                "Środki kwalifikujące się do wypłaty zostały zarezerwowane.", now);
         return toResponse(saved);
     }
 
@@ -162,7 +162,7 @@ public class PayoutService {
         record(payout, PayoutEventType.CANCELLED, PayoutEventSource.USER, currentUser,
                 "Wypłata została anulowana przez użytkownika.", now);
         record(payout, PayoutEventType.FUNDS_RESTORED, PayoutEventSource.SYSTEM, null,
-                "Zarezerwowane środki wróciły do portfela.", now);
+                "Zarezerwowane źródła środków wróciły do portfela.", now);
         return toResponse(payout);
     }
 
@@ -176,12 +176,13 @@ public class PayoutService {
     }
 
     private void restoreFunds(PayoutRequest payout) {
-        boolean restored = walletService.credit(
+        boolean restored = walletService.creditRestoringOperation(
                 payout.getUser().getId(),
                 payout.getAmount(),
                 WalletTransactionType.PAYOUT_RESTORE,
                 null,
-                restoreOperationKey(payout)
+                restoreOperationKey(payout),
+                reserveOperationKey(payout.getRequestKey())
         );
         if (!restored) {
             throw new ConflictException("Wykryto niespójny stan zwrotu zarezerwowanej wypłaty");

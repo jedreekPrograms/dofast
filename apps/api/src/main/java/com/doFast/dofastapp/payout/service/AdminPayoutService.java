@@ -114,12 +114,13 @@ public class AdminPayoutService {
         LocalDateTime now = LocalDateTime.now();
         payout.markFailed("ADMIN_DECLINED", now);
         payoutRepository.save(payout);
-        boolean restored = walletService.credit(
+        boolean restored = walletService.creditRestoringOperation(
                 payout.getUser().getId(),
                 payout.getAmount(),
                 WalletTransactionType.PAYOUT_RESTORE,
                 null,
-                "payout:" + payout.getId() + ":restore"
+                "payout:" + payout.getId() + ":restore",
+                payout.getRequestKey() + ":reserve"
         );
         if (!restored) {
             throw new ConflictException("Wykryto niespójny stan zwrotu zarezerwowanej wypłaty");
@@ -137,7 +138,7 @@ public class AdminPayoutService {
                 PayoutEventType.FUNDS_RESTORED,
                 PayoutEventSource.SYSTEM,
                 null,
-                "Zarezerwowane środki wróciły do portfela po decyzji administratora.",
+                "Dokładnie te same źródła zarezerwowanych środków wróciły do portfela po decyzji administratora.",
                 now
         ));
         return toAdminResponse(payout);

@@ -168,8 +168,14 @@ public class JobPublicationService {
 
     void restoreReservation(JobPublication publication) {
         if (publication.getWalletReservedAmount().signum() <= 0) return;
-        walletService.credit(publication.getUser().getId(), publication.getWalletReservedAmount(),
-                WalletTransactionType.JOB_PUBLICATION_RELEASE, null, releaseOperationKey(publication.getId()));
+        walletService.creditRestoringOperation(
+                publication.getUser().getId(),
+                publication.getWalletReservedAmount(),
+                WalletTransactionType.JOB_PUBLICATION_RELEASE,
+                null,
+                releaseOperationKey(publication.getId()),
+                reserveOperationKey(publication.getRequestKey())
+        );
     }
 
     JobPublicationResponse toResponse(JobPublication publication) {

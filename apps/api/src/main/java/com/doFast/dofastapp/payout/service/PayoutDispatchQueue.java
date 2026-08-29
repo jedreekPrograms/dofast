@@ -152,7 +152,7 @@ public class PayoutDispatchQueue {
         record(payout, PayoutEventType.FAILED, PayoutEventSource.PROVIDER,
                 "Provider definitywnie odrzucił wypłatę.", now);
         record(payout, PayoutEventType.FUNDS_RESTORED, PayoutEventSource.SYSTEM,
-                "Zarezerwowane środki wróciły do portfela po definitywnym niepowodzeniu.", now);
+                "Dokładnie te same źródła zarezerwowanych środków wróciły do portfela.", now);
     }
 
     private void handleRetryableFailure(PayoutRequest payout, String code, LocalDateTime now) {
@@ -170,12 +170,13 @@ public class PayoutDispatchQueue {
     }
 
     private void restoreFunds(PayoutRequest payout) {
-        boolean restored = walletService.credit(
+        boolean restored = walletService.creditRestoringOperation(
                 payout.getUser().getId(),
                 payout.getAmount(),
                 WalletTransactionType.PAYOUT_RESTORE,
                 null,
-                "payout:" + payout.getId() + ":restore"
+                "payout:" + payout.getId() + ":restore",
+                payout.getRequestKey() + ":reserve"
         );
         if (!restored) {
             throw new ConflictException("Wykryto niespójny stan zwrotu zarezerwowanej wypłaty");

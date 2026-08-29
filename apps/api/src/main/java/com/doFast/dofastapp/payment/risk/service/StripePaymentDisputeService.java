@@ -164,12 +164,14 @@ public class StripePaymentDisputeService {
     private void reinstateRecoveredWalletFunds(StripePaymentDispute exposure, LocalDateTime now) {
         BigDecimal returnAmount = exposure.amountToReturnToWallet();
         if (returnAmount.signum() > 0) {
-            boolean credited = walletService.credit(
+            boolean credited = walletService.creditRestoringOperationPrefix(
                     exposure.getUserId(),
                     returnAmount,
                     WalletTransactionType.CHARGEBACK_REINSTATEMENT,
                     null,
-                    "stripe:dispute:" + exposure.getStripeDisputeId() + ":reinstatement"
+                    "stripe:dispute:" + exposure.getStripeDisputeId() + ":reinstatement",
+                    WalletTransactionType.CHARGEBACK_RECOVERY,
+                    "stripe:dispute:" + exposure.getStripeDisputeId() + ":recovery:"
             );
             if (!credited) {
                 throw new ConflictException("Chargeback reinstatement ledger exists without matching dispute state");
