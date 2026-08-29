@@ -62,6 +62,8 @@ class StripePaymentServiceTest {
                 eq(7L),
                 eq(new BigDecimal("25.00")),
                 eq("PLN"),
+                eq("TOP_UP"),
+                eq("legacy-pi_123"),
                 any(LocalDateTime.class)
         )).thenReturn(1);
         when(walletService.credit(
@@ -86,13 +88,15 @@ class StripePaymentServiceTest {
     @Test
     void duplicatePaymentIntentDoesNotCreditWalletAgainWhenStoredDataMatches() {
         PaymentIntent intent = succeededIntent("pi_123", 2500L, "pln", "7");
-        PaymentTransaction stored = storedPayment(7L, "25.00", "PLN");
+        PaymentTransaction stored = storedPayment(7L, "25.00", "PLN", "TOP_UP", "legacy-pi_123");
         when(paymentTransactionRepository.claimSuccessfulPayment(
                 eq("pi_123"),
                 eq("evt_retry"),
                 eq(7L),
                 eq(new BigDecimal("25.00")),
                 eq("PLN"),
+                eq("TOP_UP"),
+                eq("legacy-pi_123"),
                 any(LocalDateTime.class)
         )).thenReturn(0);
         when(paymentTransactionRepository.findByStripePaymentIntentId("pi_123"))
@@ -109,15 +113,32 @@ class StripePaymentServiceTest {
     }
 
     @Test
+    void migratedLegacyTopUpWithoutStoredReferenceRemainsIdempotent() {
+        PaymentIntent intent = succeededIntent("pi_123", 2500L, "pln", "7");
+        PaymentTransaction stored = storedPayment(7L, "25.00", "PLN", "TOP_UP", null);
+        when(paymentTransactionRepository.claimSuccessfulPayment(
+                eq("pi_123"), eq("evt_retry"), eq(7L), eq(new BigDecimal("25.00")), eq("PLN"),
+                eq("TOP_UP"), eq("legacy-pi_123"), any(LocalDateTime.class)
+        )).thenReturn(0);
+        when(paymentTransactionRepository.findByStripePaymentIntentId("pi_123"))
+                .thenReturn(Optional.of(stored));
+
+        assertFalse(stripePaymentService.processSuccessfulPayment(intent, "evt_retry"));
+        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void duplicatePaymentIntentWithDifferentStoredAmountIsConflict() {
         PaymentIntent intent = succeededIntent("pi_123", 2500L, "pln", "7");
-        PaymentTransaction stored = storedPayment(7L, "24.00", "PLN");
+        PaymentTransaction stored = storedPayment(7L, "24.00", "PLN", "TOP_UP", "legacy-pi_123");
         when(paymentTransactionRepository.claimSuccessfulPayment(
                 eq("pi_123"),
                 eq("evt_retry"),
                 eq(7L),
                 eq(new BigDecimal("25.00")),
                 eq("PLN"),
+                eq("TOP_UP"),
+                eq("legacy-pi_123"),
                 any(LocalDateTime.class)
         )).thenReturn(0);
         when(paymentTransactionRepository.findByStripePaymentIntentId("pi_123"))
@@ -145,6 +166,8 @@ class StripePaymentServiceTest {
                 eq(7L),
                 eq(new BigDecimal("25.00")),
                 eq("PLN"),
+                eq("TOP_UP"),
+                eq("legacy-pi_new"),
                 any(LocalDateTime.class)
         )).thenReturn(0);
         when(paymentTransactionRepository.findByStripePaymentIntentId("pi_new"))
@@ -175,12 +198,8 @@ class StripePaymentServiceTest {
         );
 
         verify(paymentTransactionRepository, never()).claimSuccessfulPayment(
-                any(String.class),
-                any(String.class),
-                any(Long.class),
-                any(BigDecimal.class),
-                any(String.class),
-                any(LocalDateTime.class)
+                any(String.class), any(String.class), any(Long.class), any(BigDecimal.class),
+                any(String.class), any(String.class), any(String.class), any(LocalDateTime.class)
         );
     }
 
@@ -194,12 +213,8 @@ class StripePaymentServiceTest {
         );
 
         verify(paymentTransactionRepository, never()).claimSuccessfulPayment(
-                any(String.class),
-                any(String.class),
-                any(Long.class),
-                any(BigDecimal.class),
-                any(String.class),
-                any(LocalDateTime.class)
+                any(String.class), any(String.class), any(Long.class), any(BigDecimal.class),
+                any(String.class), any(String.class), any(String.class), any(LocalDateTime.class)
         );
         verify(walletService, never()).credit(
                 any(Long.class),
@@ -210,11 +225,19 @@ class StripePaymentServiceTest {
         );
     }
 
-    private PaymentTransaction storedPayment(long userId, String amount, String currency) {
+    private PaymentTransaction storedPayment(
+            long userId,
+            String amount,
+            String currency,
+            String settlementPurpose,
+            String businessReference
+    ) {
         PaymentTransaction payment = mock(PaymentTransaction.class);
         when(payment.getUserId()).thenReturn(userId);
         when(payment.getAmount()).thenReturn(new BigDecimal(amount));
         when(payment.getCurrency()).thenReturn(currency);
+        when(payment.getSettlementPurpose()).thenReturn(settlementPurpose);
+        when(payment.getBusinessReference()).thenReturn(businessReference);
         return payment;
     }
 
