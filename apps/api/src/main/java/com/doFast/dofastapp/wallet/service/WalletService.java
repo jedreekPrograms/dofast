@@ -10,11 +10,13 @@ import com.doFast.dofastapp.wallet.entity.WalletTransaction;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.repository.WalletRepository;
 import com.doFast.dofastapp.wallet.repository.WalletTransactionRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -27,15 +29,27 @@ public class WalletService {
     private final WalletRepository walletRepository;
     private final UserRepository userRepository;
     private final WalletTransactionRepository walletTransactionRepository;
+    private final List<WalletDebitGuard> debitGuards;
 
     public WalletService(
             WalletRepository walletRepository,
             UserRepository userRepository,
             WalletTransactionRepository walletTransactionRepository
     ) {
+        this(walletRepository, userRepository, walletTransactionRepository, List.of());
+    }
+
+    @Autowired
+    public WalletService(
+            WalletRepository walletRepository,
+            UserRepository userRepository,
+            WalletTransactionRepository walletTransactionRepository,
+            List<WalletDebitGuard> debitGuards
+    ) {
         this.walletRepository = walletRepository;
         this.userRepository = userRepository;
         this.walletTransactionRepository = walletTransactionRepository;
+        this.debitGuards = List.copyOf(debitGuards);
     }
 
     @Transactional
@@ -86,6 +100,10 @@ public class WalletService {
 
         if (isAlreadyApplied(wallet, type, signedAmount, normalizedOperationKey)) {
             return false;
+        }
+
+        for (WalletDebitGuard debitGuard : debitGuards) {
+            debitGuard.assertDebitAllowed(userId, normalizedAmount, type);
         }
 
         if (wallet.getBalance().compareTo(normalizedAmount) < 0) {
