@@ -15,24 +15,76 @@ WALLET_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT id FROM wallets WHERE user_id=$USER_ID;" | tr -d '[:space:]')
 test -n "$WALLET_ID"
 
-# Two settled card payments seed 60 PLN. We then reserve 25 PLN for a successful refund
-# and 15 PLN for a second refund that Stripe will fail. Only the failed refund may return
-# its reservation to the wallet.
+# Two settled card payments seed 60 PLN as distinct, non-withdrawable Stripe funding lots.
+bash .github/scripts/seed-wallet-funding.sh \
+  "$USER_ID" 40.00 STRIPE_PAYMENT \
+  'pi_refund_success_smoke' \
+  'stripe:intent:pi_refund_success_smoke'
+bash .github/scripts/seed-wallet-funding.sh \
+  "$USER_ID" 20.00 STRIPE_PAYMENT \
+  'pi_refund_failure_smoke' \
+  'stripe:intent:pi_refund_failure_smoke'
+
+# Model the two already-created refund reservations exactly like WalletService.debitFromStripePayment:
+# request 1001 consumes 25 only from the first PaymentIntent lot, request 1002 consumes 15 only
+# from the second one. The failure webhook must therefore restore request 1002 back into that lot.
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
 BEGIN;
+SELECT id FROM wallets WHERE id = $WALLET_ID FOR UPDATE;
+
+UPDATE wallet_funding_lots
+SET remaining_amount = remaining_amount - 25.00
+WHERE wallet_id = $WALLET_ID
+  AND source_type = 'STRIPE_PAYMENT'
+  AND source_reference = 'pi_refund_success_smoke'
+  AND remaining_amount >= 25.00;
+
+UPDATE wallet_funding_lots
+SET remaining_amount = remaining_amount - 15.00
+WHERE wallet_id = $WALLET_ID
+  AND source_type = 'STRIPE_PAYMENT'
+  AND source_reference = 'pi_refund_failure_smoke'
+  AND remaining_amount >= 15.00;
+
 UPDATE wallets SET balance = 20.00 WHERE id = $WALLET_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-VALUES
-  ($WALLET_ID, 'TOP_UP', 40.00, NULL, CURRENT_TIMESTAMP, 'smoke:refund:credit-1', 40.00),
-  ($WALLET_ID, 'TOP_UP', 20.00, NULL, CURRENT_TIMESTAMP, 'smoke:refund:credit-2', 60.00),
-  ($WALLET_ID, 'STRIPE_REFUND_RESERVE', -25.00, NULL, CURRENT_TIMESTAMP, 'stripe:refund:1001:reserve', 35.00),
-  ($WALLET_ID, 'STRIPE_REFUND_RESERVE', -15.00, NULL, CURRENT_TIMESTAMP, 'stripe:refund:1002:reserve', 20.00);
+
+WITH reserve_success AS (
+  INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
+  VALUES ($WALLET_ID, 'STRIPE_REFUND_RESERVE', -25.00, NULL, CURRENT_TIMESTAMP, 'stripe:refund:1001:reserve', 35.00)
+  RETURNING id
+)
+INSERT INTO wallet_funding_movements (
+  wallet_transaction_id, funding_lot_id, amount, restores_movement_id, created_at
+)
+SELECT rs.id, l.id, -25.00, NULL, CURRENT_TIMESTAMP
+FROM reserve_success rs
+JOIN wallet_funding_lots l
+  ON l.wallet_id = $WALLET_ID
+ AND l.source_type = 'STRIPE_PAYMENT'
+ AND l.source_reference = 'pi_refund_success_smoke';
+
+WITH reserve_failure AS (
+  INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
+  VALUES ($WALLET_ID, 'STRIPE_REFUND_RESERVE', -15.00, NULL, CURRENT_TIMESTAMP, 'stripe:refund:1002:reserve', 20.00)
+  RETURNING id
+)
+INSERT INTO wallet_funding_movements (
+  wallet_transaction_id, funding_lot_id, amount, restores_movement_id, created_at
+)
+SELECT rf.id, l.id, -15.00, NULL, CURRENT_TIMESTAMP
+FROM reserve_failure rf
+JOIN wallet_funding_lots l
+  ON l.wallet_id = $WALLET_ID
+ AND l.source_type = 'STRIPE_PAYMENT'
+ AND l.source_reference = 'pi_refund_failure_smoke';
+
 INSERT INTO payment_transactions (
   stripe_payment_intent_id, stripe_event_id, user_id, amount, currency,
   settlement_purpose, business_reference, processed_at
 ) VALUES
   ('pi_refund_success_smoke', 'evt_refund_original_success_1', $USER_ID, 40.00, 'PLN', 'TOP_UP', 'refund-smoke-1', CURRENT_TIMESTAMP),
   ('pi_refund_failure_smoke', 'evt_refund_original_success_2', $USER_ID, 20.00, 'PLN', 'TOP_UP', 'refund-smoke-2', CURRENT_TIMESTAMP);
+
 INSERT INTO stripe_refund_requests (
   id, version, user_id, stripe_payment_intent_id, request_key, amount, currency, status,
   stripe_refund_id, stripe_status, failure_reason, attempt_count, next_attempt_at,
@@ -46,6 +98,10 @@ INSERT INTO stripe_refund_requests (
    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL);
 COMMIT;
 SQL
+
+INITIAL_SOURCES=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT string_agg(source_reference || ':' || remaining_amount::text || ':' || withdrawable, ',' ORDER BY source_reference) FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID;" | tr -d '[:space:]')
+test "$INITIAL_SOURCES" = "pi_refund_failure_smoke:5.00:false,pi_refund_success_smoke:15.00:false"
 
 write_event() {
   local event_id="$1"
@@ -120,6 +176,9 @@ test "$SUCCESS_STATE" = "SUCCEEDED|false"
 BALANCE_AFTER_SUCCESS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE id=$WALLET_ID;" | tr -d '[:space:]')
 test "$BALANCE_AFTER_SUCCESS" = "20.00"
+SUCCESS_SOURCE_REMAINING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT remaining_amount::text FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID AND source_reference='pi_refund_success_smoke';" | tr -d '[:space:]')
+test "$SUCCESS_SOURCE_REMAINING" = "15.00"
 
 post_signed_event /tmp/refund-success.json /tmp/refund-success-replay.txt
 grep -qx 'already processed' /tmp/refund-success-replay.txt
@@ -138,6 +197,12 @@ test "$BALANCE_AFTER_FAILURE" = "35.00"
 RESTORE_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT COUNT(*) FROM wallet_transactions WHERE wallet_id=$WALLET_ID AND type='STRIPE_REFUND_RESTORE';" | tr -d '[:space:]')
 test "$RESTORE_COUNT" = "1"
+FAILURE_SOURCE_REMAINING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT remaining_amount::text FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID AND source_reference='pi_refund_failure_smoke';" | tr -d '[:space:]')
+test "$FAILURE_SOURCE_REMAINING" = "20.00"
+RESTORE_MOVEMENT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT m.amount::text || ':' || (m.restores_movement_id IS NOT NULL) FROM wallet_funding_movements m JOIN wallet_transactions wt ON wt.id=m.wallet_transaction_id WHERE wt.wallet_id=$WALLET_ID AND wt.type='STRIPE_REFUND_RESTORE';" | tr -d '[:space:]')
+test "$RESTORE_MOVEMENT" = "15.00:true"
 
 post_signed_event /tmp/refund-failed.json /tmp/refund-failed-replay.txt
 grep -qx 'already processed' /tmp/refund-failed-replay.txt
@@ -150,5 +215,12 @@ test "$FINAL_RESTORE_COUNT" = "1"
 EVENT_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT COUNT(*) FROM stripe_refund_events WHERE refund_request_id IN (1001,1002);" | tr -d '[:space:]')
 test "$EVENT_COUNT" = "2"
+FINAL_COVERAGE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT w.balance = COALESCE(sum(l.remaining_amount),0) FROM wallets w LEFT JOIN wallet_funding_lots l ON l.wallet_id=w.id WHERE w.id=$WALLET_ID GROUP BY w.id;" | tr -d '[:space:]')
+test "$FINAL_COVERAGE" = "t"
 
-echo 'Signed Stripe original-method refund success, failure restoration and replay handling: OK'
+FINAL_SOURCES=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT string_agg(source_reference || ':' || remaining_amount::text || ':' || withdrawable, ',' ORDER BY source_reference) FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID;" | tr -d '[:space:]')
+test "$FINAL_SOURCES" = "pi_refund_failure_smoke:20.00:false,pi_refund_success_smoke:15.00:false"
+
+echo 'Signed Stripe original-method refund success, exact-source failure restoration and replay handling: OK'
