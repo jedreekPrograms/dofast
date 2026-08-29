@@ -31,6 +31,8 @@ function AdminDisputesPage() {
   const [evidence, setEvidence] = useState(null)
   const [resolution, setResolution] = useState('RESUME_JOB')
   const [note, setNote] = useState('')
+  const [expenseMode, setExpenseMode] = useState('DEFAULT')
+  const [approvedExpenseAmount, setApprovedExpenseAmount] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [evidenceLoading, setEvidenceLoading] = useState(false)
@@ -64,6 +66,8 @@ function AdminDisputesPage() {
       setEvidence(messages)
       setNote('')
       setResolution('RESUME_JOB')
+      setExpenseMode('DEFAULT')
+      setApprovedExpenseAmount('')
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się pobrać sprawy.')
     } finally {
@@ -107,15 +111,39 @@ function AdminDisputesPage() {
     }
   }
 
+  function changeResolution(nextResolution) {
+    setResolution(nextResolution)
+    if (nextResolution === 'RESUME_JOB') {
+      setExpenseMode('DEFAULT')
+      setApprovedExpenseAmount('')
+    }
+  }
+
+  function expenseAmountForRequest() {
+    if (resolution === 'RESUME_JOB' || expenseMode === 'DEFAULT') return null
+    const normalized = approvedExpenseAmount.trim().replace(',', '.')
+    if (!/^\d{1,5}(\.\d{1,2})?$/.test(normalized)) {
+      throw new Error('Podaj zatwierdzoną kwotę wydatków od 0,00 do 99 999,99 PLN, maksymalnie z dwoma miejscami po przecinku.')
+    }
+    const amount = Number(normalized)
+    if (!Number.isFinite(amount) || amount < 0 || amount > 99999.99) {
+      throw new Error('Zatwierdzona kwota wydatków jest poza dozwolonym zakresem.')
+    }
+    return amount
+  }
+
   async function resolve(event) {
     event.preventDefault()
     if (!selected) return
     setBusy(true)
     setError('')
     try {
-      const detail = await resolveAdminDispute(selected.dispute.id, resolution, note)
+      const expenseAmount = expenseAmountForRequest()
+      const detail = await resolveAdminDispute(selected.dispute.id, resolution, note, expenseAmount)
       setSelected(detail)
       setNote('')
+      setExpenseMode('DEFAULT')
+      setApprovedExpenseAmount('')
       await loadQueue()
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się rozstrzygnąć sprawy.')
@@ -127,6 +155,10 @@ function AdminDisputesPage() {
   const canResolve = selected
     && ['OPEN', 'UNDER_REVIEW'].includes(selected.dispute.status)
     && (!selected.dispute.assignedAdminId || selected.dispute.assignedAdminId === user.id)
+
+  const defaultExpenseLabel = resolution === 'RELEASE_TO_WORKER'
+    ? 'Domyślnie: zwróć wszystkie zgłoszone wydatki wykonawcy'
+    : 'Domyślnie: nie zwracaj wydatków wykonawcy'
 
   return (
     <main className="admin-disputes-page">
@@ -230,10 +262,35 @@ function AdminDisputesPage() {
                   <h3>Rozstrzygnięcie</h3>
                   <label>
                     Decyzja
-                    <select value={resolution} onChange={(event) => setResolution(event.target.value)}>
+                    <select value={resolution} onChange={(event) => changeResolution(event.target.value)}>
                       {Object.entries(RESOLUTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                     </select>
                   </label>
+                  {resolution !== 'RESUME_JOB' && (
+                    <>
+                      <label>
+                        Rozliczenie udokumentowanych wydatków
+                        <select value={expenseMode} onChange={(event) => setExpenseMode(event.target.value)}>
+                          <option value="DEFAULT">{defaultExpenseLabel}</option>
+                          <option value="EXACT">Ustal dokładną zatwierdzoną kwotę</option>
+                        </select>
+                      </label>
+                      {expenseMode === 'EXACT' && (
+                        <label>
+                          Zatwierdzona kwota wydatków (PLN)
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={approvedExpenseAmount}
+                            onChange={(event) => setApprovedExpenseAmount(event.target.value)}
+                            placeholder="np. 35,00"
+                            required
+                          />
+                          <small>Kwota nie może przekroczyć sumy zgłoszonych wydatków. Reszta budżetu wraca do zlecającego.</small>
+                        </label>
+                      )}
+                    </>
+                  )}
                   <label>
                     Uzasadnienie
                     <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} minLength={3} rows={5} required placeholder="Opisz podstawę decyzji. Tekst trafi do historii sprawy." />
