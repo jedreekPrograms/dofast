@@ -42,16 +42,11 @@ WORKER_TOKEN=$(json_value /tmp/onsite-worker-login.json accessToken)
 CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT id FROM job_categories WHERE slug='montaz-mebli' AND fulfillment_mode='ON_SITE' AND active=TRUE;" | tr -d '[:space:]')
 test -n "$CATEGORY_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 120.00 WHERE user_id = $OWNER_ID;
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 120.00, NULL, CURRENT_TIMESTAMP, 'smoke:onsite:seed:' || id, 120.00
-FROM wallets WHERE user_id = $OWNER_ID;
-COMMIT;
-SQL
+# This fixture is spendable test value only and must not become cash-out eligible.
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 120.00 PLATFORM_ADJUSTMENT \
+  "smoke:onsite:funding:$OWNER_ID" \
+  "smoke:onsite:seed:$OWNER_ID"
 
 PRIVATE_ADDRESS='ul. Powstańców Śląskich 100, mieszkanie 8'
 JOB=$(curl --fail --silent --show-error \
