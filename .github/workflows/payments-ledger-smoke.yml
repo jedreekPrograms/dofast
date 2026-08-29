@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/payments-ledger-smoke.yml"
       - ".github/scripts/payments-ledger-smoke.sh"
+      - ".github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
@@ -18,6 +19,7 @@ on:
     paths:
       - ".github/workflows/payments-ledger-smoke.yml"
       - ".github/scripts/payments-ledger-smoke.sh"
+      - ".github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
@@ -83,6 +85,9 @@ jobs:
 
       - name: Verify concurrent debit, escrow release, refund and reconciliation
         run: bash .github/scripts/payments-ledger-smoke.sh
+
+      - name: Verify Stripe purpose to wallet type reconciliation
+        run: bash .github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh
 
       - name: Diagnostics
         if: failure()
