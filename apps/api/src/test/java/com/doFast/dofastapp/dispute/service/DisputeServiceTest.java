@@ -12,6 +12,7 @@ import com.doFast.dofastapp.dispute.enums.DisputeStatus;
 import com.doFast.dofastapp.dispute.repository.DisputeEventRepository;
 import com.doFast.dofastapp.dispute.repository.DisputeRepository;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
@@ -45,6 +46,7 @@ class DisputeServiceTest {
     @Mock private JobRepository jobRepository;
     @Mock private TransactionService transactionService;
     @Mock private NotificationService notificationService;
+    @Mock private JobExpenseService expenseService;
 
     private DisputeService disputeService;
     private User requester;
@@ -58,7 +60,8 @@ class DisputeServiceTest {
                 eventRepository,
                 jobRepository,
                 transactionService,
-                notificationService
+                notificationService,
+                expenseService
         );
         requester = user(1L, UserRole.USER, "requester");
         worker = user(2L, UserRole.USER, "worker");
@@ -156,6 +159,7 @@ class DisputeServiceTest {
         assertEquals(DisputeResolution.RELEASE_TO_WORKER, response.dispute().resolution());
         assertEquals(JobStatus.DONE, job.getStatus());
         verify(transactionService).releaseMoney(job, worker);
+        verify(expenseService).settleOnCompletion(job);
     }
 
     @Test
@@ -174,6 +178,7 @@ class DisputeServiceTest {
 
         assertEquals(JobStatus.CANCELLED, job.getStatus());
         verify(transactionService).refundMoney(job);
+        verify(expenseService).refundAll(job);
     }
 
     @Test
@@ -194,6 +199,8 @@ class DisputeServiceTest {
         verify(transactionService).assertHeld(job);
         verify(transactionService, never()).refundMoney(job);
         verify(transactionService, never()).releaseMoney(any(), any());
+        verify(expenseService, never()).settleOnCompletion(any());
+        verify(expenseService, never()).refundAll(any());
     }
 
     @Test

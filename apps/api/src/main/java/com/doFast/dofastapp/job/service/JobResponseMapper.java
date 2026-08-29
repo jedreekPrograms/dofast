@@ -15,6 +15,7 @@ public final class JobResponseMapper {
                 job.getTitle(),
                 job.getDescription(),
                 job.getPrice(),
+                job.getExpenseBudget(),
                 job.getAssignmentMode(),
                 job.isPriceNegotiationEnabled(),
                 job.getStatus(),

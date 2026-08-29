@@ -8,6 +8,7 @@ import com.doFast.dofastapp.job.cancellation.entity.JobCancellationRequest;
 import com.doFast.dofastapp.job.cancellation.enums.JobCancellationStatus;
 import com.doFast.dofastapp.job.cancellation.repository.JobCancellationRequestRepository;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.enums.NotificationType;
@@ -43,6 +44,7 @@ class JobCancellationServiceTest {
     @Mock private TransactionService transactionService;
     @Mock private LiveTrackingService liveTrackingService;
     @Mock private NotificationService notificationService;
+    @Mock private JobExpenseService expenseService;
 
     private JobCancellationService service;
     private User owner;
@@ -56,7 +58,8 @@ class JobCancellationServiceTest {
                 cancellationRepository,
                 transactionService,
                 liveTrackingService,
-                notificationService
+                notificationService,
+                expenseService
         );
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
@@ -138,6 +141,7 @@ class JobCancellationServiceTest {
                 .thenReturn(Optional.of(request));
 
         assertThrows(ForbiddenOperationException.class, () -> service.approve(10L, owner));
+        verify(expenseService, never()).refundForMutualCancellation(any());
         verify(transactionService, never()).refundMoney(any());
         verify(liveTrackingService, never()).stopAndClear(any());
     }
@@ -159,6 +163,7 @@ class JobCancellationServiceTest {
         assertEquals(JobCancellationStatus.APPROVED, response.status());
         assertEquals(JobStatus.CANCELLED, job.getStatus());
         assertEquals(worker.getId(), response.resolvedById());
+        verify(expenseService).refundForMutualCancellation(job);
 
         InOrder order = inOrder(jobRepository, liveTrackingService, transactionService);
         order.verify(jobRepository).save(job);
@@ -185,6 +190,7 @@ class JobCancellationServiceTest {
         assertEquals(JobCancellationStatus.DECLINED, response.status());
         assertEquals(JobStatus.IN_PROGRESS, job.getStatus());
         assertEquals(worker.getId(), response.resolvedById());
+        verify(expenseService, never()).refundForMutualCancellation(any());
         verify(transactionService, never()).refundMoney(any());
         verify(liveTrackingService, never()).stopAndClear(any());
         verify(notificationService).notify(
@@ -207,6 +213,7 @@ class JobCancellationServiceTest {
         assertEquals(JobCancellationStatus.WITHDRAWN, response.status());
         assertEquals(JobStatus.IN_PROGRESS, job.getStatus());
         assertEquals(worker.getId(), response.resolvedById());
+        verify(expenseService, never()).refundForMutualCancellation(any());
         verify(transactionService, never()).refundMoney(any());
         verify(liveTrackingService, never()).stopAndClear(any());
         verify(notificationService).notify(
