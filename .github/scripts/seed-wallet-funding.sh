@@ -29,6 +29,15 @@ case "$source_type" in
     ;;
 esac
 
+# Resolve the fixture target before mutating anything. Avoid SQL expressions such as ELSE 1/0:
+# PostgreSQL may constant-fold them even when the branch is unreachable.
+wallet_count=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT count(*) FROM wallets WHERE user_id=$user_id;" | tr -d '[:space:]')
+if test "$wallet_count" != "1"; then
+  echo "expected exactly one wallet for user_id=$user_id, found ${wallet_count:-0}" >&2
+  exit 3
+fi
+
 # CI-only helper. It creates the same four accounting facts that production wallet credits create:
 # wallet balance, wallet transaction, funding lot, and funding movement. This keeps smoke fixtures
 # from bypassing the source-of-funds invariant introduced by V49.
@@ -102,12 +111,6 @@ SELECT
     CURRENT_TIMESTAMP
 FROM transaction_row tr
 JOIN funding_lot fl ON fl.wallet_id = tr.wallet_id;
-
--- Fail the entire seed transaction if the user did not resolve to exactly one wallet.
-SELECT CASE
-    WHEN (SELECT count(*) FROM wallets WHERE user_id = :'user_id'::bigint) = 1 THEN 1
-    ELSE 1 / 0
-END;
 
 COMMIT;
 SQL
