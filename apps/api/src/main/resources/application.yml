@@ -83,6 +83,7 @@ dofast:
     dispatch-interval-ms: ${PAYOUT_DISPATCH_INTERVAL_MS:2000}
     stripe-connect:
       enabled: ${PAYOUT_STRIPE_CONNECT_ENABLED:false}
+      dispatch-enabled: ${PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED:false}
       country: ${PAYOUT_STRIPE_CONNECT_COUNTRY:PL}
       refresh-url: ${PAYOUT_STRIPE_CONNECT_REFRESH_URL:}
       return-url: ${PAYOUT_STRIPE_CONNECT_RETURN_URL:}
