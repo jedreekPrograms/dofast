@@ -40,6 +40,8 @@ A claim is accepted only when all of the following are true:
 
 Worker receipt uploads are intentionally constrained by the attachment policy: the assigned worker can create only `PARTICIPANTS` attachments and only while the job is `IN_PROGRESS`. Once an attachment is referenced by an expense claim, it becomes retained financial evidence: normal attachment deletion is rejected and the encrypted storage object is preserved. This prevents a worker or requester from removing the receipt after it has entered the reimbursement audit trail.
 
+The web attachment panel mirrors the same backend policy. During `IN_PROGRESS`, the assigned worker sees an upload control that is pinned to `PARTICIPANTS`; viewer-visible and execution-secret visibility options are not offered to the worker. This keeps receipt evidence private to the two job participants and prevents the browser UI from suggesting permissions that the API would reject.
+
 Claims are immutable in this first production version. Corrections that would change reimbursement evidence should therefore go through dispute handling rather than silently rewriting history.
 
 ## Completion and cancellation
