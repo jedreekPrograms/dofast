@@ -23,16 +23,16 @@ public class JobPublicationController {
 
     private final JobPublicationService publicationService;
     private final JobPublicationRecoveryCoordinator recoveryCoordinator;
-    private final JobPublicationPaymentIntentService paymentIntentService;
+    private final JobPublicationPaymentIntentCoordinator paymentIntentCoordinator;
 
     public JobPublicationController(
             JobPublicationService publicationService,
             JobPublicationRecoveryCoordinator recoveryCoordinator,
-            JobPublicationPaymentIntentService paymentIntentService
+            JobPublicationPaymentIntentCoordinator paymentIntentCoordinator
     ) {
         this.publicationService = publicationService;
         this.recoveryCoordinator = recoveryCoordinator;
-        this.paymentIntentService = paymentIntentService;
+        this.paymentIntentCoordinator = paymentIntentCoordinator;
     }
 
     @PostMapping
@@ -56,7 +56,7 @@ public class JobPublicationController {
 
     @PostMapping("/{id}/payment-intent")
     public CreatePaymentIntentResponse createPaymentIntent(@PathVariable Long id, @AuthenticationPrincipal User user) {
-        return paymentIntentService.create(id, user);
+        return paymentIntentCoordinator.create(id, user);
     }
 
     @PostMapping("/{id}/cancel")
