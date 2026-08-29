@@ -24,6 +24,8 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
                 user_id,
                 amount,
                 currency,
+                settlement_purpose,
+                business_reference,
                 processed_at
             ) VALUES (
                 :paymentIntentId,
@@ -31,6 +33,8 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
                 :userId,
                 :amount,
                 :currency,
+                :settlementPurpose,
+                :businessReference,
                 :processedAt
             )
             ON CONFLICT DO NOTHING
@@ -41,6 +45,8 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             @Param("userId") Long userId,
             @Param("amount") BigDecimal amount,
             @Param("currency") String currency,
+            @Param("settlementPurpose") String settlementPurpose,
+            @Param("businessReference") String businessReference,
             @Param("processedAt") LocalDateTime processedAt
     );
 
