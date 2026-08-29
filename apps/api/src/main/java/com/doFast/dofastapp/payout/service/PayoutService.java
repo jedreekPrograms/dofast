@@ -69,8 +69,10 @@ public class PayoutService {
         boolean verified = verificationRepository.existsByUser_IdAndStatus(currentUser.getId(), VerificationStatus.VERIFIED);
         boolean providerAvailable = providerRegistry.isConfiguredProviderAvailable();
         String configuredProvider = providerRegistry.configuredProviderCode();
-        boolean recipientReady = !StripeConnectOnboardingService.PROVIDER_CODE.equals(configuredProvider)
-                || onboardingService.isRecipientReady(currentUser.getId());
+        boolean recipientSetupAvailable = onboardingService.setupAvailable();
+        boolean recipientReady = !recipientSetupAvailable || onboardingService.isRecipientReady(currentUser.getId());
+        boolean recipientRequired = StripeConnectOnboardingService.PROVIDER_CODE.equals(configuredProvider);
+        boolean recipientRequirementSatisfied = !recipientRequired || recipientReady;
         BigDecimal balance = walletService.getMyWallet(currentUser.getId()).getBalance();
         return new PayoutEligibilityResponse(
                 verified,
@@ -80,8 +82,8 @@ public class PayoutService {
                 balance,
                 CURRENCY,
                 recipientReady,
-                onboardingService.setupAvailable(),
-                active && verified && providerAvailable && recipientReady
+                recipientSetupAvailable,
+                active && verified && providerAvailable && recipientRequirementSatisfied
                         && balance.compareTo(properties.minimumAmount()) >= 0
         );
     }

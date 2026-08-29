@@ -55,14 +55,26 @@ function PayoutPanel({ onWalletChanged }) {
   }, [])
 
   useEffect(() => {
-    const returnedFromConnect = new URLSearchParams(globalThis.location?.search || '').get('stripe-connect') === 'return'
-    if (!returnedFromConnect) {
-      load()
+    const connectReturn = new URLSearchParams(globalThis.location?.search || '').get('stripe-connect')
+    if (connectReturn === 'refresh') {
+      createPayoutOnboardingLink()
+        .then((response) => {
+          if (!response?.url) throw new Error('Stripe nie zwrócił adresu onboardingu.')
+          globalThis.location.assign(response.url)
+        })
+        .catch((requestError) => {
+          setError(requestError.message || 'Nie udało się wznowić konfiguracji wypłat.')
+          load()
+        })
       return
     }
-    refreshPayoutOnboardingStatus()
-      .catch(() => undefined)
-      .finally(load)
+    if (connectReturn === 'return') {
+      refreshPayoutOnboardingStatus()
+        .catch(() => undefined)
+        .finally(load)
+      return
+    }
+    load()
   }, [load])
 
   const handleRefresh = async () => {
