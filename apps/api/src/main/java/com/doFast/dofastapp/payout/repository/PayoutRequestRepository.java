@@ -58,6 +58,23 @@ public interface PayoutRequestRepository extends JpaRepository<PayoutRequest, Lo
     @Query(value = """
             SELECT *
             FROM payout_requests
+            WHERE status = 'SUBMITTED'
+              AND provider_code = :providerCode
+              AND provider_reference IS NOT NULL
+              AND provider_transfer_reference IS NOT NULL
+              AND next_attempt_at <= :now
+            ORDER BY next_attempt_at, provider_submitted_at, id
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+            """, nativeQuery = true)
+    Optional<PayoutRequest> findNextSubmittedForReconciliationForUpdate(
+            @Param("providerCode") String providerCode,
+            @Param("now") LocalDateTime now
+    );
+
+    @Query(value = """
+            SELECT *
+            FROM payout_requests
             WHERE status = 'PROCESSING'
               AND processing_started_at < :cutoff
             ORDER BY processing_started_at, id
