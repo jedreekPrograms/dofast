@@ -180,7 +180,7 @@ public class StripePaymentService {
         boolean credited = walletService.credit(
                 userId,
                 amount,
-                WalletTransactionType.TOP_UP,
+                walletTransactionType(settlementPurpose),
                 null,
                 "stripe:intent:" + paymentIntentId
         );
@@ -189,6 +189,12 @@ public class StripePaymentService {
         }
 
         return true;
+    }
+
+    private WalletTransactionType walletTransactionType(SettlementPurpose settlementPurpose) {
+        return settlementPurpose == SettlementPurpose.JOB_PUBLICATION
+                ? WalletTransactionType.JOB_PUBLICATION_FUNDING
+                : WalletTransactionType.TOP_UP;
     }
 
     private String validatePurpose(
