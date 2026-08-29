@@ -57,7 +57,7 @@ public class JobAttachmentService {
             throw new IllegalArgumentException("Attachment visibility is required");
         }
         Job job = getJobForUpdate(jobId);
-        accessPolicy.assertCanUpload(job, user);
+        accessPolicy.assertCanUpload(job, user, visibility);
         filePolicy.assertCanAdd(attachmentRepository.countByJob_IdAndDeletedAtIsNull(jobId));
         ValidatedAttachmentFile validated = filePolicy.validate(file);
 

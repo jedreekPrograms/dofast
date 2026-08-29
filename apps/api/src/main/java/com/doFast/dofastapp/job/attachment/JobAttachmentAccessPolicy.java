@@ -18,13 +18,25 @@ public class JobAttachmentAccessPolicy {
         this.userBlockService = userBlockService;
     }
 
-    public void assertCanUpload(Job job, User user) {
-        if (!sameUser(job.getCreatedBy(), user)) {
-            throw new ForbiddenOperationException("Tylko zleceniodawca może dodawać załączniki");
+    public void assertCanUpload(Job job, User user, JobAttachmentVisibility visibility) {
+        if (sameUser(job.getCreatedBy(), user)) {
+            if (job.getStatus() != JobStatus.OPEN && job.getStatus() != JobStatus.IN_PROGRESS) {
+                throw new ConflictException("Załączniki można dodawać tylko przed realizacją lub w jej trakcie");
+            }
+            return;
         }
-        if (job.getStatus() != JobStatus.OPEN && job.getStatus() != JobStatus.IN_PROGRESS) {
-            throw new ConflictException("Załączniki można dodawać tylko przed realizacją lub w jej trakcie");
+
+        if (sameUser(job.getTakenBy(), user)) {
+            if (job.getStatus() != JobStatus.IN_PROGRESS) {
+                throw new ConflictException("Wykonawca może dodawać załączniki tylko w trakcie realizacji zlecenia");
+            }
+            if (visibility != JobAttachmentVisibility.PARTICIPANTS) {
+                throw new ForbiddenOperationException("Wykonawca może dodawać tylko załączniki widoczne dla uczestników zlecenia");
+            }
+            return;
         }
+
+        throw new ForbiddenOperationException("Tylko strony aktywnego zlecenia mogą dodawać załączniki");
     }
 
     public boolean canRead(JobAttachment attachment, User user) {
