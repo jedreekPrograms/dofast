@@ -15,15 +15,38 @@ WALLET_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT id FROM wallets WHERE user_id=$USER_ID;" | tr -d '[:space:]')
 test -n "$WALLET_ID"
 
-# Model a settled 50 PLN top-up of which the user has already spent 40 PLN. The current wallet
-# therefore has only 10 PLN available when Stripe removes 30 PLN because of a dispute.
+# Model a settled 50 PLN card top-up. Forty PLN was already spent inside doFast, so only ten
+# remains in the exact Stripe PaymentIntent lot when Stripe later withdraws 30 PLN for a dispute.
+bash .github/scripts/seed-wallet-funding.sh \
+  "$USER_ID" 50.00 STRIPE_PAYMENT \
+  'pi_chargeback_smoke' \
+  'stripe:intent:pi_chargeback_smoke'
+
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
 BEGIN;
-UPDATE wallets SET balance = 10.00 WHERE id = $WALLET_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-VALUES
-  ($WALLET_ID, 'TOP_UP', 50.00, NULL, CURRENT_TIMESTAMP, 'smoke:chargeback:original-credit', 50.00),
-  ($WALLET_ID, 'WITHDRAW', -40.00, NULL, CURRENT_TIMESTAMP, 'smoke:chargeback:already-spent', 10.00);
+SELECT id FROM wallets WHERE id=$WALLET_ID FOR UPDATE;
+UPDATE wallet_funding_lots
+SET remaining_amount = remaining_amount - 40.00
+WHERE wallet_id=$WALLET_ID
+  AND source_type='STRIPE_PAYMENT'
+  AND source_reference='pi_chargeback_smoke'
+  AND remaining_amount >= 40.00;
+UPDATE wallets SET balance=10.00 WHERE id=$WALLET_ID;
+WITH spent AS (
+  INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
+  VALUES ($WALLET_ID, 'ESCROW_LOCK', -40.00, NULL, CURRENT_TIMESTAMP, 'smoke:chargeback:already-spent', 10.00)
+  RETURNING id
+)
+INSERT INTO wallet_funding_movements (
+  wallet_transaction_id, funding_lot_id, amount, restores_movement_id, created_at
+)
+SELECT spent.id, lot.id, -40.00, NULL, CURRENT_TIMESTAMP
+FROM spent
+JOIN wallet_funding_lots lot
+  ON lot.wallet_id=$WALLET_ID
+ AND lot.source_type='STRIPE_PAYMENT'
+ AND lot.source_reference='pi_chargeback_smoke';
+
 INSERT INTO payment_transactions (
   stripe_payment_intent_id, stripe_event_id, user_id, amount, currency,
   settlement_purpose, business_reference, processed_at
@@ -33,6 +56,10 @@ INSERT INTO payment_transactions (
 );
 COMMIT;
 SQL
+
+INITIAL_SOURCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || '|' || source_reference || '|' || remaining_amount::text || '|' || withdrawable FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID;" | tr -d '[:space:]')
+test "$INITIAL_SOURCE" = "STRIPE_PAYMENT|pi_chargeback_smoke|10.00|false"
 
 write_event() {
   local event_id="$1"
@@ -97,15 +124,16 @@ test "$INITIAL_STATE" = "true|false|10.00|20.00"
 INITIAL_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE id=$WALLET_ID;" | tr -d '[:space:]')
 test "$INITIAL_BALANCE" = "0.00"
+STRIPE_AFTER_RECOVERY=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT remaining_amount::text FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID AND source_reference='pi_chargeback_smoke';" | tr -d '[:space:]')
+test "$STRIPE_AFTER_RECOVERY" = "0.00"
 
-# A later incoming credit remains non-negative and is automatically swept by the recovery worker.
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 15.00 WHERE id = $WALLET_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-VALUES ($WALLET_ID, 'REFUND', 15.00, NULL, CURRENT_TIMESTAMP, 'smoke:chargeback:future-credit', 15.00);
-COMMIT;
-SQL
+# A later real doFast earning remains non-negative and is automatically swept by the recovery worker.
+bash .github/scripts/seed-wallet-funding.sh \
+  "$USER_ID" 15.00 EARNED_JOB \
+  'smoke:chargeback:future-earned' \
+  'smoke:chargeback:future-earned' \
+  ESCROW_RELEASE
 
 RECOVERED=''
 for attempt in {1..40}; do
@@ -121,6 +149,9 @@ test "$RECOVERED" = "25.00|5.00|0.00"
 RECOVERY_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT COUNT(*) FROM wallet_transactions WHERE wallet_id=$WALLET_ID AND type='CHARGEBACK_RECOVERY';" | tr -d '[:space:]')
 test "$RECOVERY_COUNT" = "2"
+EARNED_AFTER_RECOVERY=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT remaining_amount::text FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID AND source_type='EARNED_JOB';" | tr -d '[:space:]')
+test "$EARNED_AFTER_RECOVERY" = "0.00"
 
 write_event 'evt_chargeback_reinstated' 'charge.dispute.funds_reinstated' 'won' /tmp/chargeback-reinstated.json
 post_signed_event /tmp/chargeback-reinstated.json /tmp/chargeback-reinstated-response.txt
@@ -132,6 +163,12 @@ test "$FINAL_STATE" = "true|true|25.00|25.00|0.00"
 FINAL_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE id=$WALLET_ID;" | tr -d '[:space:]')
 test "$FINAL_BALANCE" = "25.00"
+FINAL_SOURCES=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT string_agg(source_type || ':' || remaining_amount::text || ':' || withdrawable, ',' ORDER BY source_type) FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID;" | tr -d '[:space:]')
+test "$FINAL_SOURCES" = "EARNED_JOB:15.00:true,STRIPE_PAYMENT:10.00:false"
+REINSTATEMENT_MOVEMENTS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT string_agg(m.amount::text || ':' || l.source_type, ',' ORDER BY l.source_type) FROM wallet_funding_movements m JOIN wallet_transactions wt ON wt.id=m.wallet_transaction_id JOIN wallet_funding_lots l ON l.id=m.funding_lot_id WHERE wt.wallet_id=$WALLET_ID AND wt.type='CHARGEBACK_REINSTATEMENT';" | tr -d '[:space:]')
+test "$REINSTATEMENT_MOVEMENTS" = "15.00:EARNED_JOB,10.00:STRIPE_PAYMENT"
 
 # Replaying the exact Stripe event must not create another wallet credit.
 post_signed_event /tmp/chargeback-reinstated.json /tmp/chargeback-replay-response.txt
@@ -142,5 +179,8 @@ test "$REINSTATEMENT_COUNT" = "1"
 EVENT_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT COUNT(*) FROM stripe_payment_dispute_events WHERE stripe_dispute_id='dp_chargeback_smoke';" | tr -d '[:space:]')
 test "$EVENT_COUNT" = "2"
+FINAL_COVERAGE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT w.balance = COALESCE(sum(l.remaining_amount),0) FROM wallets w LEFT JOIN wallet_funding_lots l ON l.wallet_id=w.id WHERE w.id=$WALLET_ID GROUP BY w.id;" | tr -d '[:space:]')
+test "$FINAL_COVERAGE" = "t"
 
-echo 'Signed Stripe chargeback withdrawal, recovery, reinstatement and replay handling: OK'
+echo 'Signed Stripe chargeback withdrawal, mixed-source recovery, exact reinstatement and replay handling: OK'
