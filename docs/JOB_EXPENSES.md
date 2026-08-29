@@ -40,7 +40,9 @@ A claim is accepted only when all of the following are true:
 
 Worker receipt uploads are intentionally constrained by the attachment policy: the assigned worker can create only `PARTICIPANTS` attachments and only while the job is `IN_PROGRESS`. Once an attachment is referenced by an expense claim, it becomes retained financial evidence: normal attachment deletion is rejected and the encrypted storage object is preserved. This prevents a worker or requester from removing the receipt after it has entered the reimbursement audit trail.
 
-The web attachment panel mirrors the same backend policy. During `IN_PROGRESS`, the assigned worker sees an upload control that is pinned to `PARTICIPANTS`; viewer-visible and execution-secret visibility options are not offered to the worker. This keeps receipt evidence private to the two job participants and prevents the browser UI from suggesting permissions that the API would reject.
+The web attachment panel mirrors the same backend policy. During `IN_PROGRESS`, the assigned worker sees an upload control that is pinned to `PARTICIPANTS`; viewer-visible and execution-secret visibility options are not offered to the worker. After upload, eligible worker-owned receipt files can be selected directly in the expense form and paired with a PLN amount. The browser enforces positive cent precision and the currently remaining budget for immediate feedback, while the backend remains authoritative and repeats all amount, ownership, status and evidence checks under database locks.
+
+Both job participants can see the participant-only expense summary: original budget, cumulative claims, remaining budget, reimbursed amount, requester refund and immutable claim history. A receipt already referenced by a claim is marked as retained financial evidence and the UI no longer offers a delete action for it. Non-participants never receive the expense summary endpoint data.
 
 Claims are immutable in this first production version. Corrections that would change reimbursement evidence should therefore go through dispute handling rather than silently rewriting history.
 
