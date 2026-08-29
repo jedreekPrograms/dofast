@@ -23,13 +23,10 @@ WALLET_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
 test -n "$CATEGORY_ID"
 test -n "$WALLET_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance=25.00 WHERE id=$WALLET_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-VALUES ($WALLET_ID, 'TOP_UP', 25.00, NULL, CURRENT_TIMESTAMP, 'smoke:job-publication:minimum:seed', 25.00);
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$USER_ID" 25.00 PLATFORM_ADJUSTMENT \
+  'smoke:job-publication:minimum:source' \
+  'smoke:job-publication:minimum:seed'
 
 PUBLICATION=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $TOKEN" \
@@ -58,6 +55,10 @@ RESERVE_ROW=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT type || ':' || amount || ':' || balance_after FROM wallet_transactions WHERE operation_key='job-publication:${USER_ID}:smoke-minimum-001:reserve';" | tr -d '[:space:]')
 test "$RESERVE_ROW" = "JOB_PUBLICATION_RESERVE:-24.50:0.50"
 
+REMAINING_DURING_RESERVATION=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || ':' || remaining_amount::text || ':' || withdrawable FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID;" | tr -d '[:space:]')
+test "$REMAINING_DURING_RESERVATION" = "PLATFORM_ADJUSTMENT:0.50:false"
+
 curl --fail --silent --show-error -X POST \
   -H "Authorization: Bearer $TOKEN" \
   "$api/jobs/publications/$PUBLICATION_ID/cancel" >/tmp/publication-minimum-cancelled.json
@@ -65,5 +66,8 @@ curl --fail --silent --show-error -X POST \
 RESTORED=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE id=$WALLET_ID;" | tr -d '[:space:]')
 test "$RESTORED" = "25.00"
+RESTORED_SOURCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || ':' || remaining_amount::text || ':' || withdrawable FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID;" | tr -d '[:space:]')
+test "$RESTORED_SOURCE" = "PLATFORM_ADJUSTMENT:25.00:false"
 
-echo 'Stripe minimum funding keeps total funding exact and preserves unused wallet balance: OK'
+echo 'Stripe minimum funding keeps total funding exact, preserves unused wallet balance and restores the original source: OK'
