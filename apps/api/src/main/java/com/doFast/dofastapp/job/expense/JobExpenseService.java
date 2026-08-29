@@ -11,6 +11,7 @@ import com.doFast.dofastapp.job.attachment.JobAttachmentVisibility;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import org.springframework.stereotype.Service;
@@ -123,7 +124,20 @@ public class JobExpenseService {
         Job job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
         assertParticipant(job, currentUser);
+        return buildSummary(jobId);
+    }
 
+    public JobExpenseSummaryResponse getSummaryForAdmin(Long jobId, User admin) {
+        if (admin == null || admin.getRole() != UserRole.ADMIN) {
+            throw new ForbiddenOperationException("Tylko administrator może przeglądać wydatki jako dowody w sporze");
+        }
+        if (!jobRepository.existsById(jobId)) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return buildSummary(jobId);
+    }
+
+    private JobExpenseSummaryResponse buildSummary(Long jobId) {
         JobExpenseEscrow escrow = escrowRepository.findByJob_Id(jobId).orElse(null);
         if (escrow == null) {
             return new JobExpenseSummaryResponse(
