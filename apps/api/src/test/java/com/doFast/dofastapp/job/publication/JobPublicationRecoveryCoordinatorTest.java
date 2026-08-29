@@ -72,24 +72,26 @@ class JobPublicationRecoveryCoordinatorTest {
                 eq(JobPublicationStatus.PAYMENT_REQUIRED),
                 any(LocalDateTime.class)
         )).thenReturn(List.of(active));
-        when(walletService.credit(
+        when(walletService.creditRestoringOperation(
                 eq(7L),
                 eq(new BigDecimal("25.00")),
                 eq(WalletTransactionType.JOB_PUBLICATION_RELEASE),
                 eq(null),
-                eq("job-publication:10:release")
+                eq("job-publication:10:release"),
+                eq("job-publication:7:req-10:reserve")
         )).thenReturn(true);
 
         var result = coordinator.getRecoverable(user);
 
         assertEquals(List.of(11L), result.stream().map(response -> response.id()).toList());
         assertEquals(JobPublicationStatus.CANCELLED, expired.getStatus());
-        verify(walletService).credit(
+        verify(walletService).creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.JOB_PUBLICATION_RELEASE,
                 null,
-                "job-publication:10:release"
+                "job-publication:10:release",
+                "job-publication:7:req-10:reserve"
         );
         verify(publicationRepository).save(expired);
     }

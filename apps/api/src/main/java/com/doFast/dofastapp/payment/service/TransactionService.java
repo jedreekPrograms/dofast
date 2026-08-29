@@ -18,10 +18,16 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @Transactional
 public class TransactionService {
+
+    private static final Set<WalletTransactionType> ESCROW_SOURCE_DEBITS = Set.of(
+            WalletTransactionType.ESCROW_ADJUSTMENT_LOCK,
+            WalletTransactionType.ESCROW_LOCK
+    );
 
     private final TransactionRepository transactionRepository;
     private final WalletService walletService;
@@ -119,12 +125,13 @@ public class TransactionService {
             );
         } else {
             BigDecimal delta = transaction.getAmount().subtract(newAmount);
-            walletService.credit(
+            walletService.creditRestoringJobDebits(
                     transaction.getPayer().getId(),
                     delta,
                     WalletTransactionType.ESCROW_ADJUSTMENT_REFUND,
                     job.getId(),
-                    proposalAdjustmentOperationKey(job, proposalId, "refund")
+                    proposalAdjustmentOperationKey(job, proposalId, "refund"),
+                    ESCROW_SOURCE_DEBITS
             );
         }
 
@@ -180,12 +187,13 @@ public class TransactionService {
             throw new ConflictException("Środki escrow nie są już zablokowane");
         }
 
-        boolean credited = walletService.credit(
+        boolean credited = walletService.creditRestoringJobDebits(
                 transaction.getPayer().getId(),
                 transaction.getAmount(),
                 WalletTransactionType.REFUND,
                 job.getId(),
-                escrowOperationKey(job, "refund")
+                escrowOperationKey(job, "refund"),
+                ESCROW_SOURCE_DEBITS
         );
         if (!credited) {
             throw new ConflictException("Wykryto niespójny stan zwrotu escrow");

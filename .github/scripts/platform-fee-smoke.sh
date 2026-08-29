@@ -37,16 +37,10 @@ CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT id FROM job_categories WHERE slug='montaz-mebli' AND fulfillment_mode='ON_SITE' AND active=TRUE;" | tr -d '[:space:]')
 test -n "$CATEGORY_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 100.00 WHERE user_id = $REQUESTER_ID;
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 100.00, NULL, CURRENT_TIMESTAMP, 'smoke:fee:seed:' || id, 100.00
-FROM wallets WHERE user_id = $REQUESTER_ID;
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$REQUESTER_ID" 100.00 PLATFORM_ADJUSTMENT \
+  "smoke:fee:requester:$REQUESTER_ID" \
+  "smoke:fee:seed:$REQUESTER_ID"
 
 POLICY=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $REQUESTER_TOKEN" \
@@ -92,6 +86,10 @@ RELEASE_LEDGER=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT amount || '|' || balance_after || '|' || operation_key FROM wallet_transactions WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$WORKER_ID) AND type='ESCROW_RELEASE';" | tr -d '[:space:]')
 test "$RELEASE_LEDGER" = "39.60|39.60|escrow:${JOB_ID}:release"
 
+WORKER_FUNDING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || '|' || withdrawable || '|' || original_amount::text || '|' || remaining_amount::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$WORKER_ID);" | tr -d '[:space:]')
+test "$WORKER_FUNDING" = "EARNED_JOB|true|39.60|39.60"
+
 ESCROW_RELEASE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT amount || '|' || platform_fee_basis_points || '|' || platform_fee_amount || '|' || payee_amount || '|' || status || '|' || payee_id FROM escrow_transactions WHERE job_id=$JOB_ID;" | tr -d '[:space:]')
 test "$ESCROW_RELEASE" = "40.00|100|0.40|39.60|RELEASED|${WORKER_ID}"
@@ -124,6 +122,10 @@ test "$REFUND_REVENUE_COUNT" = "0"
 REQUESTER_AFTER_REFUND=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE user_id=$REQUESTER_ID;" | tr -d '[:space:]')
 test "$REQUESTER_AFTER_REFUND" = "60.00"
+
+REQUESTER_COVERAGE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT w.balance = COALESCE(sum(l.remaining_amount),0) FROM wallets w LEFT JOIN wallet_funding_lots l ON l.wallet_id=w.id WHERE w.user_id=$REQUESTER_ID GROUP BY w.id;" | tr -d '[:space:]')
+test "$REQUESTER_COVERAGE" = "t"
 
 echo 'Refund does not charge platform fee: OK'
 

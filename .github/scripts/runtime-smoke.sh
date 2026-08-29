@@ -76,8 +76,10 @@ WALLET_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT COUNT(*) FROM wallets w JOIN users u ON u.id=w.user_id WHERE u.email IN ('smoke@example.com','worker-smoke@example.com','outsider-smoke@example.com');")
 test "${WALLET_COUNT//[[:space:]]/}" = "3"
 
-docker compose exec -T db psql -U dofast -d dofast -c \
-  "UPDATE wallets SET balance=100.00 WHERE user_id=(SELECT id FROM users WHERE email='smoke@example.com');" >/dev/null
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 100.00 PLATFORM_ADJUSTMENT \
+  "smoke:runtime:owner:$OWNER_ID" \
+  "smoke:runtime:seed:$OWNER_ID"
 
 ORIGIN_PRIVATE='ul. Grunwaldzka 10, wejście A'
 DESTINATION_PRIVATE='Rynek 1, wejście od placu'

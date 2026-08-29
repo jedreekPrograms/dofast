@@ -14,7 +14,6 @@ import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.verification.entity.VerificationCase;
 import com.doFast.dofastapp.verification.enums.VerificationStatus;
 import com.doFast.dofastapp.verification.repository.VerificationCaseRepository;
-import com.doFast.dofastapp.wallet.dto.WalletResponse;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
@@ -174,27 +173,36 @@ class PayoutServiceTest {
     }
 
     @Test
-    void ownerCanCancelQueuedPayoutAndRestoreReservedFunds() {
+    void ownerCanCancelQueuedPayoutAndRestoreReservedSources() {
         User user = user(7L, UserStatus.ACTIVE);
         PayoutRequest payout = payout(41L, user, new BigDecimal("25.00"));
         when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
-        when(walletService.credit(
+        when(walletService.creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.PAYOUT_RESTORE,
                 null,
-                "payout:41:restore"
+                "payout:41:restore",
+                "payout:7:client:req-12345:reserve"
         )).thenReturn(true);
 
         var response = payoutService.cancel(41L, user);
 
         assertEquals(PayoutStatus.CANCELLED, response.status());
         assertFalse(response.cancellable());
+        verify(walletService).creditRestoringOperation(
+                7L,
+                new BigDecimal("25.00"),
+                WalletTransactionType.PAYOUT_RESTORE,
+                null,
+                "payout:41:restore",
+                "payout:7:client:req-12345:reserve"
+        );
         verify(eventRepository, org.mockito.Mockito.times(2)).save(any());
     }
 
     @Test
-    void eligibilityRequiresVerificationProviderRecipientAndMinimumBalance() {
+    void eligibilityUsesWithdrawableBalanceNotTotalWalletBalance() {
         User user = user(7L, UserStatus.ACTIVE);
         when(verificationRepository.existsByUser_IdAndStatus(7L, VerificationStatus.VERIFIED)).thenReturn(true);
         when(providerRegistry.isConfiguredProviderAvailable()).thenReturn(true);
@@ -202,7 +210,7 @@ class PayoutServiceTest {
         when(providerRegistry.providerMode()).thenReturn("LIVE");
         when(onboardingService.isRecipientReady(7L)).thenReturn(true);
         when(onboardingService.setupAvailable()).thenReturn(true);
-        when(walletService.getMyWallet(7L)).thenReturn(new WalletResponse(new BigDecimal("19.50")));
+        when(walletService.getWithdrawableBalance(7L)).thenReturn(new BigDecimal("19.50"));
 
         var response = payoutService.eligibility(user);
 
@@ -211,6 +219,7 @@ class PayoutServiceTest {
         assertTrue(response.recipientSetupAvailable());
         assertEquals(new BigDecimal("19.50"), response.availableBalance());
         assertEquals("LIVE", response.providerMode());
+        verify(walletService, never()).getMyWallet(7L);
     }
 
     private PayoutRequest payout(Long id, User user, BigDecimal amount) {

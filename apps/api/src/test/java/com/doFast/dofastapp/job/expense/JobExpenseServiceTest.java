@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -55,7 +56,7 @@ class JobExpenseServiceTest {
     }
 
     @Test
-    void completionReimbursesClaimedAmountAndRefundsUnusedBudgetFeeFree() {
+    void completionReimbursesClaimedAmountAndRestoresUnusedBudgetSourcesFeeFree() {
         JobExpenseService service = service();
         when(job.getId()).thenReturn(72L);
         when(job.getCreatedBy()).thenReturn(requester);
@@ -70,8 +71,14 @@ class JobExpenseServiceTest {
 
         verify(walletService).credit(22L, new BigDecimal("35.00"), WalletTransactionType.EXPENSE_REIMBURSEMENT,
                 72L, "job:72:expense:reimburse");
-        verify(walletService).credit(12L, new BigDecimal("65.00"), WalletTransactionType.EXPENSE_BUDGET_REFUND,
-                72L, "job:72:expense:refund");
+        verify(walletService).creditRestoringJobDebits(
+                12L,
+                new BigDecimal("65.00"),
+                WalletTransactionType.EXPENSE_BUDGET_REFUND,
+                72L,
+                "job:72:expense:refund",
+                Set.of(WalletTransactionType.EXPENSE_BUDGET_LOCK)
+        );
         assertEquals(JobExpenseEscrowStatus.SETTLED, escrow.getStatus());
         assertEquals(new BigDecimal("35.00"), escrow.getReimbursedAmount());
         assertEquals(new BigDecimal("65.00"), escrow.getRefundedAmount());
@@ -93,8 +100,14 @@ class JobExpenseServiceTest {
 
         verify(walletService).credit(25L, new BigDecimal("25.00"), WalletTransactionType.EXPENSE_REIMBURSEMENT,
                 75L, "job:75:expense:reimburse");
-        verify(walletService).credit(15L, new BigDecimal("75.00"), WalletTransactionType.EXPENSE_BUDGET_REFUND,
-                75L, "job:75:expense:refund");
+        verify(walletService).creditRestoringJobDebits(
+                15L,
+                new BigDecimal("75.00"),
+                WalletTransactionType.EXPENSE_BUDGET_REFUND,
+                75L,
+                "job:75:expense:refund",
+                Set.of(WalletTransactionType.EXPENSE_BUDGET_LOCK)
+        );
         assertEquals(JobExpenseEscrowStatus.SETTLED, escrow.getStatus());
         assertEquals(new BigDecimal("25.00"), escrow.getReimbursedAmount());
         assertEquals(new BigDecimal("75.00"), escrow.getRefundedAmount());
@@ -112,6 +125,7 @@ class JobExpenseServiceTest {
                 () -> service.settleForDispute(job, new BigDecimal("40.01")));
 
         verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).creditRestoringJobDebits(any(), any(), any(), any(), any(), any());
         assertEquals(JobExpenseEscrowStatus.HELD, escrow.getStatus());
     }
 

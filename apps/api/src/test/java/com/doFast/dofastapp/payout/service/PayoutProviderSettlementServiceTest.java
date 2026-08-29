@@ -28,7 +28,6 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,25 +65,26 @@ class PayoutProviderSettlementServiceTest {
         assertEquals(PayoutProviderSettlementResult.APPLIED, result);
         assertEquals(PayoutStatus.PAID, payout.getStatus());
         assertEquals("po_123", payout.getProviderReference());
-        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
         verify(providerEventRepository).save(any(PayoutProviderEvent.class));
         verify(eventRepository).save(any());
     }
 
     @Test
-    void failedSettlementRestoresReservedFundsExactlyOnce() {
+    void failedSettlementRestoresReservedSourcesExactlyOnce() {
         PayoutRequest payout = submittedPayout();
         when(payoutRepository.findByProviderReferenceForUpdate("stripe-connect", "po_123"))
                 .thenReturn(Optional.of(payout));
         when(providerEventRepository.existsByProviderCodeAndProviderEventId("stripe-connect", "evt_failed_1"))
                 .thenReturn(false);
-        when(walletService.credit(
-                eq(7L),
-                eq(new BigDecimal("25.00")),
-                eq(WalletTransactionType.PAYOUT_RESTORE),
-                eq(null),
-                eq("payout:41:restore")
+        when(walletService.creditRestoringOperation(
+                7L,
+                new BigDecimal("25.00"),
+                WalletTransactionType.PAYOUT_RESTORE,
+                null,
+                "payout:41:restore",
+                "payout:7:client:req-12345:reserve"
         )).thenReturn(true);
 
         var result = service.settle(command(
@@ -96,12 +96,13 @@ class PayoutProviderSettlementServiceTest {
         assertEquals(PayoutProviderSettlementResult.APPLIED, result);
         assertEquals(PayoutStatus.FAILED, payout.getStatus());
         assertEquals("BANK_ACCOUNT_CLOSED", payout.getFailureCode());
-        verify(walletService).credit(
+        verify(walletService).creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.PAYOUT_RESTORE,
                 null,
-                "payout:41:restore"
+                "payout:41:restore",
+                "payout:7:client:req-12345:reserve"
         );
         verify(providerEventRepository).save(any(PayoutProviderEvent.class));
     }
@@ -118,7 +119,7 @@ class PayoutProviderSettlementServiceTest {
 
         assertEquals(PayoutProviderSettlementResult.DUPLICATE, result);
         assertEquals(PayoutStatus.SUBMITTED, payout.getStatus());
-        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
         verify(providerEventRepository, never()).save(any());
         verify(eventRepository, never()).save(any());
     }
@@ -136,7 +137,7 @@ class PayoutProviderSettlementServiceTest {
 
         assertEquals(PayoutProviderSettlementResult.ALREADY_SETTLED, result);
         assertEquals(PayoutStatus.PAID, payout.getStatus());
-        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
         verify(providerEventRepository).save(any(PayoutProviderEvent.class));
         verify(eventRepository, never()).save(any());
     }
@@ -160,7 +161,7 @@ class PayoutProviderSettlementServiceTest {
         );
 
         assertEquals(PayoutStatus.PAID, payout.getStatus());
-        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
         verify(providerEventRepository, never()).save(any());
     }
 

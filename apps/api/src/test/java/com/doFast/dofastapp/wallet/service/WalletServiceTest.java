@@ -18,12 +18,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,19 +36,28 @@ class WalletServiceTest {
     @Mock private WalletRepository walletRepository;
     @Mock private UserRepository userRepository;
     @Mock private WalletTransactionRepository transactionRepository;
+    @Mock private WalletFundingSourceService fundingSourceService;
 
     private WalletService walletService;
     private Wallet wallet;
 
     @BeforeEach
     void setUp() {
-        walletService = new WalletService(walletRepository, userRepository, transactionRepository);
+        walletService = new WalletService(
+                walletRepository,
+                userRepository,
+                transactionRepository,
+                fundingSourceService,
+                List.of()
+        );
 
         User user = new User("payer@example.com", "payer");
         ReflectionTestUtils.setField(user, "id", 1L);
         wallet = new Wallet(user);
         ReflectionTestUtils.setField(wallet, "id", 11L);
         wallet.setBalance(new BigDecimal("50.00"));
+        org.mockito.Mockito.lenient().when(transactionRepository.saveAndFlush(any(WalletTransaction.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -66,10 +77,11 @@ class WalletServiceTest {
         assertEquals(new BigDecimal("30.00"), wallet.getBalance());
 
         ArgumentCaptor<WalletTransaction> captor = ArgumentCaptor.forClass(WalletTransaction.class);
-        verify(transactionRepository).save(captor.capture());
+        verify(transactionRepository).saveAndFlush(captor.capture());
         assertEquals(new BigDecimal("-20.00"), captor.getValue().getAmount());
         assertEquals(new BigDecimal("30.00"), captor.getValue().getBalanceAfter());
         assertEquals("escrow:10:lock", captor.getValue().getOperationKey());
+        verify(fundingSourceService).consumeForDebit(captor.getValue());
     }
 
     @Test
@@ -89,7 +101,7 @@ class WalletServiceTest {
         );
 
         assertEquals(new BigDecimal("50.00"), wallet.getBalance());
-        verify(transactionRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(transactionRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -117,7 +129,7 @@ class WalletServiceTest {
 
         assertFalse(applied);
         assertEquals(new BigDecimal("30.00"), wallet.getBalance());
-        verify(transactionRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(transactionRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -144,5 +156,25 @@ class WalletServiceTest {
                         "shared-key"
                 )
         );
+    }
+
+    @Test
+    void restorationApiRejectsOriginCreditTypeBeforeLockingWallet() {
+        when(fundingSourceService.requiresExplicitRestoration(WalletTransactionType.TOP_UP)).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> walletService.creditRestoringOperation(
+                        1L,
+                        new BigDecimal("10.00"),
+                        WalletTransactionType.TOP_UP,
+                        null,
+                        "restore:invalid",
+                        "source:reserve"
+                )
+        );
+
+        verify(walletRepository, never()).findByUserIdForUpdate(any());
+        verify(transactionRepository, never()).saveAndFlush(any());
     }
 }

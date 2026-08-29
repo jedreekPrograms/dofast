@@ -35,6 +35,9 @@ public class JobExpenseService {
             "image/png",
             "image/webp"
     );
+    private static final Set<WalletTransactionType> EXPENSE_SOURCE_DEBITS = Set.of(
+            WalletTransactionType.EXPENSE_BUDGET_LOCK
+    );
 
     private final JobRepository jobRepository;
     private final JobExpenseEscrowRepository escrowRepository;
@@ -205,12 +208,13 @@ public class JobExpenseService {
             );
         }
         if (refunded.signum() > 0) {
-            walletService.credit(
+            walletService.creditRestoringJobDebits(
                     job.getCreatedBy().getId(),
                     refunded,
                     WalletTransactionType.EXPENSE_BUDGET_REFUND,
                     job.getId(),
-                    refundOperationKey(job.getId())
+                    refundOperationKey(job.getId()),
+                    EXPENSE_SOURCE_DEBITS
             );
         }
         escrow.settle(reimbursed, refunded, LocalDateTime.now());
@@ -224,12 +228,13 @@ public class JobExpenseService {
         if (escrow.getStatus() != JobExpenseEscrowStatus.HELD) {
             throw new ConflictException("Budżet wydatków został już rozliczony z wykonawcą");
         }
-        walletService.credit(
+        walletService.creditRestoringJobDebits(
                 job.getCreatedBy().getId(),
                 escrow.getBudgetAmount(),
                 WalletTransactionType.EXPENSE_BUDGET_REFUND,
                 job.getId(),
-                refundOperationKey(job.getId())
+                refundOperationKey(job.getId()),
+                EXPENSE_SOURCE_DEBITS
         );
         escrow.refundAll(LocalDateTime.now());
         escrowRepository.save(escrow);

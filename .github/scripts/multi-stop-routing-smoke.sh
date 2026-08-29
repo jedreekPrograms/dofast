@@ -50,16 +50,11 @@ WORKER_TOKEN=$(json_value /tmp/worker-login.json accessToken)
 CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT id FROM job_categories WHERE slug='mala-paczka' AND active=TRUE;" | tr -d '[:space:]')
 test -n "$CATEGORY_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 50.00 WHERE user_id = $OWNER_ID;
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 50.00, NULL, CURRENT_TIMESTAMP, 'smoke:multistop:seed:' || id, 50.00
-FROM wallets WHERE user_id = $OWNER_ID;
-COMMIT;
-SQL
+# This smoke needs spendable fixture value only; it must not masquerade as card funding or earnings.
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 50.00 PLATFORM_ADJUSTMENT \
+  "smoke:multistop:funding:$OWNER_ID" \
+  "smoke:multistop:seed:$OWNER_ID"
 
 STOP_ONE_PRIVATE='ul. Piastowska 20, odbiór w recepcji'
 STOP_TWO_PRIVATE='ul. Szczytnicka 30, wejście od podwórza'

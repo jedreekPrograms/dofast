@@ -37,16 +37,14 @@ PUBLISHER_TOKEN=$(json_value /tmp/publisher-login.json accessToken)
 CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT id FROM job_categories WHERE slug='montaz-mebli' AND fulfillment_mode='ON_SITE' AND active=TRUE;" | tr -d '[:space:]')
 test -n "$CATEGORY_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 200.00 WHERE user_id = $OWNER_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-SELECT id, 'TOP_UP', 200.00, NULL, CURRENT_TIMESTAMP, 'smoke:expense:owner-seed:' || id, 200.00 FROM wallets WHERE user_id = $OWNER_ID;
-UPDATE wallets SET balance = 50.00 WHERE user_id = $PUBLISHER_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-SELECT id, 'TOP_UP', 50.00, NULL, CURRENT_TIMESTAMP, 'smoke:expense:publisher-seed:' || id, 50.00 FROM wallets WHERE user_id = $PUBLISHER_ID;
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 200.00 PLATFORM_ADJUSTMENT \
+  "smoke:expense:owner:$OWNER_ID" \
+  "smoke:expense:owner-seed:$OWNER_ID"
+bash .github/scripts/seed-wallet-funding.sh \
+  "$PUBLISHER_ID" 50.00 PLATFORM_ADJUSTMENT \
+  "smoke:expense:publisher:$PUBLISHER_ID" \
+  "smoke:expense:publisher-seed:$PUBLISHER_ID"
 
 # Publication funding must reserve labor + expense budget, while the labor escrow fee basis remains unchanged.
 PUBLICATION=$(curl --fail --silent --show-error -H "Authorization: Bearer $PUBLISHER_TOKEN" -H 'Content-Type: application/json' \
@@ -140,5 +138,12 @@ test "$EXPENSE_LOCK" = "-100.00"
 test "$EXPENSE_REIMBURSE" = "35.00"
 test "$EXPENSE_REFUND" = "65.00"
 test "$LABOR_FEE" = "0.40"
+
+OWNER_COVERAGE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT w.balance = COALESCE(sum(l.remaining_amount),0) FROM wallets w LEFT JOIN wallet_funding_lots l ON l.wallet_id=w.id WHERE w.user_id=$OWNER_ID GROUP BY w.id;" | tr -d '[:space:]')
+test "$OWNER_COVERAGE" = "t"
+PUBLISHER_COVERAGE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT w.balance = COALESCE(sum(l.remaining_amount),0) FROM wallets w LEFT JOIN wallet_funding_lots l ON l.wallet_id=w.id WHERE w.user_id=$PUBLISHER_ID GROUP BY w.id;" | tr -d '[:space:]')
+test "$PUBLISHER_COVERAGE" = "t"
 
 echo 'Expense publication funding, receipt claim, fee-free reimbursement and unused-budget refund: OK'

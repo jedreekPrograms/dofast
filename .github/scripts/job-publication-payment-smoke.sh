@@ -29,13 +29,10 @@ RECOVERY_COLUMNS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT count(*) FROM information_schema.columns WHERE table_name='job_publications' AND column_name IN ('payment_received_at','recovery_reason');" | tr -d '[:space:]')
 test "$RECOVERY_COLUMNS" = "2"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance=25.00 WHERE id=$WALLET_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-VALUES ($WALLET_ID, 'TOP_UP', 25.00, NULL, CURRENT_TIMESTAMP, 'smoke:job-publication:seed:25', 25.00);
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$USER_ID" 25.00 PLATFORM_ADJUSTMENT \
+  'smoke:job-publication:source:25' \
+  'smoke:job-publication:seed:25'
 
 PARTIAL_PAYLOAD=$(cat <<JSON
 {"requestId":"smoke-partial-001","job":{"title":"Publication partial smoke","description":"Payment-backed publication with a partial wallet balance.","price":70.00,"categoryId":$CATEGORY_ID,"location":{"latitude":51.1100,"longitude":17.0300,"publicLabel":"Wrocław","privateLabel":"ul. Testowa 1, Wrocław"}}}
@@ -109,20 +106,21 @@ RELEASE_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT count(*) FROM wallet_transactions WHERE operation_key='job-publication:${PUBLICATION_ID}:release' AND type='JOB_PUBLICATION_RELEASE' AND amount=25.00;" | tr -d '[:space:]')
 test "$RELEASE_COUNT" = "1"
 
+RESTORED_SOURCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || ':' || remaining_amount::text || ':' || withdrawable FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID;" | tr -d '[:space:]')
+test "$RESTORED_SOURCE" = "PLATFORM_ADJUSTMENT:25.00:false"
+
 PRIVATE_PAYLOAD=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT request_payload IS NULL FROM job_publications WHERE id=$PUBLICATION_ID;" | tr -d '[:space:]')
 test "$PRIVATE_PAYLOAD" = "t"
-echo 'Cancellation restores reserved balance exactly once and clears private payload: OK'
+echo 'Cancellation restores reserved balance and original funding source exactly once: OK'
 
 # Add only the missing 45 PLN to reach a fully-funded 70 PLN wallet and verify that
 # publication immediately becomes a real OPEN job with one HELD escrow transaction.
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance=70.00 WHERE id=$WALLET_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-VALUES ($WALLET_ID, 'TOP_UP', 45.00, NULL, CURRENT_TIMESTAMP, 'smoke:job-publication:seed:45', 70.00);
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$USER_ID" 45.00 PLATFORM_ADJUSTMENT \
+  'smoke:job-publication:source:45' \
+  'smoke:job-publication:seed:45'
 
 FULL=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $TOKEN" \
@@ -155,10 +153,14 @@ ESCROW_LOCK=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT type || ':' || amount || ':' || balance_after FROM wallet_transactions WHERE operation_key='escrow:${JOB_ID}:lock';" | tr -d '[:space:]')
 test "$ESCROW_LOCK" = "ESCROW_LOCK:-70.00:0.00"
 
+FUNDING_REMAINING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT COALESCE(sum(remaining_amount),0)::text FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID;" | tr -d '[:space:]')
+test "$FUNDING_REMAINING" = "0.00"
+
 PUBLIC_JOB=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $TOKEN" \
   "$api/jobs/$JOB_ID")
 echo "$PUBLIC_JOB" | grep -q '"status":"OPEN"'
 echo "$PUBLIC_JOB" | grep -q 'Publication fully funded smoke'
 
-echo 'Fully funded wallet publication creates the public job and HELD escrow: OK'
+echo 'Fully funded wallet publication consumes all source lots and creates the public job with HELD escrow: OK'

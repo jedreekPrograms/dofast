@@ -34,16 +34,11 @@ CLEANING_CATEGORY=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SEL
 test -n "$MONTAGE_CATEGORY"
 test -n "$CLEANING_CATEGORY"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 200.00 WHERE user_id = $OWNER_ID;
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 200.00, NULL, CURRENT_TIMESTAMP, 'smoke:nearby-category:seed:' || id, 200.00
-FROM wallets WHERE user_id = $OWNER_ID;
-COMMIT;
-SQL
+# Nearby discovery needs spendable fixture value only; keep it non-withdrawable.
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 200.00 PLATFORM_ADJUSTMENT \
+  "smoke:nearby-category:funding:$OWNER_ID" \
+  "smoke:nearby-category:seed:$OWNER_ID"
 
 create_job() {
   local category_id="$1"

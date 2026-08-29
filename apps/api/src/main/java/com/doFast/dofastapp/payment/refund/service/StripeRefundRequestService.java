@@ -95,12 +95,13 @@ public class StripeRefundRequestService {
         StripeRefundRequest request = refundRepository.saveAndFlush(
                 StripeRefundRequest.create(userId, paymentIntentId, requestKey, amount, CURRENCY, now)
         );
-        walletService.debit(
+        walletService.debitFromStripePayment(
                 userId,
                 amount,
                 WalletTransactionType.STRIPE_REFUND_RESERVE,
                 null,
-                reserveOperationKey(request.getId())
+                reserveOperationKey(request.getId()),
+                paymentIntentId
         );
         return toResponse(request);
     }
@@ -187,12 +188,13 @@ public class StripeRefundRequestService {
         if (request.isWalletRestored()) {
             return;
         }
-        walletService.credit(
+        walletService.creditRestoringOperation(
                 request.getUserId(),
                 request.getAmount(),
                 WalletTransactionType.STRIPE_REFUND_RESTORE,
                 null,
-                restoreOperationKey(request.getId())
+                restoreOperationKey(request.getId()),
+                reserveOperationKey(request.getId())
         );
         request.markWalletRestored(LocalDateTime.now());
     }

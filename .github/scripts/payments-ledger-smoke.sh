@@ -69,31 +69,21 @@ CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT id
 CATEGORY_ID="${CATEGORY_ID//[[:space:]]/}"
 test -n "$CATEGORY_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets
-SET balance = CASE
-    WHEN user_id = $REQUESTER_ID THEN 50.00
-    WHEN user_id = $REFUND_ID THEN 30.00
-    ELSE balance
-END
-WHERE user_id IN ($REQUESTER_ID, $REFUND_ID);
+REQUESTER_WALLET_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT id FROM wallets WHERE user_id=$REQUESTER_ID;" | tr -d '[:space:]')
+REFUND_WALLET_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT id FROM wallets WHERE user_id=$REFUND_ID;" | tr -d '[:space:]')
+test -n "$REQUESTER_WALLET_ID"
+test -n "$REFUND_WALLET_ID"
 
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 50.00, NULL, CURRENT_TIMESTAMP, 'smoke:seed:requester:' || id, 50.00
-FROM wallets
-WHERE user_id = $REQUESTER_ID;
-
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 30.00, NULL, CURRENT_TIMESTAMP, 'smoke:seed:refund:' || id, 30.00
-FROM wallets
-WHERE user_id = $REFUND_ID;
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$REQUESTER_ID" 50.00 PLATFORM_ADJUSTMENT \
+  "smoke:ledger:requester:$REQUESTER_WALLET_ID" \
+  "smoke:seed:requester:$REQUESTER_WALLET_ID"
+bash .github/scripts/seed-wallet-funding.sh \
+  "$REFUND_ID" 30.00 PLATFORM_ADJUSTMENT \
+  "smoke:ledger:refund:$REFUND_WALLET_ID" \
+  "smoke:seed:refund:$REFUND_WALLET_ID"
 
 QUOTE_A=$(create_route_quote "$REQUESTER_TOKEN" 'Ledger A origin' 'Ledger A destination')
 QUOTE_B=$(create_route_quote "$REQUESTER_TOKEN" 'Ledger B origin' 'Ledger B destination')
@@ -167,6 +157,10 @@ RELEASE_LEDGER=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT amount || '|' || balance_after || '|' || operation_key FROM wallet_transactions WHERE wallet_id = (SELECT id FROM wallets WHERE user_id = $WORKER_ID) AND type = 'ESCROW_RELEASE';")
 test "${RELEASE_LEDGER//[[:space:]]/}" = "40.00|40.00|escrow:${JOB_ID}:release"
 
+WORKER_FUNDING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || '|' || withdrawable || '|' || remaining_amount::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$WORKER_ID);" | tr -d '[:space:]')
+test "$WORKER_FUNDING" = "EARNED_JOB|true|40.00"
+
 ESCROW_RELEASED=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT status || '|' || payee_id || '|' || (resolved_at IS NOT NULL) FROM escrow_transactions WHERE job_id = $JOB_ID;")
 test "${ESCROW_RELEASED//[[:space:]]/}" = "RELEASED|${WORKER_ID}|true"
@@ -188,11 +182,13 @@ REFUND_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE user_id = $REFUND_ID;")
 test "${REFUND_BALANCE//[[:space:]]/}" = "30.00"
 
-REFUND_WALLET_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
-  "SELECT id FROM wallets WHERE user_id = $REFUND_ID;" | tr -d '[:space:]')
 REFUND_LEDGER=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT string_agg(type || ':' || amount || ':' || balance_after || ':' || operation_key, ',' ORDER BY created_at, id) FROM wallet_transactions WHERE wallet_id = $REFUND_WALLET_ID;")
 test "${REFUND_LEDGER//[[:space:]]/}" = "TOP_UP:30.00:30.00:smoke:seed:refund:${REFUND_WALLET_ID},ESCROW_LOCK:-15.00:15.00:escrow:${REFUND_JOB_ID}:lock,REFUND:15.00:30.00:escrow:${REFUND_JOB_ID}:refund"
+
+REFUND_SOURCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || '|' || withdrawable || '|' || remaining_amount::text FROM wallet_funding_lots WHERE wallet_id=$REFUND_WALLET_ID;" | tr -d '[:space:]')
+test "$REFUND_SOURCE" = "PLATFORM_ADJUSTMENT|false|30.00"
 
 REFUNDED_ESCROW=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT status || '|' || (payee_id IS NULL) || '|' || (resolved_at IS NOT NULL) FROM escrow_transactions WHERE job_id = $REFUND_JOB_ID;")
@@ -231,6 +227,7 @@ RECONCILIATION=$(curl --fail --silent --show-error \
   "$api/admin/finance/reconciliation")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["healthy"] is True; assert d["walletBalanceMismatches"] == 0; assert d["ledgerSequenceMismatches"] == 0; assert d["stripeLedgerMismatches"] == 0; assert d["heldEscrowCount"] == 0; assert float(d["heldEscrowAmount"]) == 0.0; assert d["processedStripePayments"] == 0' <<< "$RECONCILIATION"
 
+# Intentional corruption: reconciliation must detect a wallet balance that bypasses the ledger.
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 -c \
   "UPDATE wallets w SET balance = 1.00 FROM users u WHERE w.user_id = u.id AND u.email = 'admin-ledger@example.com';"
 BROKEN_BALANCE=$(curl --fail --silent --show-error \
@@ -238,6 +235,7 @@ BROKEN_BALANCE=$(curl --fail --silent --show-error \
   "$api/admin/finance/reconciliation")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["healthy"] is False; assert d["walletBalanceMismatches"] == 1; assert d["ledgerSequenceMismatches"] == 0; assert d["stripeLedgerMismatches"] == 0' <<< "$BROKEN_BALANCE"
 
+# Intentional orphan Stripe ledger fixture: keep these raw writes so reconciliation observes the mismatch.
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<'SQL'
 UPDATE wallets w
 SET balance = 0.00

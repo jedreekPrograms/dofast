@@ -49,14 +49,12 @@ PROVIDER_EVENTS_TABLE=$(docker compose exec -T db psql -U dofast -d dofast -tAc 
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='payout_provider_events';" | tr -d '[:space:]')
 test "$PROVIDER_EVENTS_TABLE" = "1"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 50.00 WHERE user_id = $USER_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-SELECT id, 'TOP_UP', 50.00, NULL, CURRENT_TIMESTAMP, 'smoke:payout:seed:' || id, 50.00
-FROM wallets WHERE user_id = $USER_ID;
-COMMIT;
-SQL
+# Payout eligibility must be backed by money actually earned in doFast, never by card funding.
+bash .github/scripts/seed-wallet-funding.sh \
+  "$USER_ID" 50.00 EARNED_JOB \
+  "smoke:payout:earned:$USER_ID" \
+  "smoke:payout:seed:$USER_ID" \
+  ESCROW_RELEASE
 
 ELIGIBILITY=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $USER_TOKEN" "$api/wallet/payouts/eligibility")
@@ -163,6 +161,13 @@ test -z "$PROVIDER_SUBMITTED_AT"
 PAID_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE user_id=$USER_ID;" | tr -d '[:space:]')
 test "$PAID_BALANCE" = "38.00"
+
+WITHDRAWABLE_REMAINING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT COALESCE(sum(remaining_amount),0)::numeric(19,2)::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$USER_ID) AND withdrawable=TRUE;" | tr -d '[:space:]')
+test "$WITHDRAWABLE_REMAINING" = "38.00"
+NON_WITHDRAWABLE_REMAINING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT COALESCE(sum(remaining_amount),0)::numeric(19,2)::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$USER_ID) AND withdrawable=FALSE;" | tr -d '[:space:]')
+test "$NON_WITHDRAWABLE_REMAINING" = "0.00"
 
 SUCCESS_RESERVE_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT count(*) FROM wallet_transactions WHERE operation_key='payout:${USER_ID}:client:smoke-success-001:reserve';" | tr -d '[:space:]')

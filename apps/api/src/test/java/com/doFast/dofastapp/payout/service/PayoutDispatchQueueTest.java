@@ -94,28 +94,30 @@ class PayoutDispatchQueueTest {
     }
 
     @Test
-    void definitiveProviderFailureRestoresReservedFundsExactlyOnce() {
+    void definitiveProviderFailureRestoresReservedSourcesExactlyOnce() {
         User user = user(7L, UserStatus.ACTIVE);
         PayoutRequest payout = payout(41L, user);
         payout.startProcessing(LocalDateTime.now());
         when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
-        when(walletService.credit(
+        when(walletService.creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.PAYOUT_RESTORE,
                 null,
-                "payout:41:restore"
+                "payout:41:restore",
+                "payout:7:client:req-12345:reserve"
         )).thenReturn(true);
 
         queue.complete(41L, PayoutDispatchResult.definitiveFailure("RECIPIENT_REJECTED"));
 
         assertEquals(PayoutStatus.FAILED, payout.getStatus());
-        verify(walletService).credit(
+        verify(walletService).creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
                 WalletTransactionType.PAYOUT_RESTORE,
                 null,
-                "payout:41:restore"
+                "payout:41:restore",
+                "payout:7:client:req-12345:reserve"
         );
     }
 
@@ -129,7 +131,7 @@ class PayoutDispatchQueueTest {
         queue.complete(41L, PayoutDispatchResult.retryableFailure("TIMEOUT"));
 
         assertEquals(PayoutStatus.REVIEW_REQUIRED, payout.getStatus());
-        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -145,7 +147,7 @@ class PayoutDispatchQueueTest {
         assertEquals("provider-payout-41", payout.getProviderReference());
         assertNotNull(payout.getProviderSubmittedAt());
         assertNull(payout.getResolvedAt());
-        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
         verify(eventRepository).save(any());
     }
@@ -162,7 +164,7 @@ class PayoutDispatchQueueTest {
         assertEquals(PayoutStatus.PAID, payout.getStatus());
         assertEquals("sandbox-payout-41", payout.getProviderReference());
         assertNull(payout.getProviderSubmittedAt());
-        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
     }
 

@@ -31,33 +31,60 @@ WITH publication AS (
       CURRENT_TIMESTAMP, 'UNSPECIFIED'
   )
   RETURNING id
+), wallet_update AS (
+  UPDATE wallets
+  SET balance = balance + 2.00
+  WHERE id = $WALLET_ID
+  RETURNING id, balance
 ), wallet_credit AS (
   INSERT INTO wallet_transactions (
       wallet_id, type, amount, job_id, created_at, operation_key, balance_after
   )
-  SELECT $WALLET_ID, 'JOB_PUBLICATION_FUNDING', 2.00, NULL, CURRENT_TIMESTAMP,
-         'stripe:intent:pi_smoke_publication_purpose', w.balance + 2.00
-  FROM wallets w WHERE w.id = $WALLET_ID
-  RETURNING 1
-), wallet_update AS (
-  UPDATE wallets SET balance = balance + 2.00 WHERE id = $WALLET_ID RETURNING 1
+  SELECT wu.id, 'JOB_PUBLICATION_FUNDING', 2.00, NULL, CURRENT_TIMESTAMP,
+         'stripe:intent:pi_smoke_publication_purpose', wu.balance
+  FROM wallet_update wu
+  RETURNING id, wallet_id
+), funding_lot AS (
+  INSERT INTO wallet_funding_lots (
+      wallet_id, source_type, source_reference, original_amount,
+      remaining_amount, withdrawable, created_at
+  )
+  SELECT wc.wallet_id, 'STRIPE_PAYMENT', 'pi_smoke_publication_purpose',
+         2.00, 2.00, FALSE, CURRENT_TIMESTAMP
+  FROM wallet_credit wc
+  RETURNING id, wallet_id
+), funding_movement AS (
+  INSERT INTO wallet_funding_movements (
+      wallet_transaction_id, funding_lot_id, amount, restores_movement_id, created_at
+  )
+  SELECT wc.id, fl.id, 2.00, NULL, CURRENT_TIMESTAMP
+  FROM wallet_credit wc
+  JOIN funding_lot fl ON fl.wallet_id = wc.wallet_id
+  RETURNING id
+), settlement AS (
+  INSERT INTO payment_transactions (
+      stripe_payment_intent_id, stripe_event_id, user_id, amount, currency,
+      settlement_purpose, business_reference, processed_at
+  )
+  SELECT 'pi_smoke_publication_purpose', 'evt_smoke_publication_purpose', $ADMIN_ID,
+         2.00, 'PLN', 'JOB_PUBLICATION', publication.id::text, CURRENT_TIMESTAMP
+  FROM publication
+  RETURNING business_reference
 )
-INSERT INTO payment_transactions (
-    stripe_payment_intent_id, stripe_event_id, user_id, amount, currency,
-    settlement_purpose, business_reference, processed_at
-)
-SELECT 'pi_smoke_publication_purpose', 'evt_smoke_publication_purpose', $ADMIN_ID,
-       2.00, 'PLN', 'JOB_PUBLICATION', publication.id::text, CURRENT_TIMESTAMP
-FROM publication
-RETURNING business_reference;
+SELECT business_reference FROM settlement;
 SQL
 )
 PUBLICATION_ID="${PUBLICATION_ID//[[:space:]]/}"
 test -n "$PUBLICATION_ID"
 
+FUNDING_SOURCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || '|' || source_reference || '|' || remaining_amount::text || '|' || withdrawable FROM wallet_funding_lots WHERE wallet_id=$WALLET_ID AND source_reference='pi_smoke_publication_purpose';" | tr -d '[:space:]')
+test "$FUNDING_SOURCE" = "STRIPE_PAYMENT|pi_smoke_publication_purpose|2.00|false"
+
 HEALTHY=$(curl --fail --silent --show-error -H "Authorization: Bearer $ADMIN_TOKEN" "$api/admin/finance/reconciliation")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["healthy"] is True; assert d["stripeLedgerMismatches"] == 0' <<< "$HEALTHY"
 
+# Intentional settlement identity corruption: wallet funding remains valid while Stripe ledger linkage breaks.
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 -c \
   "UPDATE wallet_transactions SET type='TOP_UP' WHERE operation_key='stripe:intent:pi_smoke_publication_purpose';"
 BROKEN_TYPE=$(curl --fail --silent --show-error -H "Authorization: Bearer $ADMIN_TOKEN" "$api/admin/finance/reconciliation")
@@ -68,6 +95,7 @@ docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 -c \
 RESTORED=$(curl --fail --silent --show-error -H "Authorization: Bearer $ADMIN_TOKEN" "$api/admin/finance/reconciliation")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["healthy"] is True; assert d["stripeLedgerMismatches"] == 0' <<< "$RESTORED"
 
+# Intentional orphan: remove provider settlement identity but leave the wallet credit and its provenance intact.
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 -c \
   "DELETE FROM payment_transactions WHERE stripe_payment_intent_id='pi_smoke_publication_purpose';"
 ORPHAN=$(curl --fail --silent --show-error -H "Authorization: Bearer $ADMIN_TOKEN" "$api/admin/finance/reconciliation")
