@@ -2,6 +2,8 @@ package com.doFast.dofastapp.payment.webhook;
 
 import com.doFast.dofastapp.job.publication.JobPublicationPaymentIntentService;
 import com.doFast.dofastapp.job.publication.JobPublicationStripeSettlementService;
+import com.doFast.dofastapp.payment.refund.service.StripeRefundSettlementResult;
+import com.doFast.dofastapp.payment.refund.service.StripeRefundSettlementService;
 import com.doFast.dofastapp.payment.risk.service.StripePaymentDisputeService;
 import com.doFast.dofastapp.payment.service.StripePaymentService;
 import com.doFast.dofastapp.payout.provider.PayoutProviderSettlementResult;
@@ -11,6 +13,7 @@ import com.stripe.model.Dispute;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Payout;
+import com.stripe.model.Refund;
 import com.stripe.model.StripeObject;
 import com.stripe.net.Webhook;
 import org.slf4j.Logger;
@@ -35,19 +38,22 @@ public class StripeWebhookController {
     private final JobPublicationStripeSettlementService publicationSettlementService;
     private final StripeConnectPayoutSettlementService payoutSettlementService;
     private final StripePaymentDisputeService paymentDisputeService;
+    private final StripeRefundSettlementService refundSettlementService;
 
     public StripeWebhookController(
             @Value("${stripe.webhook.secret}") String endpointSecret,
             StripePaymentService stripePaymentService,
             JobPublicationStripeSettlementService publicationSettlementService,
             StripeConnectPayoutSettlementService payoutSettlementService,
-            StripePaymentDisputeService paymentDisputeService
+            StripePaymentDisputeService paymentDisputeService,
+            StripeRefundSettlementService refundSettlementService
     ) {
         this.endpointSecret = endpointSecret;
         this.stripePaymentService = stripePaymentService;
         this.publicationSettlementService = publicationSettlementService;
         this.payoutSettlementService = payoutSettlementService;
         this.paymentDisputeService = paymentDisputeService;
+        this.refundSettlementService = refundSettlementService;
     }
 
     @PostMapping
@@ -65,6 +71,9 @@ public class StripeWebhookController {
 
         if ("payment_intent.succeeded".equals(event.getType())) {
             return handleSuccessfulPayment(event);
+        }
+        if (isRefundEvent(event.getType())) {
+            return handleRefundEvent(event);
         }
         if (isPaymentDisputeEvent(event.getType())) {
             return handlePaymentDisputeEvent(event);
@@ -96,6 +105,33 @@ public class StripeWebhookController {
             return ResponseEntity.ok("ok");
         } catch (RuntimeException ex) {
             log.error("Failed to process Stripe event {} / PaymentIntent {}", event.getId(), paymentIntent.getId(), ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
+        }
+    }
+
+    private ResponseEntity<String> handleRefundEvent(Event event) {
+        StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
+        if (!(stripeObject instanceof Refund refund)) {
+            log.error("Unable to deserialize Stripe refund event {} of type {}", event.getId(), event.getType());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("unable to deserialize event");
+        }
+        try {
+            StripeRefundSettlementResult result = refundSettlementService.process(
+                    refund,
+                    event.getId(),
+                    event.getType(),
+                    event.getCreated()
+            );
+            if (result == StripeRefundSettlementResult.IGNORED) {
+                return ResponseEntity.ok("ignored");
+            }
+            if (result == StripeRefundSettlementResult.DUPLICATE) {
+                return ResponseEntity.ok("already processed");
+            }
+            log.info("Processed Stripe refund event {} / refund {}", event.getId(), refund.getId());
+            return ResponseEntity.ok("ok");
+        } catch (RuntimeException ex) {
+            log.error("Failed to process Stripe refund event {} / refund {}", event.getId(), refund.getId(), ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
         }
     }
@@ -139,6 +175,12 @@ public class StripeWebhookController {
             log.error("Failed to process Stripe Connect payout event {} / payout {}", event.getId(), payout.getId(), ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
         }
+    }
+
+    private boolean isRefundEvent(String eventType) {
+        return StripeRefundSettlementService.CREATED.equals(eventType)
+                || StripeRefundSettlementService.UPDATED.equals(eventType)
+                || StripeRefundSettlementService.FAILED.equals(eventType);
     }
 
     private boolean isPaymentDisputeEvent(String eventType) {

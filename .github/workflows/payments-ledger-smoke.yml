@@ -8,6 +8,7 @@ on:
       - ".github/scripts/payments-ledger-smoke.sh"
       - ".github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh"
       - ".github/scripts/stripe-chargeback-smoke.sh"
+      - ".github/scripts/stripe-refund-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
@@ -16,6 +17,7 @@ on:
       - "apps/api/src/main/resources/db/migration/V9__payments_and_ledger_hardening.sql"
       - "apps/api/src/main/resources/db/migration/V38__platform_fee_settlement.sql"
       - "apps/api/src/main/resources/db/migration/V47__stripe_payment_disputes.sql"
+      - "apps/api/src/main/resources/db/migration/V48__stripe_original_method_refunds.sql"
   pull_request:
     branches: [master]
     paths:
@@ -23,6 +25,7 @@ on:
       - ".github/scripts/payments-ledger-smoke.sh"
       - ".github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh"
       - ".github/scripts/stripe-chargeback-smoke.sh"
+      - ".github/scripts/stripe-refund-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
@@ -31,6 +34,7 @@ on:
       - "apps/api/src/main/resources/db/migration/V9__payments_and_ledger_hardening.sql"
       - "apps/api/src/main/resources/db/migration/V38__platform_fee_settlement.sql"
       - "apps/api/src/main/resources/db/migration/V47__stripe_payment_disputes.sql"
+      - "apps/api/src/main/resources/db/migration/V48__stripe_original_method_refunds.sql"
 
 permissions:
   contents: read
@@ -95,6 +99,9 @@ jobs:
 
       - name: Verify signed Stripe chargeback recovery and reinstatement
         run: bash .github/scripts/stripe-chargeback-smoke.sh
+
+      - name: Verify signed Stripe original-method refund settlement
+        run: bash .github/scripts/stripe-refund-smoke.sh
 
       - name: Diagnostics
         if: failure()

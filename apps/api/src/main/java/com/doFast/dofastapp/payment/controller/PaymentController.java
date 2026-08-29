@@ -7,6 +7,9 @@ import com.doFast.dofastapp.payment.dto.PlatformFeeQuoteResponse;
 import com.doFast.dofastapp.payment.fee.PlatformFeePolicy;
 import com.doFast.dofastapp.payment.fee.PlatformFeeQuote;
 import com.doFast.dofastapp.payment.fee.PlatformFeeQuoteService;
+import com.doFast.dofastapp.payment.refund.dto.CreateStripeRefundRequest;
+import com.doFast.dofastapp.payment.refund.dto.StripeRefundResponse;
+import com.doFast.dofastapp.payment.refund.service.StripeRefundCoordinator;
 import com.doFast.dofastapp.payment.service.StripePaymentService;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
@@ -16,6 +19,7 @@ import jakarta.validation.constraints.Min;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,15 +36,18 @@ public class PaymentController {
     private final StripePaymentService stripePaymentService;
     private final PlatformFeePolicy platformFeePolicy;
     private final PlatformFeeQuoteService platformFeeQuoteService;
+    private final StripeRefundCoordinator refundCoordinator;
 
     public PaymentController(
             StripePaymentService stripePaymentService,
             PlatformFeePolicy platformFeePolicy,
-            PlatformFeeQuoteService platformFeeQuoteService
+            PlatformFeeQuoteService platformFeeQuoteService,
+            StripeRefundCoordinator refundCoordinator
     ) {
         this.stripePaymentService = stripePaymentService;
         this.platformFeePolicy = platformFeePolicy;
         this.platformFeeQuoteService = platformFeeQuoteService;
+        this.refundCoordinator = refundCoordinator;
     }
 
     @PostMapping("/create-intent")
@@ -53,6 +60,22 @@ public class PaymentController {
                 user.getId(),
                 request.requestId()
         );
+    }
+
+    @PostMapping("/refunds")
+    public StripeRefundResponse requestRefund(
+            @RequestBody @Valid CreateStripeRefundRequest request,
+            @AuthenticationPrincipal User user
+    ) {
+        return refundCoordinator.request(user.getId(), request);
+    }
+
+    @GetMapping("/refunds/{refundRequestId}")
+    public StripeRefundResponse getRefund(
+            @PathVariable @Min(1) Long refundRequestId,
+            @AuthenticationPrincipal User user
+    ) {
+        return refundCoordinator.get(refundRequestId, user.getId());
     }
 
     @GetMapping("/platform-fee-policy")
