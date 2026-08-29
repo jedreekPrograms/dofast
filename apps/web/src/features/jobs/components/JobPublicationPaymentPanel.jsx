@@ -135,7 +135,7 @@ function JobPublicationPaymentPanel({ publication, onPublished, onReset }) {
     setSubmitting(true)
     setMessage('')
     try {
-      const returnUrl = new URL('/jobs/new', window.location.origin)
+      const returnUrl = new URL(`/jobs/publications/${publication.id}/return`, window.location.origin)
       const { error, paymentIntent } = await stripeRef.current.confirmPayment({
         elements: elementsRef.current,
         confirmParams: { return_url: returnUrl.toString() },

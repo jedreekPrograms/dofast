@@ -72,6 +72,10 @@ The web application reuses one Stripe.js loader and Stripe Payment Element. The 
 
 Frontend confirmation is never treated as proof that a job is published. After Stripe reports success or processing, the UI polls the private publication endpoint. Only backend status `PUBLISHED`, reached after signed-webhook settlement and escrow creation, completes the flow.
 
+Payment methods that require a browser redirect return to a publication-specific route, `/jobs/publications/{publicationId}/return`, rather than the generic create-job page. The return page immediately removes Stripe query parameters from the browser URL, including any client-secret-bearing parameters, and resolves the referenced publication through the authenticated backend endpoint. A `redirect_status` value is used only to decide whether the UI should wait or offer a retry; it is never accepted as evidence that money moved. Successful/processing returns poll the server for signed-webhook settlement, failed returns offer a safe path back to the existing pending publication, and the UI navigates to the real job only after the server reports `PUBLISHED`.
+
+This publication-specific return route also avoids accidentally resuming a different pending publication when a requester has more than one recoverable payment attempt.
+
 ## Privacy
 
 Exact on-site addresses and point-to-point route details remain private under the same rules as ordinary job creation. Before funding, the pending payload is owner-only and never returned by the publication response. After a terminal publication state, the serialized payload is removed from `job_publications`.
