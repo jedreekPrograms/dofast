@@ -47,12 +47,7 @@ public class JobPublicationPaymentIntentService {
                 .putMetadata("purpose", PURPOSE)
                 .putMetadata("jobPublicationId", publication.getId().toString())
                 .putMetadata("topUpRequestId", "job-publication-" + publication.getId())
-                .setAutomaticPaymentMethods(
-                        PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
-                                .setEnabled(true)
-                                .setAllowRedirects(PaymentIntentCreateParams.AutomaticPaymentMethods.AllowRedirects.NEVER)
-                                .build()
-                )
+                .setAutomaticPaymentMethods(automaticPaymentMethods())
                 .build();
         RequestOptions options = RequestOptions.builder()
                 .setIdempotencyKey("dofast:job-publication:" + publication.getId())
@@ -79,6 +74,12 @@ public class JobPublicationPaymentIntentService {
         } catch (StripeException ex) {
             throw new PaymentProviderException("Nie udało się przygotować płatności za publikację", ex);
         }
+    }
+
+    static PaymentIntentCreateParams.AutomaticPaymentMethods automaticPaymentMethods() {
+        return PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
+                .setEnabled(true)
+                .build();
     }
 
     private void assertOwner(JobPublication publication, User currentUser) {
