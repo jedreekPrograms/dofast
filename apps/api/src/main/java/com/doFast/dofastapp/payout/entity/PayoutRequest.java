@@ -179,6 +179,28 @@ public class PayoutRequest {
         failureCode = null;
     }
 
+    public void scheduleSubmittedReconciliation(LocalDateTime nextReconciliationAt) {
+        requireStatus(PayoutStatus.SUBMITTED);
+        if (nextReconciliationAt == null) {
+            throw new IllegalArgumentException("Submitted payout reconciliation time is required");
+        }
+        this.nextAttemptAt = nextReconciliationAt;
+    }
+
+    public void recordSubmittedReconciliationFailure(String code, LocalDateTime now) {
+        requireStatus(PayoutStatus.SUBMITTED);
+        if (code == null || code.isBlank() || now == null) {
+            throw new IllegalArgumentException("Submitted payout reconciliation failure is required");
+        }
+        failureCode = code.trim();
+        lastErrorAt = now;
+    }
+
+    public void clearSubmittedReconciliationFailure() {
+        requireStatus(PayoutStatus.SUBMITTED);
+        failureCode = null;
+    }
+
     public void markPaid(String providerReference, LocalDateTime now) {
         requireStatus(PayoutStatus.PROCESSING);
         requireProviderReference(providerReference);
