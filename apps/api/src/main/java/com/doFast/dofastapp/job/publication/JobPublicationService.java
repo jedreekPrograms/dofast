@@ -151,7 +151,8 @@ public class JobPublicationService {
         boolean paymentRequired = publication.getStatus() == JobPublicationStatus.PAYMENT_REQUIRED;
         return new JobPublicationResponse(publication.getId(), publication.getStatus(), publication.getTotalAmount(),
                 publication.getWalletReservedAmount(), missing, publication.getPaymentAmount(), publication.getCurrency(),
-                publication.getPublishedJobId(), publication.getExpiresAt(), paymentRequired, paymentRequired);
+                publication.getPublishedJobId(), publication.getExpiresAt(), publication.getPaymentReceivedAt(),
+                publication.getRecoveryReason(), paymentRequired, paymentRequired);
     }
 
     private LocalDateTime validatePublishable(JobRequest request, User user, LocalDateTime now) {

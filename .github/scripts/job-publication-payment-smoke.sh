@@ -25,6 +25,10 @@ WALLET_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT id FROM wallets WHERE user_id=$USER_ID;" | tr -d '[:space:]')
 test -n "$WALLET_ID"
 
+RECOVERY_COLUMNS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT count(*) FROM information_schema.columns WHERE table_name='job_publications' AND column_name IN ('payment_received_at','recovery_reason');" | tr -d '[:space:]')
+test "$RECOVERY_COLUMNS" = "2"
+
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
 BEGIN;
 UPDATE wallets SET balance=25.00 WHERE id=$WALLET_ID;
@@ -56,6 +60,8 @@ assert float(p['paymentAmount'])==45.0, p
 assert p['paymentRequired'] is True, p
 assert p['cancellable'] is True, p
 assert p['jobId'] is None, p
+assert p['paymentReceivedAt'] is None, p
+assert p['recoveryReason'] is None, p
 PY
 
 BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
@@ -86,7 +92,14 @@ CANCELLED=$(curl --fail --silent --show-error -X POST \
   -H "Authorization: Bearer $TOKEN" \
   "$api/jobs/publications/$PUBLICATION_ID/cancel")
 printf '%s' "$CANCELLED" > /tmp/publication-cancelled.json
-python3 -c 'import json; p=json.load(open("/tmp/publication-cancelled.json")); assert p["status"]=="CANCELLED" and p["cancellable"] is False'
+python3 - <<'PY'
+import json
+p=json.load(open('/tmp/publication-cancelled.json'))
+assert p['status']=='CANCELLED', p
+assert p['cancellable'] is False, p
+assert p['paymentReceivedAt'] is None, p
+assert p['recoveryReason'] is None, p
+PY
 
 RESTORED_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE id=$WALLET_ID;" | tr -d '[:space:]')
@@ -126,6 +139,8 @@ assert float(p['walletReservedAmount'])==0.0, p
 assert float(p['paymentAmount'])==0.0, p
 assert p['paymentRequired'] is False, p
 assert p['jobId'] is not None, p
+assert p['paymentReceivedAt'] is None, p
+assert p['recoveryReason'] is None, p
 PY
 
 FINAL_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \

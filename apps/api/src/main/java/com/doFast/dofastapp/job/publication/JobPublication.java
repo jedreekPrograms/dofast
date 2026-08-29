@@ -16,6 +16,7 @@ import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
@@ -79,6 +80,13 @@ public class JobPublication {
 
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
+
+    @Column(name = "payment_received_at")
+    private LocalDateTime paymentReceivedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "recovery_reason", length = 48)
+    private JobPublicationRecoveryReason recoveryReason;
 
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
@@ -150,23 +158,41 @@ public class JobPublication {
         this.updatedAt = now;
     }
 
+    public void recordSuccessfulPayment(LocalDateTime now) {
+        if (this.paymentReceivedAt == null) {
+            this.paymentReceivedAt = now;
+        }
+        this.updatedAt = now;
+    }
+
     public void markPublished(Long jobId, LocalDateTime now) {
         this.status = JobPublicationStatus.PUBLISHED;
         this.publishedJobId = jobId;
         this.requestPayload = null;
+        this.recoveryReason = null;
         this.publishedAt = now;
         this.updatedAt = now;
     }
 
-    public void markPaymentReceived(LocalDateTime now) {
+    public void markPaymentReceived(JobPublicationRecoveryReason recoveryReason, LocalDateTime now) {
         this.status = JobPublicationStatus.PAYMENT_RECEIVED;
         this.requestPayload = null;
-        this.updatedAt = now;
+        this.recoveryReason = Objects.requireNonNull(recoveryReason, "recoveryReason");
+        recordSuccessfulPayment(now);
+    }
+
+    public void markLatePaymentAfterCancellation(LocalDateTime now) {
+        if (this.status != JobPublicationStatus.CANCELLED) {
+            throw new IllegalStateException("Tylko anulowana publikacja może otrzymać późne potwierdzenie płatności");
+        }
+        this.recoveryReason = JobPublicationRecoveryReason.CANCELLED_BEFORE_PAYMENT_CONFIRMED;
+        recordSuccessfulPayment(now);
     }
 
     public void cancel(LocalDateTime now) {
         this.status = JobPublicationStatus.CANCELLED;
         this.requestPayload = null;
+        this.recoveryReason = null;
         this.cancelledAt = now;
         this.updatedAt = now;
     }
@@ -188,6 +214,8 @@ public class JobPublication {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public LocalDateTime getExpiresAt() { return expiresAt; }
+    public LocalDateTime getPaymentReceivedAt() { return paymentReceivedAt; }
+    public JobPublicationRecoveryReason getRecoveryReason() { return recoveryReason; }
     public LocalDateTime getPublishedAt() { return publishedAt; }
     public LocalDateTime getCancelledAt() { return cancelledAt; }
 }

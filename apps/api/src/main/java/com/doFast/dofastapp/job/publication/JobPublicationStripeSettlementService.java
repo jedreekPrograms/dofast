@@ -60,8 +60,14 @@ public class JobPublicationStripeSettlementService {
                 publication.getId()
         );
 
+        LocalDateTime now = LocalDateTime.now();
+        publication.recordSuccessfulPayment(now);
+
+        if (publication.getStatus() == JobPublicationStatus.CANCELLED) {
+            publication.markLatePaymentAfterCancellation(now);
+            return newlyProcessed;
+        }
         if (publication.getStatus() == JobPublicationStatus.PUBLISHED
-                || publication.getStatus() == JobPublicationStatus.CANCELLED
                 || publication.getStatus() == JobPublicationStatus.PAYMENT_RECEIVED) {
             return newlyProcessed;
         }
@@ -69,10 +75,10 @@ public class JobPublicationStripeSettlementService {
             throw new ConflictException("Publikacja ma nieobsługiwany stan płatności");
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        if (!publication.getExpiresAt().isAfter(now) || !lockAndValidateDependencies(publication, now)) {
+        JobPublicationRecoveryReason recoveryReason = settlementBlocker(publication, now);
+        if (recoveryReason != null) {
             publicationService.restoreReservation(publication);
-            publication.markPaymentReceived(now);
+            publication.markPaymentReceived(recoveryReason, now);
             publicationRepository.save(publication);
             return newlyProcessed;
         }
@@ -85,20 +91,27 @@ public class JobPublicationStripeSettlementService {
         return newlyProcessed;
     }
 
-    private boolean lockAndValidateDependencies(JobPublication publication, LocalDateTime now) {
+    private JobPublicationRecoveryReason settlementBlocker(JobPublication publication, LocalDateTime now) {
+        if (!publication.getExpiresAt().isAfter(now)) {
+            return JobPublicationRecoveryReason.PUBLICATION_EXPIRED;
+        }
+
         JobCategory category = categoryRepository.findByIdAndActiveTrue(publication.getCategoryId()).orElse(null);
         if (category == null || category.getParent() == null || category.getFulfillmentMode() == null) {
-            return false;
+            return JobPublicationRecoveryReason.CATEGORY_UNAVAILABLE;
         }
         if (publication.getRouteQuoteId() == null) {
-            return true;
+            return null;
         }
 
         RouteQuote quote = routeQuoteRepository.findByIdForUpdate(publication.getRouteQuoteId()).orElse(null);
-        return quote != null
-                && quote.getConsumedAt() == null
-                && quote.getExpiresAt().isAfter(now)
-                && quote.getUser().getId().equals(publication.getUser().getId());
+        if (quote == null
+                || quote.getConsumedAt() != null
+                || !quote.getExpiresAt().isAfter(now)
+                || !quote.getUser().getId().equals(publication.getUser().getId())) {
+            return JobPublicationRecoveryReason.ROUTE_QUOTE_UNAVAILABLE;
+        }
+        return null;
     }
 
     private void assertPaymentMatches(JobPublication publication, PaymentIntent paymentIntent) {

@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.job.publication.dto;
 
+import com.doFast.dofastapp.job.publication.JobPublicationRecoveryReason;
 import com.doFast.dofastapp.job.publication.JobPublicationStatus;
 
 import java.math.BigDecimal;
@@ -15,6 +16,8 @@ public record JobPublicationResponse(
         String currency,
         Long jobId,
         LocalDateTime expiresAt,
+        LocalDateTime paymentReceivedAt,
+        JobPublicationRecoveryReason recoveryReason,
         boolean paymentRequired,
         boolean cancellable
 ) {}
