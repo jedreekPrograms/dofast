@@ -285,3 +285,17 @@ HEALED_RECONCILIATION=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   "$api/admin/finance/reconciliation")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["healthy"] is True; assert d["walletBalanceMismatches"] == 0; assert d["ledgerSequenceMismatches"] == 0; assert d["stripeLedgerMismatches"] == 0; assert d["processedStripePayments"] == 1' <<< "$HEALED_RECONCILIATION"
+
+docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 -c \
+  "UPDATE payment_transactions SET settlement_purpose = 'JOB_PUBLICATION', business_reference = '999999999' WHERE stripe_payment_intent_id = 'pi_smoke_orphan';"
+BROKEN_SETTLEMENT_IDENTITY=$(curl --fail --silent --show-error \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "$api/admin/finance/reconciliation")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["healthy"] is False; assert d["stripeLedgerMismatches"] == 1; assert d["processedStripePayments"] == 1' <<< "$BROKEN_SETTLEMENT_IDENTITY"
+
+docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 -c \
+  "UPDATE payment_transactions SET settlement_purpose = 'TOP_UP', business_reference = 'smoke-orphan' WHERE stripe_payment_intent_id = 'pi_smoke_orphan';"
+FINAL_RECONCILIATION=$(curl --fail --silent --show-error \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "$api/admin/finance/reconciliation")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["healthy"] is True; assert d["stripeLedgerMismatches"] == 0; assert d["processedStripePayments"] == 1' <<< "$FINAL_RECONCILIATION"
