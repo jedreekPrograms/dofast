@@ -19,6 +19,18 @@ export function getPayoutEligibility() {
   return apiRequest('/wallet/payouts/eligibility')
 }
 
+export function getPayoutOnboardingStatus() {
+  return apiRequest('/wallet/payouts/onboarding/status')
+}
+
+export function refreshPayoutOnboardingStatus() {
+  return apiRequest('/wallet/payouts/onboarding/refresh', { method: 'POST' })
+}
+
+export function createPayoutOnboardingLink() {
+  return apiRequest('/wallet/payouts/onboarding/link', { method: 'POST' })
+}
+
 export function getPayouts() {
   return apiRequest('/wallet/payouts')
 }

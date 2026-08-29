@@ -2,8 +2,11 @@ package com.doFast.dofastapp.payout.controller;
 
 import com.doFast.dofastapp.payout.dto.CreatePayoutRequest;
 import com.doFast.dofastapp.payout.dto.PayoutEligibilityResponse;
+import com.doFast.dofastapp.payout.dto.PayoutOnboardingLinkResponse;
+import com.doFast.dofastapp.payout.dto.PayoutOnboardingStatusResponse;
 import com.doFast.dofastapp.payout.dto.PayoutResponse;
 import com.doFast.dofastapp.payout.service.PayoutService;
+import com.doFast.dofastapp.payout.service.StripeConnectOnboardingService;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,14 +26,31 @@ import java.util.List;
 public class PayoutController {
 
     private final PayoutService payoutService;
+    private final StripeConnectOnboardingService onboardingService;
 
-    public PayoutController(PayoutService payoutService) {
+    public PayoutController(PayoutService payoutService, StripeConnectOnboardingService onboardingService) {
         this.payoutService = payoutService;
+        this.onboardingService = onboardingService;
     }
 
     @GetMapping("/eligibility")
     public PayoutEligibilityResponse eligibility(@AuthenticationPrincipal User user) {
         return payoutService.eligibility(user);
+    }
+
+    @GetMapping("/onboarding/status")
+    public PayoutOnboardingStatusResponse onboardingStatus(@AuthenticationPrincipal User user) {
+        return onboardingService.cachedStatus(user);
+    }
+
+    @PostMapping("/onboarding/refresh")
+    public PayoutOnboardingStatusResponse refreshOnboarding(@AuthenticationPrincipal User user) {
+        return onboardingService.refreshStatus(user);
+    }
+
+    @PostMapping("/onboarding/link")
+    public PayoutOnboardingLinkResponse onboardingLink(@AuthenticationPrincipal User user) {
+        return onboardingService.createOnboardingLink(user);
     }
 
     @GetMapping

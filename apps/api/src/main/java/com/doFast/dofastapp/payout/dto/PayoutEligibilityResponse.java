@@ -9,5 +9,7 @@ public record PayoutEligibilityResponse(
         BigDecimal minimumAmount,
         BigDecimal availableBalance,
         String currency,
+        boolean recipientReady,
+        boolean recipientSetupAvailable,
         boolean eligible
 ) {}

@@ -8,15 +8,20 @@ Refunded escrow is normal available wallet balance. If an open job is cancelled 
 
 ## User flow
 
-`GET /wallet/payouts/eligibility` returns only the current user's payout eligibility, current available balance, minimum amount and provider mode.
+`GET /wallet/payouts/eligibility` returns the current user's payout eligibility, balance, minimum amount, provider mode, and connected-recipient readiness. Stripe Connect setup readiness is reported independently of whether live payout dispatch is enabled.
+
+`GET /wallet/payouts/onboarding/status` reads the last authoritative connected-account state cached by doFast. `POST /wallet/payouts/onboarding/refresh` re-reads provider state. `POST /wallet/payouts/onboarding/link` creates or reuses the user's mapped Express account and returns a single-use Stripe-hosted onboarding link. Provisioning is available only to ACTIVE users whose doFast identity verification is currently `VERIFIED`.
+
+Stripe `refresh_url` returns to the wallet with `stripe-connect=refresh`; the web app immediately requests a fresh single-use Account Link instead of trying to reuse an expired URL. The normal return path refreshes provider state before presenting readiness.
 
 `POST /wallet/payouts` requires an idempotent client `requestId`. A successful request:
 
 1. pessimistically locks the user and verifies the account is ACTIVE;
 2. requires current identity-verification status `VERIFIED`;
 3. requires a configured payout provider;
-4. persists the payout request and audit event;
-5. debits the wallet using `PAYOUT_RESERVE`, making double-spending impossible while the transfer is pending.
+4. if the configured provider is Stripe Connect, requires the mapped recipient account to be ready;
+5. persists the payout request and audit event;
+6. debits the wallet using `PAYOUT_RESERVE`, making double-spending impossible while the transfer is pending.
 
 Repeating the same request id and amount returns the same payout without reserving funds again. Reusing the request id for another amount is rejected.
 
@@ -45,13 +50,17 @@ An ambiguous provider result never restores funds automatically. This is intenti
 
 The application defaults to `PAYOUT_PROVIDER=disabled` unless configured. `sandbox` is allowed only when `PAYOUT_SANDBOX_ENABLED=true`; it is for local development and CI and **never sends real money**. The web UI explicitly labels sandbox payouts as test-only.
 
-Before live payouts are enabled, production still needs recipient onboarding and a real provider adapter (for example a regulated marketplace payout product). Provider callbacks must be signature-verified and idempotent.
+Stripe Connect recipient onboarding has a separate kill switch, `PAYOUT_STRIPE_CONNECT_ENABLED`. It creates a persistent provider-account mapping but does not itself enable money movement. This slice intentionally does **not** register `stripe-connect` as a `PayoutProvider`; setting `PAYOUT_PROVIDER=stripe-connect` therefore remains fail-closed until a live dispatch adapter is shipped and reviewed.
+
+Connected-account readiness requires all of the following provider-confirmed conditions: account details submitted, payouts enabled, the `transfers` capability active, and no currently-due requirements. A transient Stripe API error does not overwrite the last successful readiness snapshot.
 
 ## KYC and account safety
 
 A payout request requires a currently `VERIFIED` identity. The dispatcher rechecks payout eligibility before sending reserved money so a later account suspension or verification revocation cannot silently bypass the safety boundary.
 
-The public profile remains unchanged: it only exposes the existing boolean trust badge. Payout status, payout amounts, provider references and audit events are private financial data.
+Connected-account creation is also gated on ACTIVE + VERIFIED so an authenticated but unverified account cannot cause doFast to provision external provider resources. The account-link return and refresh URLs are fixed server configuration and validated to HTTPS outside localhost; callers cannot supply an arbitrary redirect target.
+
+The public profile remains unchanged: it only exposes the existing boolean trust badge. Payout status, payout amounts, provider account IDs, provider references and audit events are private financial data.
 
 ## Wallet accounting
 
@@ -73,7 +82,7 @@ Provider references and internal failure information are not returned by the nor
 
 ## Database and CI
 
-Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence and extends allowed wallet transaction types for payout reservation/restoration.
+Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence and wallet payout reservation/restoration. Flyway `V44__stripe_connect_payout_recipients.sql` owns the private user-to-provider account mapping and cached readiness state.
 
 `Worker payout smoke` verifies against PostgreSQL and the explicit sandbox provider:
 
@@ -84,7 +93,7 @@ Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence a
 - queued cancellation and exact fund restoration;
 - async sandbox dispatch to `PAID` with immutable audit events.
 
-Frontend CI additionally runs dependency audit, lint and production build, so the admin payout console is compiled through the same web verification gate as the rest of the application.
+Unit tests additionally enforce that a Stripe Connect payout cannot reserve funds before recipient readiness and that unverified users cannot provision a Connect recipient account. Frontend CI runs dependency audit, lint and production build.
 
 ## Related publish-payment flow
 

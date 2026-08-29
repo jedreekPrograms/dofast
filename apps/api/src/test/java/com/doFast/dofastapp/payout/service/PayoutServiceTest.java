@@ -26,7 +26,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,6 +47,7 @@ class PayoutServiceTest {
     @Mock private VerificationCaseRepository verificationRepository;
     @Mock private WalletService walletService;
     @Mock private PayoutProviderRegistry providerRegistry;
+    @Mock private StripeConnectOnboardingService onboardingService;
 
     private PayoutService payoutService;
 
@@ -60,7 +60,8 @@ class PayoutServiceTest {
                 verificationRepository,
                 walletService,
                 new PayoutProperties("sandbox", true, new BigDecimal("1.00"), 5, 15, 300),
-                providerRegistry
+                providerRegistry,
+                onboardingService
         );
     }
 
@@ -95,6 +96,25 @@ class PayoutServiceTest {
         assertEquals(new BigDecimal("25.00"), response.amount());
         assertTrue(response.cancellable());
         verify(eventRepository).save(any());
+    }
+
+    @Test
+    void stripeConnectRecipientMustBeReadyBeforeFundsAreReserved() {
+        User user = user(7L, UserStatus.ACTIVE);
+        VerificationCase verified = verification(user, VerificationStatus.VERIFIED);
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
+        when(payoutRepository.findByRequestKey("payout:7:client:req-12345")).thenReturn(Optional.empty());
+        when(providerRegistry.providerCodeForNewRequest()).thenReturn(StripeConnectOnboardingService.PROVIDER_CODE);
+        when(verificationRepository.findByUserIdForUpdate(7L)).thenReturn(Optional.of(verified));
+        when(onboardingService.isRecipientReady(7L)).thenReturn(false);
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user)
+        );
+
+        verify(walletService, never()).debit(any(), any(), any(), any(), any());
+        verify(payoutRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -153,18 +173,23 @@ class PayoutServiceTest {
     }
 
     @Test
-    void eligibilityRequiresVerificationProviderAndMinimumBalance() {
+    void eligibilityRequiresVerificationProviderRecipientAndMinimumBalance() {
         User user = user(7L, UserStatus.ACTIVE);
         when(verificationRepository.existsByUser_IdAndStatus(7L, VerificationStatus.VERIFIED)).thenReturn(true);
         when(providerRegistry.isConfiguredProviderAvailable()).thenReturn(true);
-        when(providerRegistry.providerMode()).thenReturn("SANDBOX");
+        when(providerRegistry.configuredProviderCode()).thenReturn(StripeConnectOnboardingService.PROVIDER_CODE);
+        when(providerRegistry.providerMode()).thenReturn("LIVE");
+        when(onboardingService.isRecipientReady(7L)).thenReturn(true);
+        when(onboardingService.setupAvailable()).thenReturn(true);
         when(walletService.getMyWallet(7L)).thenReturn(new WalletResponse(new BigDecimal("19.50")));
 
         var response = payoutService.eligibility(user);
 
         assertTrue(response.eligible());
+        assertTrue(response.recipientReady());
+        assertTrue(response.recipientSetupAvailable());
         assertEquals(new BigDecimal("19.50"), response.availableBalance());
-        assertEquals("SANDBOX", response.providerMode());
+        assertEquals("LIVE", response.providerMode());
     }
 
     private PayoutRequest payout(Long id, User user, BigDecimal amount) {
