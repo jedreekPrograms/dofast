@@ -272,9 +272,11 @@ INSERT INTO payment_transactions (
     user_id,
     amount,
     currency,
+    settlement_purpose,
+    business_reference,
     processed_at
 )
-SELECT 'pi_smoke_orphan', 'evt_smoke_orphan', u.id, 1.00, 'PLN', CURRENT_TIMESTAMP
+SELECT 'pi_smoke_orphan', 'evt_smoke_orphan', u.id, 1.00, 'PLN', 'TOP_UP', 'smoke-orphan', CURRENT_TIMESTAMP
 FROM users u
 WHERE u.email = 'admin-ledger@example.com';
 SQL
