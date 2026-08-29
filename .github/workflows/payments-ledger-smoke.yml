@@ -7,6 +7,7 @@ on:
       - ".github/workflows/payments-ledger-smoke.yml"
       - ".github/scripts/payments-ledger-smoke.sh"
       - ".github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh"
+      - ".github/scripts/stripe-chargeback-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
@@ -14,12 +15,14 @@ on:
       - "apps/api/src/main/java/com/doFast/dofastapp/dispute/**"
       - "apps/api/src/main/resources/db/migration/V9__payments_and_ledger_hardening.sql"
       - "apps/api/src/main/resources/db/migration/V38__platform_fee_settlement.sql"
+      - "apps/api/src/main/resources/db/migration/V47__stripe_payment_disputes.sql"
   pull_request:
     branches: [master]
     paths:
       - ".github/workflows/payments-ledger-smoke.yml"
       - ".github/scripts/payments-ledger-smoke.sh"
       - ".github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh"
+      - ".github/scripts/stripe-chargeback-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/**"
@@ -27,6 +30,7 @@ on:
       - "apps/api/src/main/java/com/doFast/dofastapp/dispute/**"
       - "apps/api/src/main/resources/db/migration/V9__payments_and_ledger_hardening.sql"
       - "apps/api/src/main/resources/db/migration/V38__platform_fee_settlement.sql"
+      - "apps/api/src/main/resources/db/migration/V47__stripe_payment_disputes.sql"
 
 permissions:
   contents: read
@@ -88,6 +92,9 @@ jobs:
 
       - name: Verify Stripe purpose to wallet type reconciliation
         run: bash .github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh
+
+      - name: Verify signed Stripe chargeback recovery and reinstatement
+        run: bash .github/scripts/stripe-chargeback-smoke.sh
 
       - name: Diagnostics
         if: failure()
