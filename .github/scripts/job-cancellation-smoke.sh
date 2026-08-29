@@ -29,6 +29,9 @@ OWNER_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/owner-login.js
 WORKER_ID=$(python3 -c 'import json; print(json.load(open("/tmp/worker-register.json"))["id"])')
 WORKER_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/worker-login.json"))["accessToken"])')
 OUTSIDER_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/outsider-login.json"))["accessToken"])')
+CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT id FROM job_categories WHERE slug='mala-paczka' AND fulfillment_mode='POINT_TO_POINT' AND active=TRUE;" | tr -d '[:space:]')
+test -n "$CATEGORY_ID"
 
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
 BEGIN;
@@ -51,7 +54,7 @@ QUOTE_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "
 JOB=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $OWNER_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d "{\"title\":\"Negotiated cancellation smoke\",\"description\":\"Verify mutual cancellation, escrow refund and tracking shutdown.\",\"price\":20.00,\"routeQuoteId\":\"$QUOTE_ID\"}" \
+  -d "{\"title\":\"Negotiated cancellation smoke\",\"description\":\"Verify mutual cancellation, escrow refund and tracking shutdown.\",\"price\":20.00,\"categoryId\":$CATEGORY_ID,\"routeQuoteId\":\"$QUOTE_ID\"}" \
   "$api/jobs")
 JOB_ID=$(python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]=="OPEN"; print(d["id"])' <<< "$JOB")
 
