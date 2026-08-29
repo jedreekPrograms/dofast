@@ -58,6 +58,8 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
                 LEFT JOIN wallets w ON w.user_id = p.user_id
                 LEFT JOIN wallet_transactions wt
                     ON wt.operation_key = 'stripe:intent:' || p.stripe_payment_intent_id
+                LEFT JOIN job_publications jp
+                    ON jp.stripe_payment_intent_id = p.stripe_payment_intent_id
                 WHERE p.stripe_event_id NOT LIKE 'legacy-event:%'
                   AND (
                       w.id IS NULL
@@ -67,6 +69,18 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
                       OR wt.amount <> p.amount
                       OR wt.job_id IS NOT NULL
                       OR p.currency <> 'PLN'
+                      OR (
+                          p.settlement_purpose = 'JOB_PUBLICATION'
+                          AND (
+                              p.business_reference IS NULL
+                              OR jp.id IS NULL
+                              OR p.business_reference <> jp.id::text
+                          )
+                      )
+                      OR (
+                          p.settlement_purpose = 'TOP_UP'
+                          AND jp.id IS NOT NULL
+                      )
                   )
 
                 UNION ALL
