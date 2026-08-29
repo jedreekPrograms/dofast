@@ -42,6 +42,8 @@ For the 70 / 25 / 45 example the successful flow is deliberately expressed throu
 
 This keeps the existing Stripe reconciliation invariant: every processed Stripe payment is represented by a `payment_transactions` claim and its corresponding `TOP_UP` wallet entry. The final available balance is 0.00 PLN and the held escrow is 70.00 PLN.
 
+Each processed Stripe claim also persists its settlement identity. Wallet top-ups use `TOP_UP`; publication payments use `JOB_PUBLICATION` and store the publication id as their business reference. Finance reconciliation verifies that a publication-purpose claim still points to the same `job_publications` row and that a normal top-up has not been rebound to a publication PaymentIntent. This makes cross-purpose or cross-publication ledger drift visible as an unhealthy Stripe reconciliation instead of silently accepting it.
+
 If the exact shortfall is below Stripe's configured minimum for this flow, doFast charges 1.00 PLN. The amount above the shortfall remains as ordinary wallet balance after the escrow lock.
 
 A single publication payment is capped at 10,000.00 PLN by the application safety boundary.
