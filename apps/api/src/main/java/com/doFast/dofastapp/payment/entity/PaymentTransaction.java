@@ -27,7 +27,11 @@ import java.time.LocalDateTime;
         },
         indexes = {
                 @Index(name = "idx_payment_transactions_user", columnList = "user_id"),
-                @Index(name = "idx_payment_transactions_processed", columnList = "processed_at")
+                @Index(name = "idx_payment_transactions_processed", columnList = "processed_at"),
+                @Index(
+                        name = "idx_payment_transactions_settlement_identity",
+                        columnList = "settlement_purpose,business_reference"
+                )
         }
 )
 public class PaymentTransaction {
@@ -51,6 +55,12 @@ public class PaymentTransaction {
     @Column(nullable = false, length = 3)
     private String currency;
 
+    @Column(name = "settlement_purpose", nullable = false, length = 32)
+    private String settlementPurpose;
+
+    @Column(name = "business_reference", length = 128)
+    private String businessReference;
+
     @Column(name = "processed_at", nullable = false)
     private LocalDateTime processedAt;
 
@@ -61,5 +71,7 @@ public class PaymentTransaction {
     public Long getUserId() { return userId; }
     public BigDecimal getAmount() { return amount; }
     public String getCurrency() { return currency; }
+    public String getSettlementPurpose() { return settlementPurpose; }
+    public String getBusinessReference() { return businessReference; }
     public LocalDateTime getProcessedAt() { return processedAt; }
 }
