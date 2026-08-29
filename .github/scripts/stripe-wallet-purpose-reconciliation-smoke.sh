@@ -22,11 +22,13 @@ WITH publication AS (
   INSERT INTO job_publications (
       user_id, request_key, payload_hash, request_payload, category_id,
       total_amount, wallet_reserved_amount, payment_amount, currency, status,
-      stripe_payment_intent_id, created_at, updated_at, expires_at
+      stripe_payment_intent_id, created_at, updated_at, expires_at,
+      payment_received_at, recovery_reason
   ) VALUES (
       $ADMIN_ID, 'smoke:publication-purpose', repeat('a',64), NULL, $CATEGORY_ID,
       2.00, 0.00, 2.00, 'PLN', 'PAYMENT_RECEIVED',
-      'pi_smoke_publication_purpose', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      'pi_smoke_publication_purpose', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP, 'UNSPECIFIED'
   )
   RETURNING id
 ), wallet_credit AS (
