@@ -2,13 +2,13 @@
 
 ## Purpose
 
-The payout module turns available wallet balance into an auditable cash-out request. It is deliberately separate from job escrow settlement: a completed job first credits the worker wallet (after the snapshotted platform fee), and a later payout request reserves part of that wallet balance for transfer by a payout provider.
+The payout module turns **withdrawable wallet earnings** into an auditable cash-out request. It is deliberately separate from job escrow settlement: a completed job first credits the worker wallet (after the snapshotted platform fee), and a later payout request reserves part of the wallet value that is explicitly classified as withdrawable.
 
-Refunded escrow is normal available wallet balance. If an open job is cancelled and its escrow is refunded, the requester may reuse those funds for another job or request a payout subject to the same identity/account/provider rules.
+Wallet balance is not anonymous cash. Refunded escrow, Stripe top-ups, legacy balance and platform adjustments retain their original source-of-funds classification. Returning value to a wallet makes it spendable again inside doFast, but does not automatically make it eligible for cash-out. The canonical source policy is documented in `docs/WALLET_SOURCE_OF_FUNDS.md`.
 
 ## User flow
 
-`GET /wallet/payouts/eligibility` returns the current user's payout eligibility, balance, minimum amount, provider mode, and connected-recipient readiness. Stripe Connect setup readiness is reported independently of whether live payout dispatch is enabled.
+`GET /wallet/payouts/eligibility` returns the current user's payout eligibility, balance, minimum amount, provider mode, and connected-recipient readiness. Stripe Connect setup readiness is reported independently of whether live payout dispatch is enabled. Payout eligibility uses the wallet's withdrawable funding balance rather than treating total wallet balance as cash-outable.
 
 `GET /wallet/payouts/onboarding/status` reads the last authoritative connected-account state cached by doFast. `POST /wallet/payouts/onboarding/refresh` re-reads provider state. `POST /wallet/payouts/onboarding/link` creates or reuses the user's mapped Express account and returns a single-use Stripe-hosted onboarding link. Provisioning is available only to ACTIVE users whose doFast identity verification is currently `VERIFIED`. Account creation is serialized by a fresh pessimistic user lock so concurrent onboarding requests cannot race past the local one-account-per-provider invariant.
 
@@ -20,12 +20,13 @@ Stripe `refresh_url` returns to the wallet with `stripe-connect=refresh`; the we
 2. requires current identity-verification status `VERIFIED`;
 3. requires a configured payout provider;
 4. if the configured provider is Stripe Connect, requires Connect onboarding to be available and refreshes the authoritative Stripe account state immediately before any wallet reservation;
-5. persists the payout request and audit event;
-6. debits the wallet using `PAYOUT_RESERVE`, making double-spending impossible while the transfer is pending.
+5. verifies that the requested amount is covered by funding lots marked `withdrawable=true`;
+6. persists the payout request and audit event;
+7. debits only eligible funding lots using `PAYOUT_RESERVE`, making double-spending impossible while the transfer is pending.
 
 Repeating the same request id and amount returns the same payout without reserving funds again. Reusing the request id for another amount is rejected.
 
-A user may cancel only a still-queued `REQUESTED` payout. Cancellation writes immutable audit events and restores the reserved amount exactly once with `PAYOUT_RESTORE`.
+A user may cancel only a still-queued `REQUESTED` payout. Cancellation writes immutable audit events and restores the reserved amount exactly once with `PAYOUT_RESTORE`. That restoration returns value to the exact funding lots consumed by the reserve and preserves their source type and withdrawability.
 
 ## State machine
 
@@ -104,14 +105,22 @@ The public profile remains unchanged: it only exposes the existing boolean trust
 
 ## Wallet accounting
 
-The wallet remains the source of truth for spendable balance:
+The wallet ledger and source-of-funds ledger jointly define the payout boundary:
 
 - `PAYOUT_RESERVE` is a negative wallet ledger entry created when the payout request is accepted;
+- the reserve may consume only funding lots with `withdrawable=true`;
+- current worker earnings (`EARNED_JOB`) are withdrawable;
+- Stripe/card funding (`STRIPE_PAYMENT`), migrated historical balance (`LEGACY_UNVERIFIED`) and platform adjustments (`PLATFORM_ADJUSTMENT`) are not withdrawable;
 - `PAYOUT_RESTORE` is a positive entry created only when a queued payout is cancelled, a pre-provider dispatch is definitively rejected, or an asynchronous provider failure has first been safely compensated;
+- `PAYOUT_RESTORE` restores the exact negative funding movements of the original reserve and therefore cannot change a funding source's withdrawal classification;
 - `SUBMITTED` creates no wallet entry because the reservation already removed those funds from spendable balance;
 - a successful `PAID` settlement creates no second debit because the money was already removed from available balance at reservation time.
 
-The current wallet is fungible: it does not artificially mark top-ups, job earnings or escrow refunds as separate spendability buckets. Ledger entries retain provenance, while the user may cash out available balance after KYC. If regulatory/provider requirements later require source-specific withdrawal restrictions, that must be implemented as a dedicated balance-bucket/provenance model rather than inferred heuristically from transaction history.
+For every wallet, `wallet.balance` must equal the sum of remaining funding lots. A mismatch is a financial-accounting error and fails closed. The application must never infer withdrawability heuristically from transaction history or repair a mismatch by directly changing `wallets.balance`.
+
+This model prevents a Stripe top-up from being converted into cash while still allowing card-funded value to pay for doFast jobs. Ordinary internal spending uses non-withdrawable value before earnings whenever possible, preserving legitimate earned value for later payout.
+
+See `docs/WALLET_SOURCE_OF_FUNDS.md` for the canonical source matrix, restoration rules, legacy migration behavior and operator runbook.
 
 ## Administration
 
@@ -123,20 +132,22 @@ Provider references and internal failure information are not returned by the nor
 
 ## Database and CI
 
-Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence and wallet payout reservation/restoration. Flyway `V44__stripe_connect_payout_recipients.sql` owns the private user-to-provider account mapping and cached readiness state. Flyway `V45__asynchronous_payout_settlement.sql` adds the `SUBMITTED` state, provider submission timestamp and deduplicated `payout_provider_events` audit table. Flyway `V46__stripe_connect_payout_dispatch.sql` adds the nullable, uniquely indexed provider transfer reference needed for crash-safe Stripe Connect dispatch and failure compensation.
+Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence and wallet payout reservation/restoration. Flyway `V44__stripe_connect_payout_recipients.sql` owns the private user-to-provider account mapping and cached readiness state. Flyway `V45__asynchronous_payout_settlement.sql` adds the `SUBMITTED` state, provider submission timestamp and deduplicated `payout_provider_events` audit table. Flyway `V46__stripe_connect_payout_dispatch.sql` adds the nullable, uniquely indexed provider transfer reference needed for crash-safe Stripe Connect dispatch and failure compensation. Flyway `V49__wallet_source_of_funds.sql` adds funding lots/movements and backfills positive pre-provenance balances as non-withdrawable `LEGACY_UNVERIFIED` value.
 
 `Worker payout smoke` verifies against PostgreSQL and the explicit sandbox provider:
 
-- V44 recipient persistence, V45 async-settlement state and V46 transfer-reference persistence are migrated;
+- V44 recipient persistence, V45 async-settlement state, V46 transfer-reference persistence and V49 funding provenance are migrated;
 - both Connect kill switches remain disabled in the sandbox smoke and do not affect sandbox cash-out;
 - KYC rejection before verification;
 - verified payout eligibility;
-- wallet reservation;
+- the fixture starts from `EARNED_JOB` rather than a synthetic card top-up;
+- payout reservation consumes only withdrawable funding;
 - idempotent client retry;
-- queued cancellation and exact fund restoration;
-- synchronous sandbox dispatch to `PAID` with immutable audit events and no fake provider submission/transfer references.
+- queued cancellation and exact source restoration;
+- synchronous sandbox dispatch to `PAID` with immutable audit events and no fake provider submission/transfer references;
+- paid balance remains fully covered by the remaining withdrawable earnings lot.
 
-Unit tests additionally enforce `PROCESSING -> SUBMITTED` without wallet mutation, `SUBMITTED -> PAID` without a second debit, `SUBMITTED -> FAILED` with exactly one restore, provider-event replay idempotency, rejection of contradictory terminal events, fresh Stripe Connect readiness before money movement, durable transfer-before-payout ordering, transfer reuse across retries, connected-account event identity validation, and reversal-before-wallet-restore ordering for failed Stripe payouts. Frontend CI continues to run dependency audit, tests, lint and production build.
+Unit tests additionally enforce funding-source allocation/restoration policy, coverage fail-closed behavior, exact-PaymentIntent refund allocation, `PROCESSING -> SUBMITTED` without wallet mutation, `SUBMITTED -> PAID` without a second debit, `SUBMITTED -> FAILED` with exactly one restore, provider-event replay idempotency, rejection of contradictory terminal events, fresh Stripe Connect readiness before money movement, durable transfer-before-payout ordering, transfer reuse across retries, connected-account event identity validation, and reversal-before-wallet-restore ordering for failed Stripe payouts. Frontend CI continues to run dependency audit, tests, lint and production build.
 
 ## Related publish-payment flow
 
@@ -144,4 +155,4 @@ Job publication no longer requires the wallet to cover the full budget. Publicat
 
 Stripe redirects return to the exact publication id, redirect query secrets are removed from the browser URL immediately, and the frontend treats the backend publication state—not `redirect_status`—as authoritative. Pending publication reservations expire and are released through the idempotent wallet path; attached unfinished PaymentIntents are canceled best-effort only after local cancellation/expiry has committed.
 
-These rules intentionally compose with payouts: a later cancelled job can return funds to the wallet, after which the user may reuse or cash them out subject to KYC, account and payout-provider eligibility.
+These rules compose with source-of-funds accounting: a cancelled job or publication restores the same lots that funded the original reservation. The user may reuse the returned value inside doFast. Cash-out is available only to the portion whose restored source remains withdrawable, normally worker `EARNED_JOB` value; returning card-funded or legacy value does not make it withdrawable.
