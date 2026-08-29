@@ -30,4 +30,17 @@ public interface StripePaymentDisputeEventRepository extends Repository<com.doFa
             @Param("eventType") String eventType,
             @Param("processedAt") LocalDateTime processedAt
     );
+
+    @Query(value = """
+            SELECT COUNT(*)
+            FROM stripe_payment_dispute_events
+            WHERE stripe_event_id = :eventId
+              AND stripe_dispute_id = :disputeId
+              AND event_type = :eventType
+            """, nativeQuery = true)
+    long countMatching(
+            @Param("eventId") String eventId,
+            @Param("disputeId") String disputeId,
+            @Param("eventType") String eventType
+    );
 }
