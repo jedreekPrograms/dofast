@@ -81,6 +81,10 @@ For example, if a 30.00 PLN job already has 30.00 PLN held, the chosen proposal 
 
 The web client funds that shortfall through the existing generic wallet top-up path. It does not introduce a second payment ledger or a proposal-specific Stripe webhook. A successful Stripe PaymentIntent is still claimed exactly once in `payment_transactions` and credited as a normal `TOP_UP` by the signed webhook. After the credit becomes visible, the client calls the normal proposal-accept endpoint again; that endpoint re-locks and re-validates the job/proposal and atomically debits only the actual escrow delta.
 
+Redirect-capable payment methods return to the authenticated `/jobs/{jobId}/proposal-payment-return` recovery route with a non-secret proposal recovery id. Stripe may append `payment_intent`, `payment_intent_client_secret` and `redirect_status`; the recovery page removes those Stripe parameters from the address bar in a layout effect before starting asynchronous recovery. The non-secret `proposalFunding=return` marker and proposal id remain so a manual refresh can safely retry recovery. The nginx gateway logs only `$uri`, not query strings, and sends `Referrer-Policy: strict-origin`, so the initial redirect request does not persist or forward those query values.
+
+The browser never treats `redirect_status` as settlement authority. Recovery always reads the requester-only funding preflight from the backend first. A browser-reported failure is only used to avoid extended polling after the server still reports a shortfall. Once webhook credit is visible, the client invokes the same authoritative proposal-accept endpoint; only that endpoint can revalidate marketplace state, adjust escrow and assign the worker.
+
 The existing online top-up minimum is 1.00 PLN. If the remaining shortfall is smaller, Stripe charges 1.00 PLN and only the required delta is later moved into escrow; the surplus remains ordinary wallet balance. The existing 10,000.00 PLN single top-up maximum also applies. Larger shortfalls are not split or bypassed automatically: the requester must fund the wallet separately before retrying acceptance.
 
 This separation is intentional. A Stripe webhook never chooses a worker. If the proposal is withdrawn, the job leaves `OPEN`, either user blocks the other, or any other acceptance invariant changes while payment is settling, the external payment can still safely finish as an ordinary wallet credit without resurrecting or accepting stale marketplace state.
@@ -143,6 +147,7 @@ On job details:
 - the requester sees all candidates with their public trust profiles, proposed amount and optional private message;
 - before selection, the requester gets a server-derived funding preflight rather than client-side wallet arithmetic;
 - when a higher proposal needs extra money, the existing Stripe Payment Element can fund only the remaining shortfall after currently available wallet funds;
+- inline card payments and redirect-capable payment methods both converge on the same signed-webhook settlement plus authoritative proposal-accept flow;
 - after Stripe success/processing, the UI waits for the signed webhook credit and only then retries the normal authoritative proposal acceptance;
 - if state changed while payment settled, acceptance fails safely and the credited money remains in the requester's wallet;
 - accepting a funded proposal updates the job immediately to the final price and normal active lifecycle;

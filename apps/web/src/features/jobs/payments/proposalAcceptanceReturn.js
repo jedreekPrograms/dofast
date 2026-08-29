@@ -1,6 +1,4 @@
-const PROPOSAL_RETURN_PARAM_KEYS = [
-  'proposalFunding',
-  'proposalId',
+const STRIPE_RETURN_PARAM_KEYS = [
   'payment_intent',
   'payment_intent_client_secret',
   'redirect_status',
@@ -18,7 +16,7 @@ export function buildProposalAcceptanceReturnUrl(origin, jobId, proposalId) {
     throw new TypeError('Valid job and proposal ids are required for the Stripe return URL')
   }
 
-  const url = new URL(`/jobs/${normalizedJobId}`, origin)
+  const url = new URL(`/jobs/${normalizedJobId}/proposal-payment-return`, origin)
   url.searchParams.set('proposalFunding', 'return')
   url.searchParams.set('proposalId', String(normalizedProposalId))
   return url.toString()
@@ -32,7 +30,7 @@ export function readProposalAcceptanceReturn(href) {
 
   const proposalId = positiveInteger(url.searchParams.get('proposalId'))
   const redirectStatus = url.searchParams.get('redirect_status')?.trim().toLowerCase() || null
-  PROPOSAL_RETURN_PARAM_KEYS.forEach((key) => url.searchParams.delete(key))
+  STRIPE_RETURN_PARAM_KEYS.forEach((key) => url.searchParams.delete(key))
 
   return {
     proposalId,
