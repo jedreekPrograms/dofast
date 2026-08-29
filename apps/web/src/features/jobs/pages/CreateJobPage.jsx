@@ -11,6 +11,7 @@ const EMPTY_FORM = {
   title: '',
   description: '',
   price: '',
+  expenseBudget: '',
   categoryId: '',
   assignmentMode: 'INSTANT',
   priceNegotiationEnabled: false,
@@ -240,6 +241,7 @@ function CreateJobPage() {
         title: form.title,
         description: form.description,
         price: Number(form.price),
+        expenseBudget: form.expenseBudget === '' ? 0 : Number(form.expenseBudget),
         categoryId: Number(form.categoryId),
         assignmentMode: form.assignmentMode,
         priceNegotiationEnabled: form.assignmentMode === 'PROPOSALS' && form.priceNegotiationEnabled,
@@ -386,10 +388,18 @@ function CreateJobPage() {
             <textarea name="description" value={form.description} onChange={updateField} minLength={10} maxLength={4000} rows={6} placeholder={fulfillmentMode === 'ON_SITE' ? 'Opisz dokładnie, co trzeba zrobić na miejscu i jakie narzędzia mogą być potrzebne.' : 'Opisz co trzeba odebrać lub zrobić w każdym punkcie i wszystkie ważne szczegóły.'} required />
           </label>
           <label className="field">
-            <span>Wynagrodzenie / budżet</span>
+            <span>Wynagrodzenie za usługę</span>
             <input name="price" type="number" value={form.price} onChange={updateField} min="0.01" step="0.01" placeholder="25.00" required />
-            <small>Najpierw użyjemy dostępnego salda. Jeśli go zabraknie, zapłacisz tylko brakującą kwotę przez Stripe.</small>
+            <small>To wynagrodzenie wykonawcy. Prowizja platformy jest rozliczana wyłącznie od tej części.</small>
           </label>
+          <label className="field">
+            <span>Budżet na zakupy / materiały</span>
+            <input name="expenseBudget" type="number" value={form.expenseBudget} onChange={updateField} min="0" max="10000" step="0.01" placeholder="0.00" />
+            <small>Opcjonalnie do 10 000 zł. Niewykorzystana część wraca do Ciebie, a udokumentowane koszty są zwracane wykonawcy bez prowizji od usługi.</small>
+          </label>
+          <div className="create-job-form__wide route-summary">
+            Finansowanie publikacji obejmuje wynagrodzenie i budżet zakupowy. Najpierw użyjemy dostępnego salda; jeśli go zabraknie, Stripe pobierze tylko brakującą kwotę.
+          </div>
 
           <div className="create-job-form__wide">
             <JobAssignmentModePicker
