@@ -65,7 +65,11 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
                       w.id IS NULL
                       OR wt.id IS NULL
                       OR wt.wallet_id <> w.id
-                      OR wt.type <> 'TOP_UP'
+                      OR p.settlement_purpose NOT IN ('TOP_UP', 'JOB_PUBLICATION')
+                      OR wt.type <> CASE
+                          WHEN p.settlement_purpose = 'JOB_PUBLICATION' THEN 'JOB_PUBLICATION_FUNDING'
+                          ELSE 'TOP_UP'
+                      END
                       OR wt.amount <> p.amount
                       OR wt.job_id IS NOT NULL
                       OR p.currency <> 'PLN'
@@ -90,7 +94,7 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
                 LEFT JOIN payment_transactions p
                     ON wt.operation_key = 'stripe:intent:' || p.stripe_payment_intent_id
                    AND p.stripe_event_id NOT LIKE 'legacy-event:%'
-                WHERE wt.type = 'TOP_UP'
+                WHERE wt.type IN ('TOP_UP', 'JOB_PUBLICATION_FUNDING')
                   AND wt.operation_key LIKE 'stripe:intent:%'
                   AND p.id IS NULL
             ) mismatches

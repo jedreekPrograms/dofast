@@ -36,13 +36,15 @@ Stripe PaymentIntent creation also uses a stable idempotency key derived from th
 For the 70 / 25 / 45 example the successful flow is deliberately expressed through the normal wallet ledger:
 
 - `JOB_PUBLICATION_RESERVE -25.00`
-- `TOP_UP +45.00` from the signed Stripe webhook
+- `JOB_PUBLICATION_FUNDING +45.00` from the signed Stripe webhook
 - `JOB_PUBLICATION_RELEASE +25.00`
 - `ESCROW_LOCK -70.00`
 
-This keeps the existing Stripe reconciliation invariant: every processed Stripe payment is represented by a `payment_transactions` claim and its corresponding `TOP_UP` wallet entry. The final available balance is 0.00 PLN and the held escrow is 70.00 PLN.
+The corresponding `payment_transactions` row persists `settlement_purpose=JOB_PUBLICATION` and the publication id as `business_reference`. Ordinary Stripe wallet funding uses `settlement_purpose=TOP_UP` and wallet transaction type `TOP_UP` instead.
 
-Each processed Stripe claim also persists its settlement identity. Wallet top-ups use `TOP_UP`; publication payments use `JOB_PUBLICATION` and store the publication id as their business reference. Finance reconciliation verifies that a publication-purpose claim still points to the same `job_publications` row and that a normal top-up has not been rebound to a publication PaymentIntent. This makes cross-purpose or cross-publication ledger drift visible as an unhealthy Stripe reconciliation instead of silently accepting it.
+Finance reconciliation checks both directions of this identity. A processed `JOB_PUBLICATION` payment must point to the same `job_publications` row and to a `JOB_PUBLICATION_FUNDING` wallet entry. A processed `TOP_UP` must point to a `TOP_UP` wallet entry and must not be rebound to a publication PaymentIntent. Stripe-funded wallet entries of either type must also have a matching non-legacy payment ledger claim. Cross-purpose, cross-publication, wrong-wallet-type and orphaned Stripe ledger drift therefore make reconciliation unhealthy instead of being silently accepted.
+
+The final available balance for the example is 0.00 PLN and the held escrow is 70.00 PLN.
 
 If the exact shortfall is below Stripe's configured minimum for this flow, doFast charges 1.00 PLN. The amount above the shortfall remains as ordinary wallet balance after the escrow lock.
 
