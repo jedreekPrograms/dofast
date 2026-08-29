@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @Transactional(readOnly = true)
@@ -27,6 +28,12 @@ public class JobExpenseService {
 
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal MAX_BUDGET = new BigDecimal("10000.00");
+    private static final Set<String> RECEIPT_MEDIA_TYPES = Set.of(
+            "application/pdf",
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+    );
 
     private final JobRepository jobRepository;
     private final JobExpenseEscrowRepository escrowRepository;
@@ -91,6 +98,9 @@ public class JobExpenseService {
         if (receipt.getVisibility() != JobAttachmentVisibility.PARTICIPANTS
                 || !sameUser(receipt.getUploadedBy(), currentUser)) {
             throw new ConflictException("Wydatek wymaga prywatnego załącznika PARTICIPANTS dodanego przez wykonawcę");
+        }
+        if (!RECEIPT_MEDIA_TYPES.contains(receipt.getMediaType())) {
+            throw new ConflictException("Paragon musi być plikiem PDF, JPEG, PNG lub WebP");
         }
         if (claimRepository.existsByAttachment_Id(receipt.getId())) {
             throw new ConflictException("Ten załącznik został już użyty do zgłoszenia wydatku");
