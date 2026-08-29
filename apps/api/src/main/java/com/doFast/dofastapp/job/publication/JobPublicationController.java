@@ -24,15 +24,18 @@ public class JobPublicationController {
     private final JobPublicationService publicationService;
     private final JobPublicationRecoveryCoordinator recoveryCoordinator;
     private final JobPublicationPaymentIntentCoordinator paymentIntentCoordinator;
+    private final JobPublicationCancellationCoordinator cancellationCoordinator;
 
     public JobPublicationController(
             JobPublicationService publicationService,
             JobPublicationRecoveryCoordinator recoveryCoordinator,
-            JobPublicationPaymentIntentCoordinator paymentIntentCoordinator
+            JobPublicationPaymentIntentCoordinator paymentIntentCoordinator,
+            JobPublicationCancellationCoordinator cancellationCoordinator
     ) {
         this.publicationService = publicationService;
         this.recoveryCoordinator = recoveryCoordinator;
         this.paymentIntentCoordinator = paymentIntentCoordinator;
+        this.cancellationCoordinator = cancellationCoordinator;
     }
 
     @PostMapping
@@ -61,6 +64,6 @@ public class JobPublicationController {
 
     @PostMapping("/{id}/cancel")
     public JobPublicationResponse cancel(@PathVariable Long id, @AuthenticationPrincipal User user) {
-        return publicationService.cancel(id, user);
+        return cancellationCoordinator.cancel(id, user);
     }
 }
