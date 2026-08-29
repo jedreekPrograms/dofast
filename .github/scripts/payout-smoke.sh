@@ -36,6 +36,10 @@ ADMIN_LOGIN=$(curl --fail --silent --show-error \
   "$api/users/login")
 ADMIN_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])' <<< "$ADMIN_LOGIN")
 
+RECIPIENT_TABLE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='payout_recipient_accounts';" | tr -d '[:space:]')
+test "$RECIPIENT_TABLE" = "1"
+
 docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
 BEGIN;
 UPDATE wallets SET balance = 50.00 WHERE user_id = $USER_ID;
@@ -47,7 +51,11 @@ SQL
 
 ELIGIBILITY=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $USER_TOKEN" "$api/wallet/payouts/eligibility")
-python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["identityVerified"] is False; assert d["providerAvailable"] is True; assert d["providerMode"] == "SANDBOX"; assert d["eligible"] is False; assert float(d["availableBalance"]) == 50.0' <<< "$ELIGIBILITY"
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["identityVerified"] is False; assert d["providerAvailable"] is True; assert d["providerMode"] == "SANDBOX"; assert d["recipientReady"] is False; assert d["recipientSetupAvailable"] is False; assert d["eligible"] is False; assert float(d["availableBalance"]) == 50.0' <<< "$ELIGIBILITY"
+
+ONBOARDING=$(curl --fail --silent --show-error \
+  -H "Authorization: Bearer $USER_TOKEN" "$api/wallet/payouts/onboarding/status")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["available"] is False; assert d["accountCreated"] is False; assert d["readyForPayout"] is False' <<< "$ONBOARDING"
 
 STATUS=$(curl --silent --show-error -o /tmp/payout-unverified.json -w '%{http_code}' \
   -H "Authorization: Bearer $USER_TOKEN" \
@@ -55,7 +63,7 @@ STATUS=$(curl --silent --show-error -o /tmp/payout-unverified.json -w '%{http_co
   -d '{"amount":10.00,"requestId":"smoke-unverified-001"}' \
   "$api/wallet/payouts")
 test "$STATUS" = "403"
-echo 'KYC gate: OK'
+echo 'KYC and disabled Connect onboarding gates: OK'
 
 curl --fail --silent --show-error -X POST \
   -H "Authorization: Bearer $USER_TOKEN" \
@@ -71,7 +79,7 @@ python3 -c 'import json; assert json.load(open("/tmp/payout-verification-approve
 
 ELIGIBILITY=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $USER_TOKEN" "$api/wallet/payouts/eligibility")
-python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["identityVerified"] is True; assert d["eligible"] is True; assert float(d["minimumAmount"]) == 1.0' <<< "$ELIGIBILITY"
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["identityVerified"] is True; assert d["recipientSetupAvailable"] is False; assert d["eligible"] is True; assert float(d["minimumAmount"]) == 1.0' <<< "$ELIGIBILITY"
 echo 'Verified payout eligibility: OK'
 
 CANCELLED_REQUEST=$(curl --fail --silent --show-error \

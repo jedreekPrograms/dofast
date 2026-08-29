@@ -14,12 +14,17 @@ import org.springframework.stereotype.Component;
 public class StripeConnectGateway {
 
     public String createExpressAccount(User user, String country, String idempotencyKey) {
+        AccountCreateParams.Capabilities capabilities = AccountCreateParams.Capabilities.builder()
+                .setTransfers(AccountCreateParams.Capabilities.Transfers.builder()
+                        .setRequested(true)
+                        .build())
+                .build();
         AccountCreateParams params = AccountCreateParams.builder()
                 .setType(AccountCreateParams.Type.EXPRESS)
                 .setCountry(country)
                 .setEmail(user.getEmail())
+                .setCapabilities(capabilities)
                 .putMetadata("dofastUserId", user.getId().toString())
-                .putExtraParam("capabilities[transfers][requested]", true)
                 .build();
         RequestOptions options = RequestOptions.builder().setIdempotencyKey(idempotencyKey).build();
         try {
@@ -54,11 +59,18 @@ public class StripeConnectGateway {
     public StripeConnectAccountState retrieveState(String accountId) {
         try {
             Account account = Account.retrieve(accountId);
-            boolean transfersEnabled = account.capabilities().getData().stream()
-                    .anyMatch(capability -> "transfers".equals(capability.getId()) && "active".equals(capability.getStatus()));
+            boolean transfersEnabled = account.getCapabilities() != null
+                    && "active".equals(account.getCapabilities().getTransfers());
+            if (account.getCapabilities() == null || account.getCapabilities().getTransfers() == null) {
+                transfersEnabled = account.capabilities().getData().stream()
+                        .anyMatch(capability -> "transfers".equals(capability.getId())
+                                && "active".equals(capability.getStatus()));
+            }
             boolean requirementsDue = account.getRequirements() != null
-                    && account.getRequirements().getCurrentlyDue() != null
-                    && !account.getRequirements().getCurrentlyDue().isEmpty();
+                    && ((account.getRequirements().getCurrentlyDue() != null
+                    && !account.getRequirements().getCurrentlyDue().isEmpty())
+                    || (account.getRequirements().getPastDue() != null
+                    && !account.getRequirements().getPastDue().isEmpty()));
             return new StripeConnectAccountState(
                     Boolean.TRUE.equals(account.getDetailsSubmitted()),
                     Boolean.TRUE.equals(account.getPayoutsEnabled()),
