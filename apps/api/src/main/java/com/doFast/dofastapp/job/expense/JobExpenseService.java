@@ -152,6 +152,26 @@ public class JobExpenseService {
     public void settleOnCompletion(Job job) {
         JobExpenseEscrow escrow = lockEscrow(job.getId());
         if (escrow == null) return;
+        settle(job, escrow, escrow.getClaimedAmount());
+    }
+
+    @Transactional
+    public void settleForDispute(Job job, BigDecimal approvedExpenseAmount) {
+        BigDecimal approved = normalizeNonNegative(approvedExpenseAmount);
+        JobExpenseEscrow escrow = lockEscrow(job.getId());
+        if (escrow == null) {
+            if (approved.signum() > 0) {
+                throw new ConflictException("Nie można zatwierdzić wydatków dla zlecenia bez budżetu wydatków");
+            }
+            return;
+        }
+        if (approved.compareTo(escrow.getClaimedAmount()) > 0) {
+            throw new ConflictException("Zatwierdzona kwota wydatków nie może przekraczać sumy zgłoszonych wydatków");
+        }
+        settle(job, escrow, approved);
+    }
+
+    private void settle(Job job, JobExpenseEscrow escrow, BigDecimal reimbursed) {
         if (escrow.getStatus() == JobExpenseEscrowStatus.SETTLED) return;
         if (escrow.getStatus() != JobExpenseEscrowStatus.HELD) {
             throw new ConflictException("Budżet wydatków został już zwrócony");
@@ -160,7 +180,6 @@ public class JobExpenseService {
             throw new ConflictException("Nie można rozliczyć wydatków bez przypisanego wykonawcy");
         }
 
-        BigDecimal reimbursed = escrow.getClaimedAmount();
         BigDecimal refunded = escrow.getBudgetAmount().subtract(reimbursed).setScale(2, RoundingMode.UNNECESSARY);
         if (reimbursed.signum() > 0) {
             walletService.credit(
@@ -241,6 +260,18 @@ public class JobExpenseService {
             return amount.setScale(2, RoundingMode.UNNECESSARY);
         } catch (ArithmeticException ex) {
             throw new BusinessException("Kwota wydatku może mieć maksymalnie dwa miejsca po przecinku");
+        }
+    }
+
+    private BigDecimal normalizeNonNegative(BigDecimal amount) {
+        if (amount == null) return ZERO;
+        if (amount.signum() < 0) {
+            throw new BusinessException("Zatwierdzona kwota wydatków nie może być ujemna");
+        }
+        try {
+            return amount.setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException ex) {
+            throw new BusinessException("Zatwierdzona kwota wydatków może mieć maksymalnie dwa miejsca po przecinku");
         }
     }
 

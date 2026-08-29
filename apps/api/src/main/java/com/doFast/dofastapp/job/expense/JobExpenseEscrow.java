@@ -93,7 +93,7 @@ public class JobExpenseEscrow {
         assertHeld();
         if (reimbursed == null || refunded == null || at == null
                 || reimbursed.signum() < 0 || refunded.signum() < 0
-                || reimbursed.compareTo(claimedAmount) != 0
+                || reimbursed.compareTo(claimedAmount) > 0
                 || reimbursed.add(refunded).compareTo(budgetAmount) != 0) {
             throw new IllegalArgumentException("Expense settlement does not match held budget");
         }

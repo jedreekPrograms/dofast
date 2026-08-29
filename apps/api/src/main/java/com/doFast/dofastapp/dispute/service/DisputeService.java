@@ -137,6 +137,10 @@ public class DisputeService {
             throw new ConflictException("Ten spór jest już zamknięty");
         if (dispute.getAssignedAdmin() != null && !sameUser(dispute.getAssignedAdmin(), admin))
             throw new ConflictException("Spór jest przypisany do innego administratora");
+        DisputeResolution resolution = request.resolution();
+        if (resolution == DisputeResolution.RESUME_JOB && request.approvedExpenseAmount() != null) {
+            throw new ConflictException("Nie można rozliczać wydatków przy wznowieniu zlecenia");
+        }
         LocalDateTime now = LocalDateTime.now();
         if (dispute.getStatus() == DisputeStatus.OPEN) {
             dispute.startReview(admin, now);
@@ -144,17 +148,18 @@ public class DisputeService {
         }
         Job job = jobRepository.findByIdForUpdate(dispute.getJob().getId()).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
         assertJobIsDisputed(job);
-        DisputeResolution resolution = request.resolution();
         switch (resolution) {
             case RELEASE_TO_WORKER -> {
                 if (job.getTakenBy() == null) throw new ConflictException("Zlecenie nie ma wykonawcy, któremu można wypłacić środki");
                 transactionService.releaseMoney(job, job.getTakenBy());
-                expenseService.settleOnCompletion(job);
+                if (request.approvedExpenseAmount() == null) expenseService.settleOnCompletion(job);
+                else expenseService.settleForDispute(job, request.approvedExpenseAmount());
                 job.complete(now);
             }
             case REFUND_TO_REQUESTER -> {
                 transactionService.refundMoney(job);
-                expenseService.refundAll(job);
+                if (request.approvedExpenseAmount() == null) expenseService.refundAll(job);
+                else expenseService.settleForDispute(job, request.approvedExpenseAmount());
                 job.cancel(now);
             }
             case RESUME_JOB -> {
@@ -163,11 +168,17 @@ public class DisputeService {
             }
         }
         jobRepository.save(job);
-        String note = request.note().trim();
-        dispute.resolve(admin, resolution, note, now); Dispute saved = disputeRepository.save(dispute);
-        recordEvent(saved, admin, DisputeEventType.RESOLVED, resolution.name() + ": " + note, now);
+        String note = resolutionNote(request);
+        dispute.resolve(admin, resolution, request.note().trim(), now); Dispute saved = disputeRepository.save(dispute);
+        recordEvent(saved, admin, DisputeEventType.RESOLVED, note, now);
         notifyParticipants(saved, NotificationType.DISPUTE_RESOLVED, "Spór rozstrzygnięty", resolutionMessage(saved, resolution));
         return toDetail(saved);
+    }
+
+    private String resolutionNote(ResolveDisputeRequest request) {
+        String note = request.resolution().name() + ": " + request.note().trim();
+        if (request.approvedExpenseAmount() == null) return note;
+        return note + " | approvedExpenseAmount=" + request.approvedExpenseAmount().toPlainString() + " PLN";
     }
 
     private Dispute getForRead(Long id) { return disputeRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje")); }

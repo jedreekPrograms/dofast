@@ -73,10 +73,8 @@ class DisputeServiceTest {
         stubSuccessfulPersistence();
         Job job = job(JobStatus.IN_PROGRESS);
         when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
-        when(disputeRepository.findFirstByJobAndStatusInOrderByOpenedAtDesc(
-                any(Job.class),
-                any()
-        )).thenReturn(Optional.empty());
+        when(disputeRepository.findFirstByJobAndStatusInOrderByOpenedAtDesc(any(Job.class), any()))
+                .thenReturn(Optional.empty());
 
         var response = disputeService.openDispute(
                 new CreateDisputeRequest(50L, DisputeReason.NOT_COMPLETED, "Wykonawca nie wykonał zlecenia"),
@@ -97,13 +95,8 @@ class DisputeServiceTest {
         when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
         User stranger = user(3L, UserRole.USER, "stranger");
 
-        assertThrows(
-                ForbiddenOperationException.class,
-                () -> disputeService.openDispute(
-                        new CreateDisputeRequest(50L, DisputeReason.OTHER, "Nie moja sprawa"),
-                        stranger
-                )
-        );
+        assertThrows(ForbiddenOperationException.class, () -> disputeService.openDispute(
+                new CreateDisputeRequest(50L, DisputeReason.OTHER, "Nie moja sprawa"), stranger));
     }
 
     @Test
@@ -111,18 +104,11 @@ class DisputeServiceTest {
         Job job = job(JobStatus.IN_PROGRESS);
         Dispute existing = dispute(job, requester, DisputeStatus.OPEN, JobStatus.IN_PROGRESS);
         when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
-        when(disputeRepository.findFirstByJobAndStatusInOrderByOpenedAtDesc(
-                any(Job.class),
-                any()
-        )).thenReturn(Optional.of(existing));
+        when(disputeRepository.findFirstByJobAndStatusInOrderByOpenedAtDesc(any(Job.class), any()))
+                .thenReturn(Optional.of(existing));
 
-        assertThrows(
-                ConflictException.class,
-                () -> disputeService.openDispute(
-                        new CreateDisputeRequest(50L, DisputeReason.OTHER, "Drugi spór"),
-                        requester
-                )
-        );
+        assertThrows(ConflictException.class, () -> disputeService.openDispute(
+                new CreateDisputeRequest(50L, DisputeReason.OTHER, "Drugi spór"), requester));
     }
 
     @Test
@@ -151,7 +137,7 @@ class DisputeServiceTest {
 
         var response = disputeService.resolveDispute(
                 100L,
-                new ResolveDisputeRequest(DisputeResolution.RELEASE_TO_WORKER, "Dowody potwierdzają wykonanie"),
+                new ResolveDisputeRequest(DisputeResolution.RELEASE_TO_WORKER, "Dowody potwierdzają wykonanie", null),
                 admin
         );
 
@@ -172,13 +158,55 @@ class DisputeServiceTest {
 
         disputeService.resolveDispute(
                 100L,
-                new ResolveDisputeRequest(DisputeResolution.REFUND_TO_REQUESTER, "Zlecenie nie zostało wykonane"),
+                new ResolveDisputeRequest(DisputeResolution.REFUND_TO_REQUESTER, "Zlecenie nie zostało wykonane", null),
                 admin
         );
 
         assertEquals(JobStatus.CANCELLED, job.getStatus());
         verify(transactionService).refundMoney(job);
         verify(expenseService).refundAll(job);
+    }
+
+    @Test
+    void adminCanRefundServicePriceWhileApprovingDocumentedExpenses() {
+        stubSuccessfulPersistence();
+        Job job = job(JobStatus.DISPUTED);
+        Dispute dispute = dispute(job, worker, DisputeStatus.UNDER_REVIEW, JobStatus.IN_PROGRESS);
+        dispute.startReview(admin, LocalDateTime.now());
+        when(disputeRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(dispute));
+        when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
+
+        disputeService.resolveDispute(
+                100L,
+                new ResolveDisputeRequest(
+                        DisputeResolution.REFUND_TO_REQUESTER,
+                        "Usługa niewykonana, ale paragon za materiały jest prawidłowy",
+                        new BigDecimal("35.00")
+                ),
+                admin
+        );
+
+        assertEquals(JobStatus.CANCELLED, job.getStatus());
+        verify(transactionService).refundMoney(job);
+        verify(expenseService).settleForDispute(job, new BigDecimal("35.00"));
+        verify(expenseService, never()).refundAll(job);
+    }
+
+    @Test
+    void resumeRejectsExpenseSettlementBeforeAnyMoneyMoves() {
+        Job job = job(JobStatus.DISPUTED);
+        Dispute dispute = dispute(job, requester, DisputeStatus.OPEN, JobStatus.IN_PROGRESS);
+        when(disputeRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(dispute));
+
+        assertThrows(ConflictException.class, () -> disputeService.resolveDispute(
+                100L,
+                new ResolveDisputeRequest(DisputeResolution.RESUME_JOB, "Kontynuujemy", new BigDecimal("10.00")),
+                admin
+        ));
+
+        verify(transactionService, never()).refundMoney(any());
+        verify(transactionService, never()).releaseMoney(any(), any());
+        verify(expenseService, never()).settleForDispute(any(), any());
     }
 
     @Test
@@ -191,7 +219,7 @@ class DisputeServiceTest {
 
         disputeService.resolveDispute(
                 100L,
-                new ResolveDisputeRequest(DisputeResolution.RESUME_JOB, "Strony mogą kontynuować"),
+                new ResolveDisputeRequest(DisputeResolution.RESUME_JOB, "Strony mogą kontynuować", null),
                 admin
         );
 
@@ -211,23 +239,18 @@ class DisputeServiceTest {
         when(disputeRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(dispute));
         User otherAdmin = user(11L, UserRole.ADMIN, "other-admin");
 
-        assertThrows(
-                ConflictException.class,
-                () -> disputeService.resolveDispute(
-                        100L,
-                        new ResolveDisputeRequest(DisputeResolution.RESUME_JOB, "Próba przejęcia"),
-                        otherAdmin
-                )
-        );
+        assertThrows(ConflictException.class, () -> disputeService.resolveDispute(
+                100L,
+                new ResolveDisputeRequest(DisputeResolution.RESUME_JOB, "Próba przejęcia", null),
+                otherAdmin
+        ));
     }
 
     private void stubSuccessfulPersistence() {
         when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(anyLong())).thenReturn(List.of());
         when(disputeRepository.save(any(Dispute.class))).thenAnswer(invocation -> {
             Dispute dispute = invocation.getArgument(0);
-            if (dispute.getId() == null) {
-                ReflectionTestUtils.setField(dispute, "id", 100L);
-            }
+            if (dispute.getId() == null) ReflectionTestUtils.setField(dispute, "id", 100L);
             return dispute;
         });
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));

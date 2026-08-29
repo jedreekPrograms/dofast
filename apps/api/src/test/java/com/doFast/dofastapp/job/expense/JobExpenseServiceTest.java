@@ -78,6 +78,44 @@ class JobExpenseServiceTest {
     }
 
     @Test
+    void disputeCanApproveOnlyPartOfClaimedExpenses() {
+        JobExpenseService service = service();
+        when(job.getId()).thenReturn(75L);
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(job.getTakenBy()).thenReturn(worker);
+        when(requester.getId()).thenReturn(15L);
+        when(worker.getId()).thenReturn(25L);
+        JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("100.00"), java.time.LocalDateTime.now());
+        escrow.addClaim(new BigDecimal("40.00"));
+        when(escrowRepository.findByJobIdForUpdate(75L)).thenReturn(Optional.of(escrow));
+
+        service.settleForDispute(job, new BigDecimal("25.00"));
+
+        verify(walletService).credit(25L, new BigDecimal("25.00"), WalletTransactionType.EXPENSE_REIMBURSEMENT,
+                75L, "job:75:expense:reimburse");
+        verify(walletService).credit(15L, new BigDecimal("75.00"), WalletTransactionType.EXPENSE_BUDGET_REFUND,
+                75L, "job:75:expense:refund");
+        assertEquals(JobExpenseEscrowStatus.SETTLED, escrow.getStatus());
+        assertEquals(new BigDecimal("25.00"), escrow.getReimbursedAmount());
+        assertEquals(new BigDecimal("75.00"), escrow.getRefundedAmount());
+    }
+
+    @Test
+    void disputeCannotApproveMoreThanClaimedBeforeMovingMoney() {
+        JobExpenseService service = service();
+        when(job.getId()).thenReturn(76L);
+        JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("100.00"), java.time.LocalDateTime.now());
+        escrow.addClaim(new BigDecimal("40.00"));
+        when(escrowRepository.findByJobIdForUpdate(76L)).thenReturn(Optional.of(escrow));
+
+        assertThrows(ConflictException.class,
+                () -> service.settleForDispute(job, new BigDecimal("40.01")));
+
+        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        assertEquals(JobExpenseEscrowStatus.HELD, escrow.getStatus());
+    }
+
+    @Test
     void claimRequiresPrivateParticipantReceiptUploadedByAssignedWorker() {
         JobExpenseService service = service();
         when(jobRepository.findByIdForUpdate(73L)).thenReturn(Optional.of(job));
