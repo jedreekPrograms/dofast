@@ -68,6 +68,7 @@ The core doFast workflow is transactional and money-sensitive, so the primary da
 - [Job lifecycle](docs/JOB_LIFECYCLE.md)
 - [Job discovery](docs/JOB_DISCOVERY.md)
 - [Location and nearby matching](docs/LOCATION_AND_MATCHING.md)
+- [Production deployment](docs/PRODUCTION_DEPLOYMENT.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Security baseline](docs/SECURITY.md)
 

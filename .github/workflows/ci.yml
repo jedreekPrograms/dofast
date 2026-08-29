@@ -54,10 +54,18 @@ jobs:
         working-directory: apps/web
         run: npm run build
 
+  production-contract:
+    name: Production Compose contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate production configuration and persistence contract
+        run: bash .github/scripts/production-compose-contract-smoke.sh
+
   smoke:
     name: Containers and runtime smoke test
     runs-on: ubuntu-latest
-    needs: [api, web]
+    needs: [api, web, production-contract]
     steps:
       - uses: actions/checkout@v7
       - name: Prepare local configuration
