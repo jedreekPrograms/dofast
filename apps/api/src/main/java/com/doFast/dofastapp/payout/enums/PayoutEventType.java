@@ -3,6 +3,7 @@ package com.doFast.dofastapp.payout.enums;
 public enum PayoutEventType {
     REQUESTED,
     PROCESSING_STARTED,
+    SUBMITTED,
     RETRY_SCHEDULED,
     REVIEW_REQUIRED,
     PAID,

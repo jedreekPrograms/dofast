@@ -28,6 +28,18 @@ public interface PayoutRequestRepository extends JpaRepository<PayoutRequest, Lo
     @Query("select payout from PayoutRequest payout where payout.id = :id")
     Optional<PayoutRequest> findByIdForUpdate(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+            select payout from PayoutRequest payout
+            where payout.providerCode = :providerCode
+              and payout.providerReference = :providerReference
+            """)
+    Optional<PayoutRequest> findByProviderReferenceForUpdate(
+            @Param("providerCode") String providerCode,
+            @Param("providerReference") String providerReference
+    );
+
     @Query(value = """
             SELECT *
             FROM payout_requests
