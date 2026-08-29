@@ -67,7 +67,9 @@ The current wallet is fungible: it does not artificially mark top-ups, job earni
 
 `/admin/payouts/**` is protected by the existing admin security boundary. Admins can inspect payout state/events and act only on requests requiring review. A forced failure requires a reason and restores reserved funds through the same idempotent wallet path.
 
-Provider references and internal failure information are not returned by the normal user payout DTO.
+The web operator console at `/admin/payouts` mirrors those backend constraints instead of inventing finance rules in the browser. It supports status filtering, paginated payout inspection, provider/failure metadata, immutable event history, audited retry, and audited final rejection with fund restoration. Retry/failure controls are rendered only for `REVIEW_REQUIRED`; the backend remains authoritative and rejects invalid transitions.
+
+Provider references and internal failure information are not returned by the normal user payout DTO. They are visible only through the admin endpoint and admin-gated UI.
 
 ## Database and CI
 
@@ -82,6 +84,12 @@ Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence a
 - queued cancellation and exact fund restoration;
 - async sandbox dispatch to `PAID` with immutable audit events.
 
+Frontend CI additionally runs dependency audit, lint and production build, so the admin payout console is compiled through the same web verification gate as the rest of the application.
+
 ## Related publish-payment flow
 
-Job publication currently requires sufficient wallet balance before escrow can be held. The next payment slice will remove that UX requirement: when a user publishes a job and the wallet covers only part of the budget, doFast will request payment only for the missing amount and automatically continue publication after the provider confirms the payment. The escrow/refund and payout rules above are designed so a later cancelled job can return to wallet and then be reused or cashed out.
+Job publication no longer requires the wallet to cover the full budget. Publication reserves the available wallet amount, requests Stripe payment only for the missing amount, and publishes only after authoritative server-side payment confirmation. The funded amount includes the service reward plus any optional expense budget; expense reimbursement remains separate from the platform fee calculation.
+
+Stripe redirects return to the exact publication id, redirect query secrets are removed from the browser URL immediately, and the frontend treats the backend publication state—not `redirect_status`—as authoritative. Pending publication reservations expire and are released through the idempotent wallet path.
+
+These rules intentionally compose with payouts: a later cancelled job can return funds to the wallet, after which the user may reuse or cash them out subject to KYC, account and payout-provider eligibility.
