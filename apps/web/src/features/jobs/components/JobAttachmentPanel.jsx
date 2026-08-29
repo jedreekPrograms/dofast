@@ -39,7 +39,12 @@ const dateFormatter = new Intl.DateTimeFormat('pl-PL', {
 
 function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
   const isCreator = job.createdById === currentUserId
-  const canUpload = isCreator && (job.status === 'OPEN' || job.status === 'IN_PROGRESS')
+  const isWorker = job.takenById === currentUserId
+  const workerCanUpload = isWorker && job.status === 'IN_PROGRESS'
+  const canUpload = (isCreator && (job.status === 'OPEN' || job.status === 'IN_PROGRESS')) || workerCanUpload
+  const availableVisibilityOptions = workerCanUpload
+    ? VISIBILITY_OPTIONS.filter((option) => option.value === 'PARTICIPANTS')
+    : VISIBILITY_OPTIONS
   const [attachments, setAttachments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -80,11 +85,12 @@ function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
   }, [job.status, job.takenById, loadAttachments])
 
   useEffect(() => {
+    if (workerCanUpload) setVisibility('PARTICIPANTS')
     if (!canUpload) {
       setFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
-  }, [canUpload])
+  }, [canUpload, workerCanUpload])
 
   function handleFileChange(event) {
     const selected = event.target.files?.[0] || null
@@ -112,7 +118,9 @@ function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
       setAttachments((current) => [...current, created])
       setFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
-      onSuccess?.('Załącznik został bezpiecznie dodany do zlecenia.')
+      onSuccess?.(workerCanUpload
+        ? 'Paragon lub dowód wydatku został prywatnie dodany do zlecenia.'
+        : 'Załącznik został bezpiecznie dodany do zlecenia.')
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się dodać załącznika.')
     } finally {
@@ -165,6 +173,12 @@ function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
         Dozwolone: JPG, PNG, WebP i PDF do 10 MB. Serwer sprawdza rzeczywisty format pliku i przechowuje zawartość zaszyfrowaną.
       </p>
 
+      {workerCanUpload && (
+        <div className="job-attachment-panel__locked-note" role="note">
+          Jako wykonawca możesz podczas realizacji dodać wyłącznie prywatny materiał dla stron zlecenia, np. paragon potrzebny do rozliczenia kosztów.
+        </div>
+      )}
+
       {error && <div className="form-message form-message--error" role="alert">{error}</div>}
 
       {canUpload && (
@@ -172,7 +186,7 @@ function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
           <fieldset>
             <legend>Kto ma zobaczyć plik?</legend>
             <div className="job-attachment-visibility-grid">
-              {VISIBILITY_OPTIONS.map((option) => (
+              {availableVisibilityOptions.map((option) => (
                 <label
                   className={`job-attachment-visibility ${visibility === option.value ? 'job-attachment-visibility--selected' : ''}`}
                   key={option.value}
@@ -183,7 +197,7 @@ function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
                     value={option.value}
                     checked={visibility === option.value}
                     onChange={(event) => setVisibility(event.target.value)}
-                    disabled={Boolean(busyAction)}
+                    disabled={Boolean(busyAction) || workerCanUpload}
                   />
                   <span>
                     <strong>{option.label}</strong>
@@ -219,15 +233,15 @@ function JobAttachmentPanel({ job, currentUserId, onSuccess }) {
               type="submit"
               disabled={Boolean(busyAction) || !file || attachments.length >= 12}
             >
-              {busyAction === 'upload' ? 'Szyfrowanie i wysyłanie…' : 'Dodaj załącznik'}
+              {busyAction === 'upload' ? 'Szyfrowanie i wysyłanie…' : workerCanUpload ? 'Dodaj dowód wydatku' : 'Dodaj załącznik'}
             </button>
           </div>
         </form>
       )}
 
-      {isCreator && !canUpload && (
+      {(isCreator || isWorker) && !canUpload && (
         <div className="job-attachment-panel__locked-note">
-          Nowych plików nie można już dodawać na tym etapie zlecenia. Tajne materiały nadal możesz usunąć.
+          Nowych plików nie można już dodawać na tym etapie zlecenia.
         </div>
       )}
 
