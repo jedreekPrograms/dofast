@@ -157,4 +157,24 @@ class WalletServiceTest {
                 )
         );
     }
+
+    @Test
+    void restorationApiRejectsOriginCreditTypeBeforeLockingWallet() {
+        when(fundingSourceService.requiresExplicitRestoration(WalletTransactionType.TOP_UP)).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> walletService.creditRestoringOperation(
+                        1L,
+                        new BigDecimal("10.00"),
+                        WalletTransactionType.TOP_UP,
+                        null,
+                        "restore:invalid",
+                        "source:reserve"
+                )
+        );
+
+        verify(walletRepository, never()).findByUserIdForUpdate(any());
+        verify(transactionRepository, never()).saveAndFlush(any());
+    }
 }
