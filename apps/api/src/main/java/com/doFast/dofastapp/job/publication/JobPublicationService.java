@@ -84,9 +84,9 @@ public class JobPublicationService {
                     request.job().getRouteQuoteId(), totalAmount, job.id(), now);
             return toResponse(publicationRepository.save(publication));
         }
-        BigDecimal reservedAmount = walletBalance.max(BigDecimal.ZERO).setScale(2, RoundingMode.UNNECESSARY);
-        BigDecimal missingAmount = totalAmount.subtract(reservedAmount);
-        BigDecimal paymentAmount = missingAmount.max(MIN_ONLINE_PAYMENT).setScale(2, RoundingMode.UNNECESSARY);
+        FundingPlan funding = fundingPlan(totalAmount, walletBalance);
+        BigDecimal reservedAmount = funding.walletReservedAmount();
+        BigDecimal paymentAmount = funding.onlinePaymentAmount();
         if (paymentAmount.compareTo(MAX_ONLINE_PAYMENT) > 0) throw new BusinessException("Brakująca kwota przekracza limit pojedynczej płatności online 10 000,00 PLN");
         if (reservedAmount.signum() > 0) walletService.debit(lockedUser.getId(), reservedAmount,
                 WalletTransactionType.JOB_PUBLICATION_RESERVE, null, reserveOperationKey(requestKey));
@@ -95,6 +95,27 @@ public class JobPublicationService {
                 request.job().getRouteQuoteId(), totalAmount, reservedAmount, paymentAmount, now, expiresAt);
         return toResponse(publicationRepository.save(publication));
     }
+
+    static FundingPlan fundingPlan(BigDecimal totalAmount, BigDecimal walletBalance) {
+        BigDecimal total = totalAmount.setScale(2, RoundingMode.UNNECESSARY);
+        BigDecimal availableWallet = walletBalance.max(BigDecimal.ZERO).min(total).setScale(2, RoundingMode.UNNECESSARY);
+        BigDecimal missingAmount = total.subtract(availableWallet).setScale(2, RoundingMode.UNNECESSARY);
+
+        if (missingAmount.signum() <= 0) {
+            return new FundingPlan(total, BigDecimal.ZERO.setScale(2));
+        }
+        if (missingAmount.compareTo(MIN_ONLINE_PAYMENT) >= 0) {
+            return new FundingPlan(availableWallet, missingAmount);
+        }
+        if (total.compareTo(MIN_ONLINE_PAYMENT) < 0) {
+            throw new BusinessException("Kwota zlecenia jest niższa niż minimalna płatność online 1,00 PLN. Doładuj portfel i spróbuj ponownie");
+        }
+
+        BigDecimal reservedAmount = total.subtract(MIN_ONLINE_PAYMENT).setScale(2, RoundingMode.UNNECESSARY);
+        return new FundingPlan(reservedAmount, MIN_ONLINE_PAYMENT);
+    }
+
+    record FundingPlan(BigDecimal walletReservedAmount, BigDecimal onlinePaymentAmount) {}
 
     @Transactional
     public JobPublicationResponse get(Long publicationId, User currentUser) {
