@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/job-publication-payment-smoke.yml"
       - ".github/scripts/job-publication-payment-smoke.sh"
+      - ".github/scripts/job-publication-minimum-funding-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/publication/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
@@ -18,6 +19,7 @@ on:
     paths:
       - ".github/workflows/job-publication-payment-smoke.yml"
       - ".github/scripts/job-publication-payment-smoke.sh"
+      - ".github/scripts/job-publication-minimum-funding-smoke.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/publication/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
@@ -76,6 +78,9 @@ jobs:
 
       - name: Verify wallet reservation, recovery contract, idempotency, cancellation and fully-funded publication
         run: bash .github/scripts/job-publication-payment-smoke.sh
+
+      - name: Verify exact funding at Stripe minimum boundary
+        run: bash .github/scripts/job-publication-minimum-funding-smoke.sh
 
       - name: Diagnostics
         if: failure()

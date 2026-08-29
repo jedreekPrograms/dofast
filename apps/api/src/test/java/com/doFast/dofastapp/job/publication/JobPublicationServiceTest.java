@@ -97,19 +97,33 @@ class JobPublicationServiceTest {
     }
 
     @Test
-    void onlinePaymentUsesOnePlnMinimumWithoutChangingMissingAmount() {
+    void onlinePaymentMinimumReducesWalletReservationInsteadOfOverfunding() {
         JobRequest job = onSiteJob("25.50");
         when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
         when(objectMapper.writeValueAsString(job)).thenReturn("payload-minimum");
         when(categoryRepository.findByIdAndActiveTrue(42L)).thenReturn(Optional.of(category));
         when(walletService.getBalanceForUpdate(7L)).thenReturn(new BigDecimal("25.00"));
         when(publicationRepository.save(any(JobPublication.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(walletService.debit(any(), any(), any(), eq(null), anyString())).thenReturn(true);
+        when(walletService.debit(
+                7L,
+                new BigDecimal("24.50"),
+                WalletTransactionType.JOB_PUBLICATION_RESERVE,
+                null,
+                "job-publication:7:req-min:reserve"
+        )).thenReturn(true);
 
         var response = service.create(new CreateJobPublicationRequest("req-min", job), user);
 
-        assertEquals(new BigDecimal("0.50"), response.missingAmount());
+        assertEquals(new BigDecimal("24.50"), response.walletReservedAmount());
+        assertEquals(new BigDecimal("1.00"), response.missingAmount());
         assertEquals(new BigDecimal("1.00"), response.paymentAmount());
+        verify(walletService).debit(
+                7L,
+                new BigDecimal("24.50"),
+                WalletTransactionType.JOB_PUBLICATION_RESERVE,
+                null,
+                "job-publication:7:req-min:reserve"
+        );
     }
 
     @Test
