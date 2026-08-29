@@ -96,6 +96,28 @@ class JobExpenseServiceTest {
         assertEquals(new BigDecimal("0.00"), escrow.getClaimedAmount());
     }
 
+    @Test
+    void claimRejectsNonReceiptMediaBeforeMutatingEscrow() {
+        JobExpenseService service = service();
+        when(jobRepository.findByIdForUpdate(74L)).thenReturn(Optional.of(job));
+        when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
+        when(job.getTakenBy()).thenReturn(worker);
+        when(worker.getId()).thenReturn(24L);
+        JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("80.00"), java.time.LocalDateTime.now());
+        when(escrowRepository.findByJobIdForUpdate(74L)).thenReturn(Optional.of(escrow));
+        when(attachmentRepository.findByIdAndJob_IdAndDeletedAtIsNull(901L, 74L)).thenReturn(Optional.of(receipt));
+        when(receipt.getVisibility()).thenReturn(JobAttachmentVisibility.PARTICIPANTS);
+        when(receipt.getUploadedBy()).thenReturn(worker);
+        when(receipt.getMediaType()).thenReturn("text/plain");
+
+        assertThrows(ConflictException.class,
+                () -> service.createClaim(74L, new CreateJobExpenseClaimRequest(new BigDecimal("20.00"), 901L), worker));
+
+        verify(claimRepository, never()).save(any());
+        verify(escrowRepository, never()).save(any());
+        assertEquals(new BigDecimal("0.00"), escrow.getClaimedAmount());
+    }
+
     private JobExpenseService service() {
         return new JobExpenseService(jobRepository, escrowRepository, claimRepository, attachmentRepository, walletService);
     }
