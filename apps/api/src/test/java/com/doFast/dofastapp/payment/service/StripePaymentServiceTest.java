@@ -224,7 +224,10 @@ class StripePaymentServiceTest {
         intent.setAmount(amount);
         intent.setCurrency(currency);
         intent.setStatus("succeeded");
-        intent.setMetadata(Map.of("userId", userId));
+        intent.setMetadata(Map.of(
+                "userId", userId,
+                "topUpRequestId", "legacy-" + id
+        ));
         return intent;
     }
 }
