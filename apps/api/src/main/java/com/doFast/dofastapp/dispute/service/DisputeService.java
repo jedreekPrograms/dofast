@@ -112,7 +112,10 @@ public class DisputeService {
         Page<Dispute> result = status == null ? disputeRepository.findAll(pageable) : disputeRepository.findByStatus(status, pageable);
         return PageResponse.from(result, result.getContent().stream().map(this::toResponse).toList());
     }
-    public DisputeDetailResponse getAdminDispute(Long disputeId, User admin) { assertAdmin(admin); return toDetail(getForRead(disputeId)); }
+    public DisputeDetailResponse getAdminDispute(Long disputeId, User admin) {
+        assertAdmin(admin);
+        return toAdminDetail(getForRead(disputeId), admin);
+    }
 
     @Transactional
     public DisputeDetailResponse claimDispute(Long disputeId, User admin) {
@@ -121,13 +124,13 @@ public class DisputeService {
             throw new ConflictException("Ten spór jest już zamknięty");
         if (dispute.getAssignedAdmin() != null && !sameUser(dispute.getAssignedAdmin(), admin))
             throw new ConflictException("Spór jest już przypisany do innego administratora");
-        if (dispute.getStatus() == DisputeStatus.UNDER_REVIEW && sameUser(dispute.getAssignedAdmin(), admin)) return toDetail(dispute);
+        if (dispute.getStatus() == DisputeStatus.UNDER_REVIEW && sameUser(dispute.getAssignedAdmin(), admin)) return toAdminDetail(dispute, admin);
         LocalDateTime now = LocalDateTime.now();
         dispute.startReview(admin, now); Dispute saved = disputeRepository.save(dispute);
         recordEvent(saved, admin, DisputeEventType.CLAIMED, "Spór podjęty przez administratora", now);
         notifyParticipants(saved, NotificationType.DISPUTE_CLAIMED, "Spór jest analizowany",
                 "Administrator rozpoczął analizę sporu dotyczącego zlecenia „" + saved.getJob().getTitle() + "”.");
-        return toDetail(saved);
+        return toAdminDetail(saved, admin);
     }
 
     @Transactional
@@ -172,7 +175,7 @@ public class DisputeService {
         dispute.resolve(admin, resolution, request.note().trim(), now); Dispute saved = disputeRepository.save(dispute);
         recordEvent(saved, admin, DisputeEventType.RESOLVED, note, now);
         notifyParticipants(saved, NotificationType.DISPUTE_RESOLVED, "Spór rozstrzygnięty", resolutionMessage(saved, resolution));
-        return toDetail(saved);
+        return toAdminDetail(saved, admin);
     }
 
     private String resolutionNote(ResolveDisputeRequest request) {
@@ -228,7 +231,15 @@ public class DisputeService {
         List<DisputeEventResponse> events = eventRepository.findByDispute_IdOrderByCreatedAtAsc(dispute.getId()).stream()
                 .map(event -> new DisputeEventResponse(event.getId(), event.getActor().getId(), event.getActor().getNickname(),
                         event.getEventType(), event.getNote(), event.getCreatedAt())).toList();
-        return new DisputeDetailResponse(toResponse(dispute), events);
+        return new DisputeDetailResponse(toResponse(dispute), events, null);
+    }
+    private DisputeDetailResponse toAdminDetail(Dispute dispute, User admin) {
+        DisputeDetailResponse detail = toDetail(dispute);
+        return new DisputeDetailResponse(
+                detail.dispute(),
+                detail.events(),
+                expenseService.getSummaryForAdmin(dispute.getJob().getId(), admin)
+        );
     }
     private DisputeResponse toResponse(Dispute dispute) {
         Job job = dispute.getJob();
