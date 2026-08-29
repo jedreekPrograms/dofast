@@ -22,13 +22,16 @@ import java.util.List;
 public class JobPublicationController {
 
     private final JobPublicationService publicationService;
+    private final JobPublicationRecoveryCoordinator recoveryCoordinator;
     private final JobPublicationPaymentIntentService paymentIntentService;
 
     public JobPublicationController(
             JobPublicationService publicationService,
+            JobPublicationRecoveryCoordinator recoveryCoordinator,
             JobPublicationPaymentIntentService paymentIntentService
     ) {
         this.publicationService = publicationService;
+        this.recoveryCoordinator = recoveryCoordinator;
         this.paymentIntentService = paymentIntentService;
     }
 
@@ -43,7 +46,7 @@ public class JobPublicationController {
 
     @GetMapping("/pending")
     public List<JobPublicationResponse> getPending(@AuthenticationPrincipal User user) {
-        return publicationService.getRecoverable(user);
+        return recoveryCoordinator.getRecoverable(user);
     }
 
     @GetMapping("/{id}")
