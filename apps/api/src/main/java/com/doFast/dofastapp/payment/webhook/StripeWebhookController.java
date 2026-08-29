@@ -2,10 +2,12 @@ package com.doFast.dofastapp.payment.webhook;
 
 import com.doFast.dofastapp.job.publication.JobPublicationPaymentIntentService;
 import com.doFast.dofastapp.job.publication.JobPublicationStripeSettlementService;
+import com.doFast.dofastapp.payment.risk.service.StripePaymentDisputeService;
 import com.doFast.dofastapp.payment.service.StripePaymentService;
 import com.doFast.dofastapp.payout.provider.PayoutProviderSettlementResult;
 import com.doFast.dofastapp.payout.service.StripeConnectPayoutSettlementService;
 import com.stripe.exception.SignatureVerificationException;
+import com.stripe.model.Dispute;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Payout;
@@ -32,17 +34,20 @@ public class StripeWebhookController {
     private final StripePaymentService stripePaymentService;
     private final JobPublicationStripeSettlementService publicationSettlementService;
     private final StripeConnectPayoutSettlementService payoutSettlementService;
+    private final StripePaymentDisputeService paymentDisputeService;
 
     public StripeWebhookController(
             @Value("${stripe.webhook.secret}") String endpointSecret,
             StripePaymentService stripePaymentService,
             JobPublicationStripeSettlementService publicationSettlementService,
-            StripeConnectPayoutSettlementService payoutSettlementService
+            StripeConnectPayoutSettlementService payoutSettlementService,
+            StripePaymentDisputeService paymentDisputeService
     ) {
         this.endpointSecret = endpointSecret;
         this.stripePaymentService = stripePaymentService;
         this.publicationSettlementService = publicationSettlementService;
         this.payoutSettlementService = payoutSettlementService;
+        this.paymentDisputeService = paymentDisputeService;
     }
 
     @PostMapping
@@ -60,6 +65,9 @@ public class StripeWebhookController {
 
         if ("payment_intent.succeeded".equals(event.getType())) {
             return handleSuccessfulPayment(event);
+        }
+        if (isPaymentDisputeEvent(event.getType())) {
+            return handlePaymentDisputeEvent(event);
         }
         if ("payout.paid".equals(event.getType())
                 || "payout.failed".equals(event.getType())
@@ -92,6 +100,27 @@ public class StripeWebhookController {
         }
     }
 
+    private ResponseEntity<String> handlePaymentDisputeEvent(Event event) {
+        StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
+        if (!(stripeObject instanceof Dispute dispute)) {
+            log.error("Unable to deserialize Stripe dispute event {} of type {}", event.getId(), event.getType());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("unable to deserialize event");
+        }
+
+        try {
+            boolean processed = paymentDisputeService.process(dispute, event.getId(), event.getType());
+            if (!processed) {
+                log.info("Stripe dispute event {} / dispute {} was already processed", event.getId(), dispute.getId());
+                return ResponseEntity.ok("already processed");
+            }
+            log.info("Processed Stripe dispute event {} / dispute {}", event.getId(), dispute.getId());
+            return ResponseEntity.ok("ok");
+        } catch (RuntimeException ex) {
+            log.error("Failed to process Stripe dispute event {} / dispute {}", event.getId(), dispute.getId(), ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
+        }
+    }
+
     private ResponseEntity<String> handlePayoutEvent(Event event) {
         StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
         if (!(stripeObject instanceof Payout payout)) {
@@ -110,6 +139,14 @@ public class StripeWebhookController {
             log.error("Failed to process Stripe Connect payout event {} / payout {}", event.getId(), payout.getId(), ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("processing failed");
         }
+    }
+
+    private boolean isPaymentDisputeEvent(String eventType) {
+        return StripePaymentDisputeService.CREATED.equals(eventType)
+                || StripePaymentDisputeService.UPDATED.equals(eventType)
+                || StripePaymentDisputeService.CLOSED.equals(eventType)
+                || StripePaymentDisputeService.FUNDS_WITHDRAWN.equals(eventType)
+                || StripePaymentDisputeService.FUNDS_REINSTATED.equals(eventType);
     }
 
     private boolean isJobPublication(PaymentIntent paymentIntent) {
