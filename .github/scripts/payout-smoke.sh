@@ -163,10 +163,10 @@ PAID_BALANCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
 test "$PAID_BALANCE" = "38.00"
 
 WITHDRAWABLE_REMAINING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
-  "SELECT COALESCE(sum(remaining_amount),0)::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$USER_ID) AND withdrawable=TRUE;" | tr -d '[:space:]')
+  "SELECT COALESCE(sum(remaining_amount),0)::numeric(19,2)::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$USER_ID) AND withdrawable=TRUE;" | tr -d '[:space:]')
 test "$WITHDRAWABLE_REMAINING" = "38.00"
 NON_WITHDRAWABLE_REMAINING=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
-  "SELECT COALESCE(sum(remaining_amount),0)::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$USER_ID) AND withdrawable=FALSE;" | tr -d '[:space:]')
+  "SELECT COALESCE(sum(remaining_amount),0)::numeric(19,2)::text FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$USER_ID) AND withdrawable=FALSE;" | tr -d '[:space:]')
 test "$NON_WITHDRAWABLE_REMAINING" = "0.00"
 
 SUCCESS_RESERVE_COUNT=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
