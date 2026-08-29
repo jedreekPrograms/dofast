@@ -42,14 +42,10 @@ OUTSIDER_TOKEN=$(json_value /tmp/attachment-outsider-login.json accessToken)
 CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc "SELECT id FROM job_categories WHERE slug='montaz-mebli' AND fulfillment_mode='ON_SITE' AND active=TRUE;" | tr -d '[:space:]')
 test -n "$CATEGORY_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 100.00 WHERE user_id = $OWNER_ID;
-INSERT INTO wallet_transactions (wallet_id, type, amount, job_id, created_at, operation_key, balance_after)
-SELECT id, 'TOP_UP', 100.00, NULL, CURRENT_TIMESTAMP, 'smoke:attachments:seed:' || id, 100.00
-FROM wallets WHERE user_id = $OWNER_ID;
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 100.00 PLATFORM_ADJUSTMENT \
+  "smoke:attachments:owner:$OWNER_ID" \
+  "smoke:attachments:seed:$OWNER_ID"
 
 JOB=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
@@ -185,4 +181,8 @@ SECRET_DELETE_STATUS=$(curl --silent --output /tmp/secret-delete.json --write-ou
 test "$SECRET_DELETE_STATUS" = "204"
 docker compose exec -T api sh -c "test ! -f '/var/lib/dofast/attachments/$STORAGE_KEY.bin'"
 
-echo 'Worker participant evidence, participant history, execution-secret revocation and deletion policy: OK'
+OWNER_COVERAGE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT w.balance = COALESCE(sum(l.remaining_amount),0) FROM wallets w LEFT JOIN wallet_funding_lots l ON l.wallet_id=w.id WHERE w.user_id=$OWNER_ID GROUP BY w.id;" | tr -d '[:space:]')
+test "$OWNER_COVERAGE" = "t"
+
+echo 'Worker participant evidence, participant history, execution-secret revocation, deletion policy and wallet provenance: OK'
