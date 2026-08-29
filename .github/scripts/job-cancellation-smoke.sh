@@ -33,16 +33,10 @@ CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT id FROM job_categories WHERE slug='mala-paczka' AND fulfillment_mode='POINT_TO_POINT' AND active=TRUE;" | tr -d '[:space:]')
 test -n "$CATEGORY_ID"
 
-docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 <<SQL
-BEGIN;
-UPDATE wallets SET balance = 50.00 WHERE user_id = $OWNER_ID;
-INSERT INTO wallet_transactions (
-    wallet_id, type, amount, job_id, created_at, operation_key, balance_after
-)
-SELECT id, 'TOP_UP', 50.00, NULL, CURRENT_TIMESTAMP, 'smoke:cancellation:seed:' || id, 50.00
-FROM wallets WHERE user_id = $OWNER_ID;
-COMMIT;
-SQL
+bash .github/scripts/seed-wallet-funding.sh \
+  "$OWNER_ID" 50.00 PLATFORM_ADJUSTMENT \
+  "smoke:cancellation:owner:$OWNER_ID" \
+  "smoke:cancellation:seed:$OWNER_ID"
 
 QUOTE=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $OWNER_TOKEN" \
@@ -65,7 +59,7 @@ test "${BALANCE_AFTER_HOLD//[[:space:]]/}" = "30.00"
 curl --fail --silent --show-error --output /tmp/accepted.json -X POST \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   "$api/jobs/$JOB_ID/accept"
-python3 -c 'import json; d=json.load(open("/tmp/accepted.json")); assert d["status"]=="IN_PROGRESS"' 
+python3 -c 'import json; d=json.load(open("/tmp/accepted.json")); assert d["status"]=="IN_PROGRESS"'
 
 OUTSIDER_STATUS=$(curl --silent --show-error --output /tmp/outsider-cancellation.json --write-out '%{http_code}' \
   -H "Authorization: Bearer $OUTSIDER_TOKEN" \
@@ -111,6 +105,10 @@ REFUND_LEDGER=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT COUNT(*) FROM wallet_transactions WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$OWNER_ID) AND operation_key='escrow:${JOB_ID}:refund' AND type='REFUND' AND amount=20.00 AND balance_after=50.00;")
 test "${REFUND_LEDGER//[[:space:]]/}" = "1"
 
+FUNDING_SOURCE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT source_type || '|' || remaining_amount::text || '|' || withdrawable FROM wallet_funding_lots WHERE wallet_id=(SELECT id FROM wallets WHERE user_id=$OWNER_ID);" | tr -d '[:space:]')
+test "$FUNDING_SOURCE" = "PLATFORM_ADJUSTMENT|50.00|false"
+
 CANCELLATION_ROW=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT status || '|' || resolved_by_id || '|' || (resolved_at IS NOT NULL) FROM job_cancellation_requests WHERE id=$REQUEST_ID;")
 test "${CANCELLATION_ROW//[[:space:]]/}" = "APPROVED|${WORKER_ID}|true"
@@ -124,4 +122,4 @@ POST_CANCEL_PENDING_STATUS=$(curl --silent --show-error --output /tmp/no-pending
   "$api/jobs/$JOB_ID/cancellation")
 test "$POST_CANCEL_PENDING_STATUS" = "204"
 
-echo "Negotiated cancellation, escrow refund and tracking shutdown: OK"
+echo "Negotiated cancellation, escrow refund, funding restoration and tracking shutdown: OK"
