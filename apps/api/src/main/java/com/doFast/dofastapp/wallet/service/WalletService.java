@@ -243,6 +243,10 @@ public class WalletService {
             String operationKey,
             FundingRestoration restoration
     ) {
+        if (!fundingSourceService.requiresExplicitRestoration(type)) {
+            throw new IllegalArgumentException("Wallet transaction type is not a source restoration: " + type);
+        }
+
         BigDecimal normalizedAmount = normalizePositiveAmount(amount);
         Wallet wallet = getWalletForUpdate(userId);
         String normalizedOperationKey = normalizeOperationKey(operationKey);
