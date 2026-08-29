@@ -29,4 +29,11 @@ public interface JobPublicationRepository extends JpaRepository<JobPublication, 
             JobPublicationStatus status,
             LocalDateTime expiresAt
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<JobPublication> findFirstByUser_IdAndStatusAndExpiresAtBeforeOrderByExpiresAtAscIdAsc(
+            Long userId,
+            JobPublicationStatus status,
+            LocalDateTime expiresAt
+    );
 }
