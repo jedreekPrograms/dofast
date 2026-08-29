@@ -61,13 +61,15 @@ For an active job, mutual cancellation is allowed to refund the expense budget o
 
 ## Disputes
 
-Admin dispute resolution is authoritative for both money components:
+Admin dispute resolution is authoritative for the labor escrow and the expense escrow independently. `ResolveDisputeRequest` accepts an optional `approvedExpenseAmount` in PLN. When this field is present, it is the exact portion of already-submitted receipt-backed claims that the administrator accepts as legitimate costs.
 
-- `RELEASE_TO_WORKER` releases the labor escrow and settles valid receipt-backed expenses, refunding any unused expense budget;
-- `REFUND_TO_REQUESTER` refunds both the labor escrow and the full expense budget to the requester;
-- `RESUME_JOB` leaves both escrows held and restores the previous active job state.
+- `RELEASE_TO_WORKER` releases the labor escrow. Without an explicit expense amount it preserves the normal completion behavior and reimburses all claimed expenses. With `approvedExpenseAmount`, only that amount is reimbursed and the rest of the original expense budget is refunded to the requester.
+- `REFUND_TO_REQUESTER` refunds the labor escrow. Without an explicit expense amount it preserves the legacy full expense-budget refund. With `approvedExpenseAmount`, documented costs can still be reimbursed to the worker even when the service itself is refunded; the remainder of the expense budget returns to the requester.
+- `RESUME_JOB` leaves both escrows held and therefore rejects any `approvedExpenseAmount`.
 
-This keeps expense handling aligned with the existing dispute audit trail without treating expense reimbursement as worker compensation.
+The approved amount cannot be negative, cannot have more than two decimal places and cannot exceed the cumulative amount of submitted claims. These checks run before wallet credits are created. The final expense escrow still obeys the conservation invariant `reimbursedAmount + refundedAmount = budgetAmount`, and the resolution event records the approved expense amount for auditability.
+
+This separation is important commercially: a worker can be denied service compensation while still receiving reimbursement for independently verified materials, or can receive service compensation while only part of disputed receipts are accepted.
 
 ## API
 
@@ -77,6 +79,8 @@ Participant-only expense endpoints:
 
 - `GET /jobs/{jobId}/expenses` — current budget, claimed/reimbursed/refunded totals and immutable claims;
 - `POST /jobs/{jobId}/expenses/claims` — assigned worker submits `{ "amount": ..., "attachmentId": ... }` while the job is `IN_PROGRESS`.
+
+Admin dispute resolution accepts `{ "resolution": ..., "note": ..., "approvedExpenseAmount": ... }`; `approvedExpenseAmount` is optional for backward compatibility and must be omitted when resuming a job.
 
 The receipt's storage key, encryption metadata and internal hash are never exposed by the expense API.
 
