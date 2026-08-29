@@ -67,10 +67,15 @@ class StripePaymentServicePurposeTest {
                 eq("JOB_PUBLICATION"), eq("11"), any()
         )).thenReturn(1);
         when(walletService.credit(
-                7L, new BigDecimal("25.00"), WalletTransactionType.TOP_UP, null, "stripe:intent:pi_topup"
+                7L, new BigDecimal("25.00"), WalletTransactionType.JOB_PUBLICATION_FUNDING, null,
+                "stripe:intent:pi_topup"
         )).thenReturn(true);
 
         assertTrue(service.processSuccessfulJobPublicationPayment(intent, "evt_publication", 11L));
+        verify(walletService).credit(
+                7L, new BigDecimal("25.00"), WalletTransactionType.JOB_PUBLICATION_FUNDING, null,
+                "stripe:intent:pi_topup"
+        );
     }
 
     @Test
@@ -168,6 +173,9 @@ class StripePaymentServicePurposeTest {
         )).thenReturn(true);
 
         assertTrue(service.processSuccessfulPayment(intent, "evt_topup"));
+        verify(walletService).credit(
+                7L, new BigDecimal("25.00"), WalletTransactionType.TOP_UP, null, "stripe:intent:pi_topup"
+        );
     }
 
     private PaymentTransaction storedPayment(String purpose, String reference) {
