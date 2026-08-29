@@ -11,7 +11,7 @@ Attachments are deliberately separate from chat, exact location, payments and mo
 The requester chooses one of three server-enforced visibility classes for every file:
 
 - `JOB_VIEWERS` — visible to authenticated users who are allowed to view the open job detail. Once a worker is assigned, access closes to outsiders and remains only for the job participants. Use this for material a candidate may legitimately need before deciding whether to take or propose for a job, such as a shopping list or product photo.
-- `PARTICIPANTS` — hidden before assignment. The requester and assigned worker can read it after worker selection, including later historical lifecycle states. Use this for normal transaction material that should stay between the two sides.
+- `PARTICIPANTS` — hidden before assignment. The requester and assigned worker can read it after worker selection, including later historical lifecycle states. During `IN_PROGRESS`, the assigned worker may also upload this visibility class for execution evidence such as receipts or delivery confirmations. Worker uploads never become visible to marketplace viewers.
 - `EXECUTION_SECRET` — the requester can always read or revoke it; the assigned worker can read it only while the job is exactly `IN_PROGRESS`. Access disappears immediately on completion request, dispute, completion or cancellation. This is the appropriate class for a temporary loyalty-card image or short-lived pickup credential.
 
 A block relation also hides `JOB_VIEWERS` attachments from a non-participant, matching the existing job-detail visibility policy. Hidden attachments return the same not-found response as nonexistent attachments so their existence is not disclosed.
@@ -20,9 +20,9 @@ Do not use attachments for payment-card data, passwords, identity documents or o
 
 ## Upload and deletion lifecycle
 
-Only the job creator can upload files. Upload is allowed while the job is `OPEN` or `IN_PROGRESS`; later lifecycle states are frozen so new material cannot silently rewrite completed/disputed evidence.
+The job creator can upload files while the job is `OPEN` or `IN_PROGRESS`. The assigned worker can upload only `PARTICIPANTS` files and only while the job is exactly `IN_PROGRESS`. A worker cannot publish `JOB_VIEWERS` material, cannot create `EXECUTION_SECRET` files and cannot upload before assignment or after completion has been requested. This narrow permission is intended for receipts and other execution evidence needed by both sides.
 
-Regular `JOB_VIEWERS` and `PARTICIPANTS` files become immutable after a worker has been selected. `EXECUTION_SECRET` is intentionally different: the creator may delete it at any time, including during an active job, to revoke the worker's access immediately.
+Regular `JOB_VIEWERS` and `PARTICIPANTS` files become immutable after a worker has been selected. That means worker-supplied evidence is preserved as transaction history: the worker cannot delete it, and the creator cannot remove ordinary participant evidence after assignment. `EXECUTION_SECRET` is intentionally different: the creator may delete it at any time, including during an active job, to revoke the worker's access immediately.
 
 Deleted rows are tombstoned in PostgreSQL first. The encrypted object is removed only after the database transaction commits. Conversely, a newly stored object is registered for cleanup if its database transaction rolls back. This prevents normal transaction failures from leaving metadata pointing at a missing file or retaining a failed upload indefinitely.
 
@@ -43,7 +43,7 @@ Downloads are served with `Content-Disposition: attachment`, `Cache-Control: no-
 
 The job-details page uses only the authenticated visibility-filtered attachment endpoint. It never attempts to reconstruct hidden attachment counts or discover whether another visibility class exists.
 
-The requester can upload through the three visibility choices with a plain-language explanation of each boundary. The browser's `accept` filter is only a convenience; the backend magic-byte policy remains authoritative.
+The requester can upload through the three visibility choices with a plain-language explanation of each boundary. Worker upload UI must expose only the `PARTICIPANTS` path while the authenticated user is the assigned worker of an `IN_PROGRESS` job; the backend policy remains authoritative regardless of client behavior. The browser's `accept` filter is only a convenience; the backend magic-byte policy remains authoritative.
 
 `EXECUTION_SECRET` files are deliberately never rendered as inline image/PDF previews. A user must explicitly request a download. The web client receives the authorized response as a `Blob`, creates a short-lived object URL only for the browser download action and revokes that URL immediately afterwards. The application does not persist downloaded attachment content in local/session storage.
 
@@ -63,7 +63,7 @@ The domain depends on the `AttachmentStorage` interface rather than filesystem p
 
 All endpoints are authenticated:
 
-- `POST /jobs/{jobId}/attachments` — multipart upload with `visibility` plus `file`; creator only;
+- `POST /jobs/{jobId}/attachments` — multipart upload with `visibility` plus `file`; creator while `OPEN`/`IN_PROGRESS`, or assigned worker with `PARTICIPANTS` only while `IN_PROGRESS`;
 - `GET /jobs/{jobId}/attachments` — returns only metadata currently visible to the caller;
 - `GET /jobs/{jobId}/attachments/{attachmentId}/content` — authorized decrypted download;
 - `DELETE /jobs/{jobId}/attachments/{attachmentId}` — creator deletion under lifecycle rules.
@@ -74,4 +74,4 @@ Responses never include storage paths, storage keys, encryption material or SHA-
 
 Flyway `V37__job_attachments.sql` creates metadata, visibility/size/hash checks and active-job indexes. `V36__tracking_destination_arrival.sql` precedes it on the current schema history. The application and database hard limits both cap a file at 10 MiB.
 
-Focused tests cover magic-byte validation, filename normalization, count/size limits, encrypted-at-rest round trips, failure with a wrong AES key, root-path confinement and lifecycle access rules. The container runtime smoke additionally verifies multipart upload, metadata privacy, encrypted bytes on the mounted volume, pre/post-assignment access, execution-secret revocation and deletion behavior.
+Focused tests cover magic-byte validation, filename normalization, count/size limits, encrypted-at-rest round trips, failure with a wrong AES key, root-path confinement and lifecycle access rules. The container runtime smoke additionally verifies multipart upload, metadata privacy, encrypted bytes on the mounted volume, pre/post-assignment access, worker-only participant evidence, execution-secret revocation and deletion behavior.

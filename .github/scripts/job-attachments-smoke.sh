@@ -35,6 +35,7 @@ register_and_login 'attachment-worker-smoke@example.com' 'attachmentWorker' atta
 register_and_login 'attachment-outsider-smoke@example.com' 'attachmentOutsider' attachment-outsider
 
 OWNER_ID=$(json_value /tmp/attachment-owner-register.json id)
+WORKER_ID=$(json_value /tmp/attachment-worker-register.json id)
 OWNER_TOKEN=$(json_value /tmp/attachment-owner-login.json accessToken)
 WORKER_TOKEN=$(json_value /tmp/attachment-worker-login.json accessToken)
 OUTSIDER_TOKEN=$(json_value /tmp/attachment-outsider-login.json accessToken)
@@ -62,6 +63,7 @@ sig=bytes([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])
 open('/tmp/attachment-public.png','wb').write(sig+b'PUBLIC_ATTACHMENT_SMOKE_MARKER')
 open('/tmp/attachment-participant.png','wb').write(sig+b'PARTICIPANT_ATTACHMENT_SMOKE_MARKER')
 open('/tmp/attachment-secret.png','wb').write(sig+b'EXECUTION_SECRET_SMOKE_MARKER')
+open('/tmp/attachment-worker-participant.png','wb').write(sig+b'WORKER_PARTICIPANT_ATTACHMENT_SMOKE_MARKER')
 PY
 
 PUBLIC=$(curl --fail --silent --show-error \
@@ -91,6 +93,12 @@ python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d)==1; assert d[
 WORKER_LIST_BEFORE=$(curl --fail --silent --show-error -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/attachments")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d)==1; assert d[0]["visibility"]=="JOB_VIEWERS"' <<< "$WORKER_LIST_BEFORE"
 
+WORKER_UPLOAD_BEFORE=$(curl --silent --output /tmp/worker-upload-before.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $WORKER_TOKEN" \
+  -F 'visibility=PARTICIPANTS' -F 'file=@/tmp/attachment-worker-participant.png;type=image/png' \
+  "$api/jobs/$JOB_ID/attachments")
+test "$WORKER_UPLOAD_BEFORE" = "403"
+
 curl --fail --silent --show-error -H "Authorization: Bearer $OUTSIDER_TOKEN" \
   --output /tmp/public-download.png "$api/jobs/$JOB_ID/attachments/$PUBLIC_ID/content"
 cmp /tmp/attachment-public.png /tmp/public-download.png
@@ -110,8 +118,30 @@ echo 'Attachment upload, metadata privacy and encrypted-at-rest storage: OK'
 
 curl --fail --silent --show-error --output /tmp/attachment-accepted.json -X POST \
   -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/accept"
+
+WORKER_PUBLIC_STATUS=$(curl --silent --output /tmp/worker-public-upload.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $WORKER_TOKEN" \
+  -F 'visibility=JOB_VIEWERS' -F 'file=@/tmp/attachment-worker-participant.png;type=image/png' \
+  "$api/jobs/$JOB_ID/attachments")
+test "$WORKER_PUBLIC_STATUS" = "403"
+WORKER_SECRET_STATUS=$(curl --silent --output /tmp/worker-secret-upload.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $WORKER_TOKEN" \
+  -F 'visibility=EXECUTION_SECRET' -F 'file=@/tmp/attachment-worker-participant.png;type=image/png' \
+  "$api/jobs/$JOB_ID/attachments")
+test "$WORKER_SECRET_STATUS" = "403"
+
+WORKER_PARTICIPANT=$(curl --fail --silent --show-error \
+  -H "Authorization: Bearer $WORKER_TOKEN" \
+  -F 'visibility=PARTICIPANTS' -F 'file=@/tmp/attachment-worker-participant.png;type=image/png' \
+  "$api/jobs/$JOB_ID/attachments")
+printf '%s' "$WORKER_PARTICIPANT" > /tmp/worker-participant-attachment.json
+WORKER_PARTICIPANT_ID=$(json_value /tmp/worker-participant-attachment.json id)
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["visibility"]=="PARTICIPANTS"; assert d["uploadedById"]==int(sys.argv[1])' "$WORKER_ID" <<< "$WORKER_PARTICIPANT"
+
 WORKER_LIST_ACTIVE=$(curl --fail --silent --show-error -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/attachments")
-python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d)==3; assert {x["visibility"] for x in d}=={"JOB_VIEWERS","PARTICIPANTS","EXECUTION_SECRET"}' <<< "$WORKER_LIST_ACTIVE"
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d)==4; assert sum(x["visibility"]=="PARTICIPANTS" for x in d)==2; assert {x["visibility"] for x in d}=={"JOB_VIEWERS","PARTICIPANTS","EXECUTION_SECRET"}' <<< "$WORKER_LIST_ACTIVE"
+OWNER_LIST_ACTIVE=$(curl --fail --silent --show-error -H "Authorization: Bearer $OWNER_TOKEN" "$api/jobs/$JOB_ID/attachments")
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert any(x["id"]==int(sys.argv[1]) and x["uploadedById"]==int(sys.argv[2]) for x in d)' "$WORKER_PARTICIPANT_ID" "$WORKER_ID" <<< "$OWNER_LIST_ACTIVE"
 
 curl --fail --silent --show-error -H "Authorization: Bearer $WORKER_TOKEN" \
   --output /tmp/secret-download.png "$api/jobs/$JOB_ID/attachments/$SECRET_ID/content"
@@ -119,6 +149,9 @@ cmp /tmp/attachment-secret.png /tmp/secret-download.png
 curl --fail --silent --show-error -H "Authorization: Bearer $WORKER_TOKEN" \
   --output /tmp/participant-download.png "$api/jobs/$JOB_ID/attachments/$PARTICIPANT_ID/content"
 cmp /tmp/attachment-participant.png /tmp/participant-download.png
+curl --fail --silent --show-error -H "Authorization: Bearer $OWNER_TOKEN" \
+  --output /tmp/worker-participant-owner-download.png "$api/jobs/$JOB_ID/attachments/$WORKER_PARTICIPANT_ID/content"
+cmp /tmp/attachment-worker-participant.png /tmp/worker-participant-owner-download.png
 
 OUTSIDER_LIST_AFTER=$(curl --fail --silent --show-error -H "Authorization: Bearer $OUTSIDER_TOKEN" "$api/jobs/$JOB_ID/attachments")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d)==0' <<< "$OUTSIDER_LIST_AFTER"
@@ -131,9 +164,18 @@ test "$SECRET_AFTER" = "404"
 curl --fail --silent --show-error -H "Authorization: Bearer $WORKER_TOKEN" \
   --output /tmp/participant-after.png "$api/jobs/$JOB_ID/attachments/$PARTICIPANT_ID/content"
 cmp /tmp/attachment-participant.png /tmp/participant-after.png
+curl --fail --silent --show-error -H "Authorization: Bearer $WORKER_TOKEN" \
+  --output /tmp/worker-participant-after.png "$api/jobs/$JOB_ID/attachments/$WORKER_PARTICIPANT_ID/content"
+cmp /tmp/attachment-worker-participant.png /tmp/worker-participant-after.png
 curl --fail --silent --show-error -H "Authorization: Bearer $OWNER_TOKEN" \
   --output /tmp/owner-secret-after.png "$api/jobs/$JOB_ID/attachments/$SECRET_ID/content"
 cmp /tmp/attachment-secret.png /tmp/owner-secret-after.png
+
+WORKER_UPLOAD_AFTER=$(curl --silent --output /tmp/worker-upload-after.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $WORKER_TOKEN" \
+  -F 'visibility=PARTICIPANTS' -F 'file=@/tmp/attachment-worker-participant.png;type=image/png' \
+  "$api/jobs/$JOB_ID/attachments")
+test "$WORKER_UPLOAD_AFTER" = "409"
 
 PUBLIC_DELETE_STATUS=$(curl --silent --output /tmp/public-delete.json --write-out '%{http_code}' -X DELETE \
   -H "Authorization: Bearer $OWNER_TOKEN" "$api/jobs/$JOB_ID/attachments/$PUBLIC_ID")
@@ -143,4 +185,4 @@ SECRET_DELETE_STATUS=$(curl --silent --output /tmp/secret-delete.json --write-ou
 test "$SECRET_DELETE_STATUS" = "204"
 docker compose exec -T api sh -c "test ! -f '/var/lib/dofast/attachments/$STORAGE_KEY.bin'"
 
-echo 'Participant history, execution-secret revocation and deletion policy: OK'
+echo 'Worker participant evidence, participant history, execution-secret revocation and deletion policy: OK'

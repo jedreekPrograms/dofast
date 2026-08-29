@@ -73,16 +73,63 @@ class JobAttachmentAccessPolicyTest {
     }
 
     @Test
-    void nonCreatorCannotUploadAndCreatorCannotUploadAfterExecutionPhase() {
+    void creatorCanUploadDuringOpenAndInProgressButNotAfterExecutionPhase() {
+        JobAttachmentAccessPolicy policy = new JobAttachmentAccessPolicy(userBlockService);
+        when(job.getCreatedBy()).thenReturn(creator);
+        when(creator.getId()).thenReturn(10L);
+
+        when(job.getStatus()).thenReturn(JobStatus.OPEN);
+        assertDoesNotThrow(() -> policy.assertCanUpload(job, creator, JobAttachmentVisibility.JOB_VIEWERS));
+
+        when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
+        assertDoesNotThrow(() -> policy.assertCanUpload(job, creator, JobAttachmentVisibility.EXECUTION_SECRET));
+
+        when(job.getStatus()).thenReturn(JobStatus.COMPLETION_REQUESTED);
+        assertThrows(ConflictException.class,
+                () -> policy.assertCanUpload(job, creator, JobAttachmentVisibility.PARTICIPANTS));
+    }
+
+    @Test
+    void assignedWorkerCanUploadOnlyParticipantEvidenceWhileInProgress() {
+        JobAttachmentAccessPolicy policy = new JobAttachmentAccessPolicy(userBlockService);
+        when(job.getCreatedBy()).thenReturn(creator);
+        when(job.getTakenBy()).thenReturn(worker);
+        when(creator.getId()).thenReturn(10L);
+        when(worker.getId()).thenReturn(20L);
+        when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
+
+        assertDoesNotThrow(() -> policy.assertCanUpload(job, worker, JobAttachmentVisibility.PARTICIPANTS));
+        assertThrows(ForbiddenOperationException.class,
+                () -> policy.assertCanUpload(job, worker, JobAttachmentVisibility.JOB_VIEWERS));
+        assertThrows(ForbiddenOperationException.class,
+                () -> policy.assertCanUpload(job, worker, JobAttachmentVisibility.EXECUTION_SECRET));
+    }
+
+    @Test
+    void workerCannotUploadBeforeAssignmentOrAfterCompletionRequest() {
+        JobAttachmentAccessPolicy policy = new JobAttachmentAccessPolicy(userBlockService);
+        when(job.getCreatedBy()).thenReturn(creator);
+        when(creator.getId()).thenReturn(10L);
+        when(worker.getId()).thenReturn(20L);
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> policy.assertCanUpload(job, worker, JobAttachmentVisibility.PARTICIPANTS));
+
+        when(job.getTakenBy()).thenReturn(worker);
+        when(job.getStatus()).thenReturn(JobStatus.COMPLETION_REQUESTED);
+        assertThrows(ConflictException.class,
+                () -> policy.assertCanUpload(job, worker, JobAttachmentVisibility.PARTICIPANTS));
+    }
+
+    @Test
+    void outsiderCannotUpload() {
         JobAttachmentAccessPolicy policy = new JobAttachmentAccessPolicy(userBlockService);
         when(job.getCreatedBy()).thenReturn(creator);
         when(creator.getId()).thenReturn(10L);
         when(outsider.getId()).thenReturn(30L);
 
-        assertThrows(ForbiddenOperationException.class, () -> policy.assertCanUpload(job, outsider));
-
-        when(job.getStatus()).thenReturn(JobStatus.COMPLETION_REQUESTED);
-        assertThrows(ConflictException.class, () -> policy.assertCanUpload(job, creator));
+        assertThrows(ForbiddenOperationException.class,
+                () -> policy.assertCanUpload(job, outsider, JobAttachmentVisibility.PARTICIPANTS));
     }
 
     @Test
