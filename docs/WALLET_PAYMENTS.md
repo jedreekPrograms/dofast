@@ -17,6 +17,12 @@ The wallet UI treats `topup=return` as the required flow marker. On a recognized
 
 The returned browser status is informational only. `succeeded`, `processing`, or `redirect_status` in the URL never credits the wallet and never acts as settlement authority.
 
+## Gateway privacy
+
+Stripe redirect parameters necessarily arrive on the first browser request before React can scrub the address bar. The production nginx access log therefore records `$uri` rather than the full request target and deliberately omits query strings and referrers. This prevents Stripe client secrets and other query data from being persisted in the web container access log.
+
+The web gateway also sends `Referrer-Policy: strict-origin`, so subsequent browser requests receive only the origin as referrer rather than a path or query string. A container smoke test requests a wallet return URL containing a synthetic secret and fails if that marker appears in nginx logs.
+
 ## Settlement authority
 
 Wallet balance is credited only by the server-side Stripe webhook path after signature verification and PaymentIntent validation. Settlement verifies the final `succeeded` state, PLN currency, supported amount range, user metadata, and `TOP_UP` purpose before claiming the payment transaction and crediting the wallet ledger.
@@ -25,4 +31,4 @@ The payment transaction claim plus wallet ledger reference keep webhook retries 
 
 ## Operational checks
 
-Changes to this flow must keep the API Maven verification, frontend Node tests/lint/build, container/runtime smoke, and payments-ledger smoke green. No Flyway migration is required for the redirect-method change because it does not alter persisted schema or ledger semantics.
+Changes to this flow must keep the API Maven verification, frontend Node tests/lint/build, container/runtime smoke, dedicated web-container privacy smoke, and payments-ledger smoke green. No Flyway migration is required for the redirect-method change because it does not alter persisted schema or ledger semantics.

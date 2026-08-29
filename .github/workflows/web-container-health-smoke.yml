@@ -2,7 +2,7 @@ name: Web container health smoke
 
 on:
   push:
-    branches: [master, "fix/**"]
+    branches: [master, "fix/**", "feat/**"]
     paths:
       - "compose.yaml"
       - "apps/web/Dockerfile"
@@ -52,6 +52,22 @@ jobs:
           done
           docker inspect dofast-web-1 --format '{{json .State.Health}}'
           exit 1
+      - name: Verify payment query secrets are not logged or forwarded as referrers
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret_marker='pi_smoke_secret_DO_NOT_LOG'
+          curl --fail --silent \
+            "http://localhost:5173/wallet?topup=return&payment_intent=pi_smoke&payment_intent_client_secret=${secret_marker}&redirect_status=succeeded" \
+            >/dev/null
+          sleep 1
+          if docker logs dofast-web-1 2>&1 | grep -Fq "$secret_marker"; then
+            echo "Sensitive Stripe return query was written to the web access log"
+            exit 1
+          fi
+          curl --fail --silent --head http://localhost:5173/wallet \
+            | tr -d '\r' \
+            | grep -qi '^Referrer-Policy: strict-origin$'
       - name: Verify gateway still reaches API
         shell: bash
         run: |
