@@ -58,13 +58,27 @@ The owner can cancel while the publication is still `PAYMENT_REQUIRED`. A schedu
 
 The real job has not been created at this point, so no escrow cancellation, worker notification, tracking permission or public record needs to be undone.
 
-## Late Stripe payments
+## Late Stripe payments and settlement recovery
 
-A PaymentIntent can theoretically succeed after the user cancelled or after the publication window expired. The signed webhook is still accepted and the payment is claimed exactly once in the normal Stripe ledger, but it never resurrects a cancelled publication.
+A PaymentIntent can theoretically succeed after the user cancelled, after the publication window expired or after a dependency needed to create the job became unavailable. The signed webhook is still accepted and the payment is claimed exactly once in the normal Stripe ledger, but it never resurrects an unsafe or cancelled publication.
 
-If payment reaches an expired publication before the expiry scheduler has cancelled it, doFast restores the reserved wallet amount, keeps the Stripe money in the wallet, clears the private payload and moves the publication to `PAYMENT_RECEIVED`. The user can start a fresh publication with the now-funded wallet.
+Every successfully claimed publication payment now records `paymentReceivedAt` on the private publication. This is an auditable settlement fact; it is separate from the publication status and does not replace the wallet/payment ledgers as the source of truth for balances.
 
-For a cancelled publication, the reservation was already restored. A later successful Stripe webhook only credits the wallet and leaves the publication cancelled.
+When Stripe succeeds but the job cannot be safely created, the publication exposes a coarse `recoveryReason` to its owner:
+
+- `PUBLICATION_EXPIRED` — the protected publication window was already closed;
+- `CATEGORY_UNAVAILABLE` — the selected leaf category was no longer publishable;
+- `ROUTE_QUOTE_UNAVAILABLE` — the route quote was missing, consumed, expired or otherwise unusable at settlement;
+- `CANCELLED_BEFORE_PAYMENT_CONFIRMED` — the requester had already cancelled before the successful Stripe confirmation was processed;
+- `UNSPECIFIED` — compatibility value for historical `PAYMENT_RECEIVED` rows created before recovery reasons were persisted.
+
+Recovery reasons intentionally stay coarse. They explain the safe next step without returning the serialized job payload, exact address, route details, Stripe client secrets or internal validation data.
+
+If payment reaches an expired or otherwise no-longer-publishable `PAYMENT_REQUIRED` publication, doFast restores the wallet reservation, keeps the Stripe money in the wallet, clears the private payload and moves the publication to `PAYMENT_RECEIVED`. The user can start a fresh publication with the now-funded wallet rather than paying the same amount again.
+
+For a cancelled publication, the reservation was already restored. A later successful Stripe webhook credits the wallet, leaves the publication `CANCELLED`, records `paymentReceivedAt` plus `CANCELLED_BEFORE_PAYMENT_CONFIRMED`, and never creates a job.
+
+The Stripe return page uses these server-side fields to explain whether money is safely in the wallet and why the job was not created. A cancelled redirect that reports `succeeded` or `processing` is polled briefly until `paymentReceivedAt` appears, because the terminal `CANCELLED` status itself does not change when a late webhook arrives. The UI therefore does not misreport a late successful charge as an ordinary unpaid cancellation.
 
 ## Stripe and payment methods
 
@@ -89,3 +103,5 @@ This guard is intentional: array order from the recovery endpoint must never dec
 Exact on-site addresses and point-to-point route details remain private under the same rules as ordinary job creation. Before funding, the pending payload is owner-only and never returned by the publication response. After a terminal publication state, the serialized payload is removed from `job_publications`.
 
 Stripe receives payment metadata needed to bind the PaymentIntent to the authenticated user/publication; it does not receive the job description or exact route from this flow.
+
+`paymentReceivedAt` and `recoveryReason` are returned only through the authenticated owner-scoped publication endpoint. They contain settlement metadata, not job content or payment credentials.
