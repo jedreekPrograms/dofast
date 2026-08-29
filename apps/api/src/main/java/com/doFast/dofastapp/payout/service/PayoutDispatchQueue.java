@@ -128,6 +128,7 @@ public class PayoutDispatchQueue {
             }
             if (result.settlementPending()) {
                 payout.markSubmitted(reference, now);
+                payout.scheduleSubmittedReconciliation(now.plus(properties.submittedReconciliationDelay()));
                 payoutRepository.save(payout);
                 record(payout, PayoutEventType.SUBMITTED, PayoutEventSource.PROVIDER,
                         "Provider przyjął wypłatę; środki pozostają zarezerwowane do potwierdzenia końcowego rozliczenia.", now);
