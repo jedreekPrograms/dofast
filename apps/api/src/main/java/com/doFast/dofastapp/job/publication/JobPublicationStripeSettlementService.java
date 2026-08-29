@@ -54,7 +54,11 @@ public class JobPublicationStripeSettlementService {
             publication.attachStripePaymentIntent(paymentIntent.getId(), LocalDateTime.now());
         }
 
-        boolean newlyProcessed = stripePaymentService.processSuccessfulPayment(paymentIntent, eventId);
+        boolean newlyProcessed = stripePaymentService.processSuccessfulJobPublicationPayment(
+                paymentIntent,
+                eventId,
+                publication.getId()
+        );
 
         if (publication.getStatus() == JobPublicationStatus.PUBLISHED
                 || publication.getStatus() == JobPublicationStatus.CANCELLED

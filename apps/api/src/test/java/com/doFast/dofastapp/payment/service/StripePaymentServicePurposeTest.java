@@ -38,7 +38,7 @@ class StripePaymentServicePurposeTest {
     void rejectsPaymentIntentWithAnotherCommercialPurposeBeforeLedgerMutation() {
         PaymentIntent intent = paymentIntent(Map.of(
                 "userId", "7",
-                "purpose", "JOB_PUBLICATION",
+                "purpose", StripePaymentService.JOB_PUBLICATION_PURPOSE,
                 "jobPublicationId", "11",
                 "topUpRequestId", "job-publication-11"
         ));
@@ -50,25 +50,49 @@ class StripePaymentServicePurposeTest {
     }
 
     @Test
+    void acceptsPublicationPurposeOnlyThroughScopedSettlement() {
+        PaymentIntent intent = paymentIntent(Map.of(
+                "userId", "7",
+                "purpose", StripePaymentService.JOB_PUBLICATION_PURPOSE,
+                "jobPublicationId", "11"
+        ));
+        when(paymentTransactionRepository.claimSuccessfulPayment(
+                eq("pi_topup"), eq("evt_publication"), eq(7L), eq(new BigDecimal("25.00")), eq("PLN"), any()
+        )).thenReturn(1);
+        when(walletService.credit(
+                7L, new BigDecimal("25.00"), WalletTransactionType.TOP_UP, null, "stripe:intent:pi_topup"
+        )).thenReturn(true);
+
+        assertTrue(service.processSuccessfulJobPublicationPayment(intent, "evt_publication", 11L));
+    }
+
+    @Test
+    void scopedPublicationSettlementRejectsDifferentPublicationBeforeLedgerMutation() {
+        PaymentIntent intent = paymentIntent(Map.of(
+                "userId", "7",
+                "purpose", StripePaymentService.JOB_PUBLICATION_PURPOSE,
+                "jobPublicationId", "12"
+        ));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> service.processSuccessfulJobPublicationPayment(intent, "evt_publication", 11L)
+        );
+        verify(paymentTransactionRepository, never()).claimSuccessfulPayment(any(), any(), any(), any(), any(), any());
+        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void keepsLegacyTopUpWithoutPurposeCompatibleWhenItHasNoPublicationMarker() {
         PaymentIntent intent = paymentIntent(Map.of(
                 "userId", "7",
                 "topUpRequestId", "legacy-request-1"
         ));
         when(paymentTransactionRepository.claimSuccessfulPayment(
-                eq("pi_topup"),
-                eq("evt_legacy"),
-                eq(7L),
-                eq(new BigDecimal("25.00")),
-                eq("PLN"),
-                any()
+                eq("pi_topup"), eq("evt_legacy"), eq(7L), eq(new BigDecimal("25.00")), eq("PLN"), any()
         )).thenReturn(1);
         when(walletService.credit(
-                7L,
-                new BigDecimal("25.00"),
-                WalletTransactionType.TOP_UP,
-                null,
-                "stripe:intent:pi_topup"
+                7L, new BigDecimal("25.00"), WalletTransactionType.TOP_UP, null, "stripe:intent:pi_topup"
         )).thenReturn(true);
 
         assertTrue(service.processSuccessfulPayment(intent, "evt_legacy"));
@@ -82,19 +106,10 @@ class StripePaymentServicePurposeTest {
                 "topUpRequestId", "request-2"
         ));
         when(paymentTransactionRepository.claimSuccessfulPayment(
-                eq("pi_topup"),
-                eq("evt_topup"),
-                eq(7L),
-                eq(new BigDecimal("25.00")),
-                eq("PLN"),
-                any()
+                eq("pi_topup"), eq("evt_topup"), eq(7L), eq(new BigDecimal("25.00")), eq("PLN"), any()
         )).thenReturn(1);
         when(walletService.credit(
-                7L,
-                new BigDecimal("25.00"),
-                WalletTransactionType.TOP_UP,
-                null,
-                "stripe:intent:pi_topup"
+                7L, new BigDecimal("25.00"), WalletTransactionType.TOP_UP, null, "stripe:intent:pi_topup"
         )).thenReturn(true);
 
         assertTrue(service.processSuccessfulPayment(intent, "evt_topup"));

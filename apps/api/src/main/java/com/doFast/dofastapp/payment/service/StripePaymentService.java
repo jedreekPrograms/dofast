@@ -25,6 +25,7 @@ import java.util.Map;
 public class StripePaymentService {
 
     public static final String PURPOSE = "TOP_UP";
+    public static final String JOB_PUBLICATION_PURPOSE = "JOB_PUBLICATION";
 
     private static final String CURRENCY = "PLN";
     private static final BigDecimal MIN_TOP_UP_AMOUNT = new BigDecimal("1.00");
@@ -85,6 +86,32 @@ public class StripePaymentService {
 
     @Transactional
     public boolean processSuccessfulPayment(PaymentIntent paymentIntent, String eventId) {
+        return processSuccessfulPayment(paymentIntent, eventId, SettlementPurpose.TOP_UP, null);
+    }
+
+    @Transactional
+    public boolean processSuccessfulJobPublicationPayment(
+            PaymentIntent paymentIntent,
+            String eventId,
+            Long publicationId
+    ) {
+        if (publicationId == null) {
+            throw new IllegalArgumentException("Publication id is required for Stripe settlement");
+        }
+        return processSuccessfulPayment(
+                paymentIntent,
+                eventId,
+                SettlementPurpose.JOB_PUBLICATION,
+                publicationId.toString()
+        );
+    }
+
+    private boolean processSuccessfulPayment(
+            PaymentIntent paymentIntent,
+            String eventId,
+            SettlementPurpose settlementPurpose,
+            String expectedPublicationId
+    ) {
         if (paymentIntent == null) {
             throw new IllegalStateException("Stripe event does not contain a PaymentIntent");
         }
@@ -106,7 +133,7 @@ public class StripePaymentService {
         }
 
         Map<String, String> metadata = paymentIntent.getMetadata();
-        validateTopUpPurpose(metadata);
+        validatePurpose(metadata, settlementPurpose, expectedPublicationId);
         String userIdValue = metadata != null ? metadata.get("userId") : null;
         if (userIdValue == null || userIdValue.isBlank()) {
             throw new IllegalStateException("Stripe PaymentIntent is missing userId metadata");
@@ -155,10 +182,23 @@ public class StripePaymentService {
         return true;
     }
 
-    private void validateTopUpPurpose(Map<String, String> metadata) {
+    private void validatePurpose(
+            Map<String, String> metadata,
+            SettlementPurpose settlementPurpose,
+            String expectedPublicationId
+    ) {
         String purpose = metadata != null ? metadata.get("purpose") : null;
         String topUpRequestId = metadata != null ? metadata.get("topUpRequestId") : null;
         String jobPublicationId = metadata != null ? metadata.get("jobPublicationId") : null;
+
+        if (settlementPurpose == SettlementPurpose.JOB_PUBLICATION) {
+            if (!JOB_PUBLICATION_PURPOSE.equals(purpose)
+                    || expectedPublicationId == null
+                    || !expectedPublicationId.equals(jobPublicationId)) {
+                throw new IllegalStateException("Stripe PaymentIntent is not for the expected job publication");
+            }
+            return;
+        }
 
         if (PURPOSE.equals(purpose)) {
             if (topUpRequestId == null || topUpRequestId.isBlank()) {
@@ -227,5 +267,10 @@ public class StripePaymentService {
             throw new BusinessException("Identyfikator żądania płatności jest wymagany");
         }
         return requestId.trim();
+    }
+
+    private enum SettlementPurpose {
+        TOP_UP,
+        JOB_PUBLICATION
     }
 }

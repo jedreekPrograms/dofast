@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,8 +68,9 @@ class JobPublicationStripeSettlementServiceTest {
         JobResponse created = org.mockito.Mockito.mock(JobResponse.class);
         when(created.id()).thenReturn(99L);
         when(publicationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(publication));
-        when(stripePaymentService.processSuccessfulPayment(any(PaymentIntent.class), org.mockito.ArgumentMatchers.eq("evt_1")))
-                .thenReturn(true);
+        when(stripePaymentService.processSuccessfulJobPublicationPayment(
+                any(PaymentIntent.class), eq("evt_1"), eq(11L)
+        )).thenReturn(true);
         when(categoryRepository.findByIdAndActiveTrue(42L)).thenReturn(Optional.of(category));
         when(publicationService.deserialize("payload")).thenReturn(jobRequest);
         when(jobService.createJob(jobRequest, user)).thenReturn(created);
@@ -82,8 +84,9 @@ class JobPublicationStripeSettlementServiceTest {
         verify(jobService).createJob(jobRequest, user);
         verify(publicationRepository).save(publication);
 
-        when(stripePaymentService.processSuccessfulPayment(any(PaymentIntent.class), org.mockito.ArgumentMatchers.eq("evt_retry")))
-                .thenReturn(false);
+        when(stripePaymentService.processSuccessfulJobPublicationPayment(
+                any(PaymentIntent.class), eq("evt_retry"), eq(11L)
+        )).thenReturn(false);
         service.processSuccessfulPayment(paymentIntent("pi_1", 4500L), "evt_retry");
         verify(jobService).createJob(jobRequest, user);
     }
@@ -93,8 +96,9 @@ class JobPublicationStripeSettlementServiceTest {
         JobPublication publication = pendingPublication(LocalDateTime.now().plusMinutes(5));
         publication.cancel(LocalDateTime.now());
         when(publicationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(publication));
-        when(stripePaymentService.processSuccessfulPayment(any(PaymentIntent.class), org.mockito.ArgumentMatchers.eq("evt_late")))
-                .thenReturn(true);
+        when(stripePaymentService.processSuccessfulJobPublicationPayment(
+                any(PaymentIntent.class), eq("evt_late"), eq(11L)
+        )).thenReturn(true);
 
         assertTrue(service.processSuccessfulPayment(paymentIntent("pi_1", 4500L), "evt_late"));
 
@@ -107,8 +111,9 @@ class JobPublicationStripeSettlementServiceTest {
     void paymentAfterPublicationExpiryBecomesWalletFundingWithoutPublishing() {
         JobPublication publication = pendingPublication(LocalDateTime.now().minusSeconds(1));
         when(publicationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(publication));
-        when(stripePaymentService.processSuccessfulPayment(any(PaymentIntent.class), org.mockito.ArgumentMatchers.eq("evt_expired")))
-                .thenReturn(true);
+        when(stripePaymentService.processSuccessfulJobPublicationPayment(
+                any(PaymentIntent.class), eq("evt_expired"), eq(11L)
+        )).thenReturn(true);
 
         assertTrue(service.processSuccessfulPayment(paymentIntent("pi_1", 4500L), "evt_expired"));
 
@@ -128,7 +133,7 @@ class JobPublicationStripeSettlementServiceTest {
                 () -> service.processSuccessfulPayment(paymentIntent("pi_1", 4400L), "evt_bad")
         );
 
-        verify(stripePaymentService, never()).processSuccessfulPayment(any(), any());
+        verify(stripePaymentService, never()).processSuccessfulJobPublicationPayment(any(), any(), any());
         verify(jobService, never()).createJob(any(), any());
     }
 
