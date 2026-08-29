@@ -2,7 +2,8 @@
   grid-column: 1 / -1;
 }
 
-.job-attachment-panel__heading {
+.job-attachment-panel__heading,
+.job-expense-summary__heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -25,6 +26,87 @@
 
 .job-attachment-panel__intro {
   margin-top: 10px !important;
+}
+
+.job-expense-summary,
+.job-expense-claim-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #dfe3e8;
+  border-radius: 14px;
+  background: #fafbfc;
+}
+
+.job-expense-summary__heading strong {
+  display: block;
+  margin-top: 4px;
+  color: #222831;
+  font-size: 1.35rem;
+}
+
+.job-expense-summary__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.job-expense-summary__metrics > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e3e6ea;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.job-expense-summary__metrics span,
+.job-expense-claim-row span {
+  color: #737a85;
+  font-size: 0.8rem;
+}
+
+.job-expense-summary__metrics strong,
+.job-expense-claim-row strong {
+  color: #2b3038;
+}
+
+.job-expense-claims {
+  display: grid;
+  gap: 8px;
+}
+
+.job-expense-claim-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.job-expense-claim-form h3 {
+  margin: 4px 0 0;
+}
+
+.job-expense-claim-form p {
+  margin: 6px 0 0;
+  color: #69717d;
+  line-height: 1.5;
+}
+
+.job-expense-claim-form__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.job-expense-claim-form__fields .button {
+  min-height: 44px;
 }
 
 .job-attachment-upload {
@@ -211,15 +293,32 @@
 }
 
 @media (max-width: 900px) {
-  .job-attachment-visibility-grid {
-    grid-template-columns: 1fr;
+  .job-attachment-visibility-grid,
+  .job-expense-summary__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .job-expense-claim-form__fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .job-expense-claim-form__fields .button {
+    grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 680px) {
   .job-attachment-upload__file-row,
-  .job-attachment-card {
+  .job-attachment-card,
+  .job-expense-summary__metrics,
+  .job-expense-claim-row,
+  .job-expense-claim-form__fields {
     grid-template-columns: 1fr;
+  }
+
+  .job-expense-summary__heading {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .job-attachment-card__icon {
@@ -232,7 +331,8 @@
   }
 
   .job-attachment-card__actions .button,
-  .job-attachment-upload__file-row .button {
+  .job-attachment-upload__file-row .button,
+  .job-expense-claim-form__fields .button {
     width: 100%;
   }
 }
