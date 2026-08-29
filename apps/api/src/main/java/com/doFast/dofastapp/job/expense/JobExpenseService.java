@@ -1,0 +1,260 @@
+package com.doFast.dofastapp.job.expense;
+
+import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
+import com.doFast.dofastapp.job.attachment.JobAttachment;
+import com.doFast.dofastapp.job.attachment.JobAttachmentRepository;
+import com.doFast.dofastapp.job.attachment.JobAttachmentVisibility;
+import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.repository.JobRepository;
+import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
+import com.doFast.dofastapp.wallet.service.WalletService;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@Transactional(readOnly = true)
+public class JobExpenseService {
+
+    private static final BigDecimal ZERO = new BigDecimal("0.00");
+    private static final BigDecimal MAX_BUDGET = new BigDecimal("10000.00");
+
+    private final JobRepository jobRepository;
+    private final JobExpenseEscrowRepository escrowRepository;
+    private final JobExpenseClaimRepository claimRepository;
+    private final JobAttachmentRepository attachmentRepository;
+    private final WalletService walletService;
+
+    public JobExpenseService(
+            JobRepository jobRepository,
+            JobExpenseEscrowRepository escrowRepository,
+            JobExpenseClaimRepository claimRepository,
+            JobAttachmentRepository attachmentRepository,
+            WalletService walletService
+    ) {
+        this.jobRepository = jobRepository;
+        this.escrowRepository = escrowRepository;
+        this.claimRepository = claimRepository;
+        this.attachmentRepository = attachmentRepository;
+        this.walletService = walletService;
+    }
+
+    @Transactional
+    public void holdBudget(Job job) {
+        BigDecimal budget = normalizeBudget(job.getExpenseBudget());
+        if (budget.signum() == 0) return;
+        if (job.getId() == null || job.getCreatedBy() == null || job.getCreatedBy().getId() == null) {
+            throw new IllegalStateException("Expense budget requires a persisted job and payer");
+        }
+        if (escrowRepository.findByJob_Id(job.getId()).isPresent()) {
+            throw new ConflictException("Budżet wydatków dla tego zlecenia został już zablokowany");
+        }
+
+        walletService.debit(
+                job.getCreatedBy().getId(),
+                budget,
+                WalletTransactionType.EXPENSE_BUDGET_LOCK,
+                job.getId(),
+                lockOperationKey(job.getId())
+        );
+        escrowRepository.save(new JobExpenseEscrow(job, job.getCreatedBy(), budget, LocalDateTime.now()));
+    }
+
+    @Transactional
+    public JobExpenseClaimResponse createClaim(Long jobId, CreateJobExpenseClaimRequest request, User currentUser) {
+        Job job = jobRepository.findByIdForUpdate(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+        if (job.getStatus() != JobStatus.IN_PROGRESS || job.getTakenBy() == null) {
+            throw new ConflictException("Wydatek można zgłosić tylko podczas aktywnej realizacji zlecenia");
+        }
+        if (!sameUser(job.getTakenBy(), currentUser)) {
+            throw new ForbiddenOperationException("Tylko przypisany wykonawca może zgłosić wydatek");
+        }
+
+        JobExpenseEscrow escrow = escrowRepository.findByJobIdForUpdate(jobId)
+                .orElseThrow(() -> new ConflictException("To zlecenie nie ma budżetu na wydatki"));
+        if (escrow.getStatus() != JobExpenseEscrowStatus.HELD) {
+            throw new ConflictException("Budżet wydatków został już rozliczony");
+        }
+
+        JobAttachment receipt = attachmentRepository.findByIdAndJob_IdAndDeletedAtIsNull(request.attachmentId(), jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Załącznik-paragon nie istnieje"));
+        if (receipt.getVisibility() != JobAttachmentVisibility.PARTICIPANTS
+                || !sameUser(receipt.getUploadedBy(), currentUser)) {
+            throw new ConflictException("Wydatek wymaga prywatnego załącznika PARTICIPANTS dodanego przez wykonawcę");
+        }
+        if (claimRepository.existsByAttachment_Id(receipt.getId())) {
+            throw new ConflictException("Ten załącznik został już użyty do zgłoszenia wydatku");
+        }
+
+        BigDecimal amount = normalizePositive(request.amount());
+        BigDecimal remaining = escrow.getBudgetAmount().subtract(escrow.getClaimedAmount());
+        if (amount.compareTo(remaining) > 0) {
+            throw new BusinessException("Zgłoszone wydatki przekraczają pozostały budżet");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        escrow.addClaim(amount);
+        escrowRepository.save(escrow);
+        JobExpenseClaim saved = claimRepository.save(new JobExpenseClaim(job, currentUser, receipt, amount, now));
+        return toClaimResponse(saved);
+    }
+
+    public JobExpenseSummaryResponse getSummary(Long jobId, User currentUser) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+        assertParticipant(job, currentUser);
+
+        JobExpenseEscrow escrow = escrowRepository.findByJob_Id(jobId).orElse(null);
+        if (escrow == null) {
+            return new JobExpenseSummaryResponse(
+                    jobId, ZERO, ZERO, ZERO, ZERO, null, null, null, List.of()
+            );
+        }
+        List<JobExpenseClaimResponse> claims = claimRepository
+                .findAllByJob_IdOrderByCreatedAtAscIdAsc(jobId)
+                .stream()
+                .map(this::toClaimResponse)
+                .toList();
+        return new JobExpenseSummaryResponse(
+                jobId,
+                escrow.getBudgetAmount(),
+                escrow.getClaimedAmount(),
+                escrow.getReimbursedAmount(),
+                escrow.getRefundedAmount(),
+                escrow.getStatus(),
+                escrow.getHeldAt(),
+                escrow.getResolvedAt(),
+                claims
+        );
+    }
+
+    @Transactional
+    public void settleOnCompletion(Job job) {
+        JobExpenseEscrow escrow = lockEscrow(job.getId());
+        if (escrow == null) return;
+        if (escrow.getStatus() == JobExpenseEscrowStatus.SETTLED) return;
+        if (escrow.getStatus() != JobExpenseEscrowStatus.HELD) {
+            throw new ConflictException("Budżet wydatków został już zwrócony");
+        }
+        if (job.getTakenBy() == null) {
+            throw new ConflictException("Nie można rozliczyć wydatków bez przypisanego wykonawcy");
+        }
+
+        BigDecimal reimbursed = escrow.getClaimedAmount();
+        BigDecimal refunded = escrow.getBudgetAmount().subtract(reimbursed).setScale(2, RoundingMode.UNNECESSARY);
+        if (reimbursed.signum() > 0) {
+            walletService.credit(
+                    job.getTakenBy().getId(),
+                    reimbursed,
+                    WalletTransactionType.EXPENSE_REIMBURSEMENT,
+                    job.getId(),
+                    reimbursementOperationKey(job.getId())
+            );
+        }
+        if (refunded.signum() > 0) {
+            walletService.credit(
+                    job.getCreatedBy().getId(),
+                    refunded,
+                    WalletTransactionType.EXPENSE_BUDGET_REFUND,
+                    job.getId(),
+                    refundOperationKey(job.getId())
+            );
+        }
+        escrow.settle(reimbursed, refunded, LocalDateTime.now());
+        escrowRepository.save(escrow);
+    }
+
+    @Transactional
+    public void refundAll(Job job) {
+        JobExpenseEscrow escrow = lockEscrow(job.getId());
+        if (escrow == null || escrow.getStatus() == JobExpenseEscrowStatus.REFUNDED) return;
+        if (escrow.getStatus() != JobExpenseEscrowStatus.HELD) {
+            throw new ConflictException("Budżet wydatków został już rozliczony z wykonawcą");
+        }
+        walletService.credit(
+                job.getCreatedBy().getId(),
+                escrow.getBudgetAmount(),
+                WalletTransactionType.EXPENSE_BUDGET_REFUND,
+                job.getId(),
+                refundOperationKey(job.getId())
+        );
+        escrow.refundAll(LocalDateTime.now());
+        escrowRepository.save(escrow);
+    }
+
+    @Transactional
+    public void refundForMutualCancellation(Job job) {
+        JobExpenseEscrow escrow = lockEscrow(job.getId());
+        if (escrow == null || escrow.getStatus() == JobExpenseEscrowStatus.REFUNDED) return;
+        if (escrow.getStatus() != JobExpenseEscrowStatus.HELD) {
+            throw new ConflictException("Budżet wydatków został już rozliczony");
+        }
+        if (escrow.getClaimedAmount().signum() > 0) {
+            throw new ConflictException("Zlecenie ma zgłoszone wydatki. Anulowanie wymaga rozstrzygnięcia sporu");
+        }
+        refundAll(job);
+    }
+
+    private JobExpenseEscrow lockEscrow(Long jobId) {
+        return escrowRepository.findByJobIdForUpdate(jobId).orElse(null);
+    }
+
+    private BigDecimal normalizeBudget(BigDecimal amount) {
+        if (amount == null) return ZERO;
+        BigDecimal normalized;
+        try {
+            normalized = amount.setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException ex) {
+            throw new BusinessException("Budżet wydatków może mieć maksymalnie dwa miejsca po przecinku");
+        }
+        if (normalized.signum() < 0 || normalized.compareTo(MAX_BUDGET) > 0) {
+            throw new BusinessException("Budżet wydatków musi mieścić się w zakresie 0–10 000 PLN");
+        }
+        return normalized;
+    }
+
+    private BigDecimal normalizePositive(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new BusinessException("Kwota wydatku musi być dodatnia");
+        }
+        try {
+            return amount.setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException ex) {
+            throw new BusinessException("Kwota wydatku może mieć maksymalnie dwa miejsca po przecinku");
+        }
+    }
+
+    private void assertParticipant(Job job, User user) {
+        if (!sameUser(job.getCreatedBy(), user) && !sameUser(job.getTakenBy(), user)) {
+            throw new ForbiddenOperationException("Tylko strony zlecenia mogą przeglądać rozliczenie wydatków");
+        }
+    }
+
+    private boolean sameUser(User first, User second) {
+        return first != null && second != null && first.getId() != null && first.getId().equals(second.getId());
+    }
+
+    private JobExpenseClaimResponse toClaimResponse(JobExpenseClaim claim) {
+        return new JobExpenseClaimResponse(
+                claim.getId(),
+                claim.getAmount(),
+                claim.getAttachment().getId(),
+                claim.getWorker().getId(),
+                claim.getCreatedAt()
+        );
+    }
+
+    private String lockOperationKey(Long jobId) { return "job:" + jobId + ":expense:lock"; }
+    private String reimbursementOperationKey(Long jobId) { return "job:" + jobId + ":expense:reimburse"; }
+    private String refundOperationKey(Long jobId) { return "job:" + jobId + ":expense:refund"; }
+}

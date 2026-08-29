@@ -62,6 +62,9 @@ public class Job {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal price;
 
+    @Column(name = "expense_budget", nullable = false, precision = 19, scale = 2)
+    private BigDecimal expenseBudget = BigDecimal.ZERO.setScale(2);
+
     @Enumerated(EnumType.STRING)
     @Column(name = "assignment_mode", nullable = false, length = 20)
     private JobAssignmentMode assignmentMode = JobAssignmentMode.INSTANT;
@@ -158,6 +161,9 @@ public class Job {
         if (assignmentMode == null) {
             assignmentMode = JobAssignmentMode.INSTANT;
         }
+        if (expenseBudget == null) {
+            expenseBudget = BigDecimal.ZERO.setScale(2);
+        }
         updatedAt = now;
     }
 
@@ -204,6 +210,7 @@ public class Job {
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public BigDecimal getPrice() { return price; }
+    public BigDecimal getExpenseBudget() { return expenseBudget; }
     public JobAssignmentMode getAssignmentMode() { return assignmentMode; }
     public boolean isPriceNegotiationEnabled() { return priceNegotiationEnabled; }
     public JobStatus getStatus() { return status; }
@@ -233,6 +240,7 @@ public class Job {
     public void setTitle(String title) { this.title = title; }
     public void setDescription(String description) { this.description = description; }
     public void setPrice(BigDecimal price) { this.price = price; }
+    public void setExpenseBudget(BigDecimal expenseBudget) { this.expenseBudget = expenseBudget; }
     public void setAssignmentMode(JobAssignmentMode assignmentMode) { this.assignmentMode = assignmentMode; }
     public void setPriceNegotiationEnabled(boolean priceNegotiationEnabled) { this.priceNegotiationEnabled = priceNegotiationEnabled; }
     public void setStatus(JobStatus status) { this.status = status; }

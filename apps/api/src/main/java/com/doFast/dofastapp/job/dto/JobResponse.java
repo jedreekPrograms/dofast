@@ -12,6 +12,7 @@ public record JobResponse(
         String title,
         String description,
         BigDecimal price,
+        BigDecimal expenseBudget,
         JobAssignmentMode assignmentMode,
         boolean priceNegotiationEnabled,
         JobStatus status,

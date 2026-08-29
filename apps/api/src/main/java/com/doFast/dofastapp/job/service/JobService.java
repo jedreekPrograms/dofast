@@ -17,6 +17,7 @@ import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.entity.JobRouteStop;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.search.alert.JobPublicationOutbox;
 import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
@@ -55,6 +56,7 @@ public class JobService {
     private final LiveTrackingService liveTrackingService;
     private final JobPublicationOutboxRepository jobPublicationOutboxRepository;
     private final UserBlockService userBlockService;
+    private final JobExpenseService expenseService;
 
     @Autowired
     public JobService(
@@ -65,7 +67,8 @@ public class JobService {
             RouteQuoteService routeQuoteService,
             LiveTrackingService liveTrackingService,
             JobPublicationOutboxRepository jobPublicationOutboxRepository,
-            UserBlockService userBlockService
+            UserBlockService userBlockService,
+            JobExpenseService expenseService
     ) {
         this.jobRepository = jobRepository;
         this.jobCategoryRepository = jobCategoryRepository;
@@ -75,6 +78,7 @@ public class JobService {
         this.liveTrackingService = liveTrackingService;
         this.jobPublicationOutboxRepository = jobPublicationOutboxRepository;
         this.userBlockService = userBlockService;
+        this.expenseService = expenseService;
     }
 
     JobService(
@@ -94,6 +98,7 @@ public class JobService {
                 routeQuoteService,
                 liveTrackingService,
                 jobPublicationOutboxRepository,
+                null,
                 null
         );
     }
@@ -117,6 +122,7 @@ public class JobService {
         job.setTitle(request.getTitle().trim());
         job.setDescription(request.getDescription().trim());
         job.setPrice(request.getPrice());
+        job.setExpenseBudget(request.getExpenseBudget());
         job.setAssignmentMode(assignmentMode);
         job.setPriceNegotiationEnabled(request.isPriceNegotiationEnabled());
         job.setStatus(JobStatus.OPEN);
@@ -126,6 +132,9 @@ public class JobService {
 
         Job saved = jobRepository.save(job);
         transactionService.holdMoney(saved);
+        if (expenseService != null) {
+            expenseService.holdBudget(saved);
+        }
         jobPublicationOutboxRepository.save(new JobPublicationOutbox(saved));
         return toResponse(saved);
     }
@@ -264,6 +273,9 @@ public class JobService {
         jobRepository.flush();
         liveTrackingService.stopAndClear(saved.getId());
         transactionService.releaseMoney(saved, saved.getTakenBy());
+        if (expenseService != null) {
+            expenseService.settleOnCompletion(saved);
+        }
         notificationService.notify(saved.getTakenBy(), NotificationType.JOB_COMPLETED, "Zlecenie potwierdzone",
                 "Zlecenie „" + saved.getTitle() + "” zostało zakończone, a środki zwolnione.", saved, null);
         return toResponse(saved);
@@ -277,6 +289,9 @@ public class JobService {
         job.cancel(LocalDateTime.now());
         Job saved = jobRepository.save(job);
         transactionService.refundMoney(saved);
+        if (expenseService != null) {
+            expenseService.refundAll(saved);
+        }
         return toResponse(saved);
     }
 
