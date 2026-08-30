@@ -4,8 +4,10 @@ import AdminJobReportsPage from '../features/admin/pages/AdminJobReportsPage.jsx
 import AdminPage from '../features/admin/pages/AdminPage.jsx'
 import AdminPayoutsPage from '../features/admin/pages/AdminPayoutsPage.jsx'
 import AdminVerificationsPage from '../features/admin/pages/AdminVerificationsPage.jsx'
+import ForgotPasswordPage from '../features/auth/pages/ForgotPasswordPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import RegisterPage from '../features/auth/pages/RegisterPage.jsx'
+import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage.jsx'
 import RequireAdmin from '../features/auth/components/RequireAdmin.jsx'
 import RequireAuth from '../features/auth/components/RequireAuth.jsx'
 import ChatPage from '../features/chat/pages/ChatPage.jsx'
@@ -36,6 +38,8 @@ function App() {
           <Route path="/" element={<JobsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/users/:userId" element={<PublicProfilePage />} />
 
           <Route element={<RequireAuth />}>
