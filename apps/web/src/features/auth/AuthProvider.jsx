@@ -58,8 +58,10 @@ function AuthProvider({ children }) {
   }
 
   async function register(payload) {
-    await registerUser(payload)
-    return login({ email: payload.email, password: payload.password })
+    const created = await registerUser(payload)
+    if (!created.emailVerified) return created
+    await login({ email: payload.email, password: payload.password })
+    return created
   }
 
   async function logout() {
