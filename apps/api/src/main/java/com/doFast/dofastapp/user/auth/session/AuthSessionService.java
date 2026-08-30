@@ -83,7 +83,7 @@ public class AuthSessionService {
             throw new ForbiddenOperationException("Konto jest obecnie zawieszone");
         }
 
-        String accessToken = jwtUtil.generateToken(user.getEmail());
+        String accessToken = jwtUtil.generateToken(user.getEmail(), user.getAuthVersion());
         AuthResponse response = new AuthResponse(
                 accessToken,
                 "Bearer",
