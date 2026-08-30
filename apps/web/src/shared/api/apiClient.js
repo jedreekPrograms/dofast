@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '/api'
 const CSRF_COOKIE = 'dofast_csrf'
 const CSRF_HEADER = 'X-CSRF-Token'
 
