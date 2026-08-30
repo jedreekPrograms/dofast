@@ -72,6 +72,13 @@ dofast:
       cleanup-interval-ms: ${AUTH_SESSION_CLEANUP_INTERVAL_MS:3600000}
       cookie-secure: ${AUTH_COOKIE_SECURE:false}
       same-site: ${AUTH_COOKIE_SAME_SITE:Strict}
+    password-recovery:
+      delivery: ${PASSWORD_RECOVERY_DELIVERY:disabled}
+      token-ttl-minutes: ${PASSWORD_RESET_TTL_MINUTES:30}
+      retention-days: ${PASSWORD_RESET_RETENTION_DAYS:7}
+      cleanup-interval-ms: ${PASSWORD_RESET_CLEANUP_INTERVAL_MS:3600000}
+      reset-base-url: ${PASSWORD_RESET_BASE_URL:}
+      from-address: ${PASSWORD_RECOVERY_FROM_ADDRESS:}
     admin-bootstrap:
       email: ${ADMIN_BOOTSTRAP_EMAIL:}
       password: ${ADMIN_BOOTSTRAP_PASSWORD:}
