@@ -155,7 +155,7 @@ public class UserService {
 
     @Transactional
     public void changePassword(User principal, ChangePasswordRequest request) {
-        User user = userRepository.findById(principal.getId())
+        User user = userRepository.findByIdForUpdate(principal.getId())
                 .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
 
         if (!user.isPasswordLoginEnabled()) {
@@ -169,6 +169,7 @@ public class UserService {
         }
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));
+        user.incrementAuthVersion();
         userRepository.save(user);
         refreshSessionRepository.revokeAllActiveForUser(
                 user.getId(),
@@ -263,7 +264,7 @@ public class UserService {
     }
 
     private AuthResponse createAuthResponse(User user) {
-        String token = jwtUtil.generateToken(user.getEmail());
+        String token = jwtUtil.generateToken(user.getEmail(), user.getAuthVersion());
         return new AuthResponse(token, "Bearer", jwtUtil.getExpirationMs(), toResponse(user));
     }
 
