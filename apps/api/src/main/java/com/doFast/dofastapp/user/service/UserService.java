@@ -8,6 +8,7 @@ import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.auth.GoogleIdentity;
 import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
 import com.doFast.dofastapp.user.auth.apple.AppleIdentity;
+import com.doFast.dofastapp.user.auth.email.EmailVerificationService;
 import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
@@ -47,6 +48,7 @@ public class UserService {
     private final UserAuthIdentityRepository authIdentityRepository;
     private final GoogleIdentityVerifier googleIdentityVerifier;
     private final AuthRefreshSessionRepository refreshSessionRepository;
+    private final EmailVerificationService emailVerificationService;
 
     public UserService(
             UserRepository userRepository,
@@ -55,7 +57,8 @@ public class UserService {
             WalletService walletService,
             UserAuthIdentityRepository authIdentityRepository,
             GoogleIdentityVerifier googleIdentityVerifier,
-            AuthRefreshSessionRepository refreshSessionRepository
+            AuthRefreshSessionRepository refreshSessionRepository,
+            EmailVerificationService emailVerificationService
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -64,6 +67,7 @@ public class UserService {
         this.authIdentityRepository = authIdentityRepository;
         this.googleIdentityVerifier = googleIdentityVerifier;
         this.refreshSessionRepository = refreshSessionRepository;
+        this.emailVerificationService = emailVerificationService;
     }
 
     @Transactional
@@ -83,6 +87,7 @@ public class UserService {
 
         User saved = userRepository.save(user);
         walletService.createWalletForUser(saved.getId());
+        emailVerificationService.initializeLocalAccount(saved);
         return toResponse(saved);
     }
 
@@ -94,6 +99,9 @@ public class UserService {
             throw new AuthenticationFailedException("Nieprawidłowy email lub hasło");
         }
         requireActive(user);
+        if (emailVerificationService.required() && !user.isEmailVerified()) {
+            throw new ForbiddenOperationException("Adres email wymaga weryfikacji");
+        }
         return createAuthResponse(user);
     }
 
@@ -188,6 +196,7 @@ public class UserService {
                                 "Admin bootstrap email is already registered as a non-admin account"
                         );
                     }
+                    if (!existing.isEmailVerified()) existing.markEmailVerified(LocalDateTime.now());
                     return existing;
                 })
                 .orElseGet(() -> {
@@ -196,6 +205,7 @@ public class UserService {
                     admin.setNickname(normalizeAdminNickname(nicknameValue));
                     admin.setPassword(passwordEncoder.encode(passwordValue));
                     admin.setPasswordLoginEnabled(true);
+                    admin.markEmailVerified(LocalDateTime.now());
                     admin.setRole(UserRole.ADMIN);
                     admin.setStatus(UserStatus.ACTIVE);
                     User saved = userRepository.save(admin);
@@ -213,6 +223,7 @@ public class UserService {
                 user.getPublicLocation(),
                 user.getRole(),
                 user.getStatus(),
+                user.isEmailVerified(),
                 user.getCreatedAt()
         );
     }
@@ -237,6 +248,10 @@ public class UserService {
         if (authIdentityRepository.existsByUser_IdAndProvider(user.getId(), AuthProvider.GOOGLE)) {
             throw new AuthenticationFailedException("To konto jest już połączone z innym kontem Google");
         }
+        if (!user.isEmailVerified()) {
+            user.markEmailVerified(LocalDateTime.now());
+            userRepository.save(user);
+        }
         return user;
     }
 
@@ -246,6 +261,7 @@ public class UserService {
         user.setNickname(nickname);
         user.setPassword(passwordEncoder.encode(generateUnusablePassword()));
         user.setPasswordLoginEnabled(false);
+        user.markEmailVerified(LocalDateTime.now());
         user.setRole(UserRole.USER);
         user.setStatus(UserStatus.ACTIVE);
 
