@@ -81,40 +81,7 @@ class StripeRefundSettlementServiceTest {
     }
 
     @Test
-    void succeededRefundCannotRegressOnLaterProviderEvent() {
-        StripeRefundRequest request = StripeRefundRequest.create(
-                7L,
-                "pi_refund_terminal",
-                "terminal-ordering",
-                new BigDecimal("15.00"),
-                "PLN",
-                LocalDateTime.parse("2026-08-31T01:00:00")
-        );
-
-        boolean succeeded = request.applyProviderEvent(
-                "re_terminal",
-                "succeeded",
-                null,
-                200L,
-                LocalDateTime.parse("2026-08-31T01:01:00")
-        );
-        boolean regressed = request.applyProviderEvent(
-                "re_terminal",
-                "pending",
-                null,
-                201L,
-                LocalDateTime.parse("2026-08-31T01:02:00")
-        );
-
-        assertThat(succeeded).isTrue();
-        assertThat(regressed).isFalse();
-        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.SUCCEEDED);
-        assertThat(request.getStripeStatus()).isEqualTo("succeeded");
-        assertThat(request.getProviderEventCreatedAt()).isEqualTo(200L);
-    }
-
-    @Test
-    void terminalRefundCannotFlipOnSameSecondConflictingEvent() {
+    void sameSecondConflictMovesResolvedRefundToManualReview() {
         StripeRefundRequest request = StripeRefundRequest.create(
                 7L,
                 "pi_refund_same_second",
@@ -126,28 +93,70 @@ class StripeRefundSettlementServiceTest {
 
         assertThat(request.applyProviderEvent(
                 "re_same_second",
-                "failed",
-                "declined",
+                "succeeded",
+                null,
                 300L,
                 LocalDateTime.parse("2026-08-31T01:01:00")
         )).isTrue();
 
         assertThat(request.applyProviderEvent(
                 "re_same_second",
+                "failed",
+                "declined",
+                300L,
+                LocalDateTime.parse("2026-08-31T01:01:01")
+        )).isTrue();
+
+        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.REVIEW_REQUIRED);
+        assertThat(request.getStripeStatus()).isEqualTo("succeeded");
+        assertThat(request.getFailureReason()).isEqualTo("conflicting_same_second_event");
+        assertThat(request.getProviderEventCreatedAt()).isEqualTo(300L);
+        assertThat(request.getResolvedAt()).isNull();
+    }
+
+    @Test
+    void newerProviderEventCanResolveSameSecondReviewState() {
+        StripeRefundRequest request = StripeRefundRequest.create(
+                7L,
+                "pi_refund_review_recovery",
+                "review-recovery",
+                new BigDecimal("15.00"),
+                "PLN",
+                LocalDateTime.parse("2026-08-31T01:00:00")
+        );
+
+        request.applyProviderEvent(
+                "re_review_recovery",
                 "succeeded",
                 null,
                 300L,
+                LocalDateTime.parse("2026-08-31T01:01:00")
+        );
+        request.applyProviderEvent(
+                "re_review_recovery",
+                "failed",
+                "declined",
+                300L,
                 LocalDateTime.parse("2026-08-31T01:01:01")
-        )).isFalse();
+        );
+
+        assertThat(request.applyProviderEvent(
+                "re_review_recovery",
+                "failed",
+                "declined",
+                301L,
+                LocalDateTime.parse("2026-08-31T01:02:00")
+        )).isTrue();
 
         assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.FAILED);
         assertThat(request.getStripeStatus()).isEqualTo("failed");
         assertThat(request.getFailureReason()).isEqualTo("declined");
-        assertThat(request.getProviderEventCreatedAt()).isEqualTo(300L);
+        assertThat(request.getProviderEventCreatedAt()).isEqualTo(301L);
+        assertThat(request.getResolvedAt()).isNotNull();
     }
 
     @Test
-    void staleEventCannotMutateTerminalProviderMetadata() {
+    void staleEventCannotMutateProviderState() {
         StripeRefundRequest request = StripeRefundRequest.create(
                 7L,
                 "pi_refund_stale",
