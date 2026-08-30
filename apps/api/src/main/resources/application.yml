@@ -80,10 +80,13 @@ dofast:
     max-attempts: ${PAYOUT_MAX_ATTEMPTS:5}
     retry-base-seconds: ${PAYOUT_RETRY_BASE_SECONDS:15}
     stale-processing-seconds: ${PAYOUT_STALE_PROCESSING_SECONDS:300}
+    submitted-reconciliation-seconds: ${PAYOUT_SUBMITTED_RECONCILIATION_SECONDS:300}
     dispatch-interval-ms: ${PAYOUT_DISPATCH_INTERVAL_MS:2000}
     stripe-connect:
       enabled: ${PAYOUT_STRIPE_CONNECT_ENABLED:false}
       dispatch-enabled: ${PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED:false}
+      reconciliation-enabled: ${PAYOUT_STRIPE_CONNECT_RECONCILIATION_ENABLED:false}
+      reconciliation-interval-ms: ${PAYOUT_STRIPE_CONNECT_RECONCILIATION_INTERVAL_MS:60000}
       country: ${PAYOUT_STRIPE_CONNECT_COUNTRY:PL}
       refresh-url: ${PAYOUT_STRIPE_CONNECT_REFRESH_URL:}
       return-url: ${PAYOUT_STRIPE_CONNECT_RETURN_URL:}

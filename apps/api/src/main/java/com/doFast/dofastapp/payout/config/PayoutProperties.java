@@ -18,6 +18,7 @@ public class PayoutProperties {
     private final int maxAttempts;
     private final long retryBaseSeconds;
     private final long staleProcessingSeconds;
+    private final long submittedReconciliationSeconds;
 
     public PayoutProperties(
             @Value("${dofast.payouts.provider:disabled}") String provider,
@@ -25,7 +26,8 @@ public class PayoutProperties {
             @Value("${dofast.payouts.minimum-amount:1.00}") BigDecimal minimumAmount,
             @Value("${dofast.payouts.max-attempts:5}") int maxAttempts,
             @Value("${dofast.payouts.retry-base-seconds:15}") long retryBaseSeconds,
-            @Value("${dofast.payouts.stale-processing-seconds:300}") long staleProcessingSeconds
+            @Value("${dofast.payouts.stale-processing-seconds:300}") long staleProcessingSeconds,
+            @Value("${dofast.payouts.submitted-reconciliation-seconds:300}") long submittedReconciliationSeconds
     ) {
         this.provider = normalizeProvider(provider);
         this.sandboxEnabled = sandboxEnabled;
@@ -34,9 +36,13 @@ public class PayoutProperties {
         if (maxAttempts < 1 || maxAttempts > 20) throw new IllegalArgumentException("Payout max attempts must be between 1 and 20");
         if (retryBaseSeconds < 1 || retryBaseSeconds > 3600) throw new IllegalArgumentException("Invalid payout retry base seconds");
         if (staleProcessingSeconds < 30 || staleProcessingSeconds > 86400) throw new IllegalArgumentException("Invalid payout stale-processing timeout");
+        if (submittedReconciliationSeconds < 30 || submittedReconciliationSeconds > 86400) {
+            throw new IllegalArgumentException("Invalid payout submitted-reconciliation interval");
+        }
         this.maxAttempts = maxAttempts;
         this.retryBaseSeconds = retryBaseSeconds;
         this.staleProcessingSeconds = staleProcessingSeconds;
+        this.submittedReconciliationSeconds = submittedReconciliationSeconds;
     }
 
     public String provider() { return provider; }
@@ -44,6 +50,7 @@ public class PayoutProperties {
     public BigDecimal minimumAmount() { return minimumAmount; }
     public int maxAttempts() { return maxAttempts; }
     public Duration staleProcessingTimeout() { return Duration.ofSeconds(staleProcessingSeconds); }
+    public Duration submittedReconciliationDelay() { return Duration.ofSeconds(submittedReconciliationSeconds); }
 
     public Duration retryDelay(int attemptCount) {
         int exponent = Math.max(0, Math.min(attemptCount - 1, 8));

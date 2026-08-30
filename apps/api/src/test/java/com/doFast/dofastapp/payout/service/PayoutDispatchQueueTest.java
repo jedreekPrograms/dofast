@@ -52,7 +52,7 @@ class PayoutDispatchQueueTest {
                 userRepository,
                 verificationRepository,
                 walletService,
-                new PayoutProperties("sandbox", true, new BigDecimal("1.00"), 1, 15, 300)
+                new PayoutProperties("sandbox", true, new BigDecimal("1.00"), 1, 15, 300, 300)
         );
     }
 
@@ -135,10 +135,12 @@ class PayoutDispatchQueueTest {
     }
 
     @Test
-    void submittedProviderResultWaitsForSettlementWithoutWalletMutation() {
+    void submittedProviderResultWaitsForSettlementAndSchedulesReadOnlyReconciliation() {
         User user = user(7L, UserStatus.ACTIVE);
         PayoutRequest payout = payout(41L, user);
         payout.startProcessing(LocalDateTime.now());
+        int dispatchAttempts = payout.getAttemptCount();
+        LocalDateTime before = LocalDateTime.now();
         when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
 
         queue.complete(41L, PayoutDispatchResult.submitted("provider-payout-41"));
@@ -146,6 +148,9 @@ class PayoutDispatchQueueTest {
         assertEquals(PayoutStatus.SUBMITTED, payout.getStatus());
         assertEquals("provider-payout-41", payout.getProviderReference());
         assertNotNull(payout.getProviderSubmittedAt());
+        assertNotNull(payout.getNextAttemptAt());
+        assertTrue(payout.getNextAttemptAt().isAfter(before.plusSeconds(290)));
+        assertEquals(dispatchAttempts, payout.getAttemptCount());
         assertNull(payout.getResolvedAt());
         verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
