@@ -42,10 +42,13 @@ public class AuthSessionController {
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(HttpServletRequest request, HttpServletResponse response) {
-        AuthSessionCredentials credentials = cookieService.optionalCredentials(request);
-        if (credentials != null) {
-            sessionService.logout(credentials.refreshToken(), credentials.csrfToken());
+        try {
+            AuthSessionCredentials credentials = cookieService.optionalCredentials(request);
+            if (credentials != null) {
+                sessionService.logout(credentials.refreshToken(), credentials.csrfToken());
+            }
+        } finally {
+            cookieService.clear(response);
         }
-        cookieService.clear(response);
     }
 }
