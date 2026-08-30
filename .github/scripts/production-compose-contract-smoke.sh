@@ -28,6 +28,11 @@ export PASSWORD_RECOVERY_FROM_ADDRESS='security@example.test'
 export PASSWORD_RESET_TTL_MINUTES=25
 export PASSWORD_RESET_RETENTION_DAYS=8
 export PASSWORD_RESET_CLEANUP_INTERVAL_MS=5400000
+export EMAIL_VERIFICATION_BASE_URL='https://app.example.test/verify-email'
+export EMAIL_VERIFICATION_FROM_ADDRESS='security@example.test'
+export EMAIL_VERIFICATION_TTL_HOURS=36
+export EMAIL_VERIFICATION_RETENTION_DAYS=9
+export EMAIL_VERIFICATION_CLEANUP_INTERVAL_MS=4200000
 export WEBSOCKET_ALLOWED_ORIGIN_PATTERNS='https://app.example.test'
 export STRIPE_SECRET_KEY='sk_test_prod_contract'
 export STRIPE_WEBHOOK_SECRET='whsec_prod_contract'
@@ -95,6 +100,11 @@ expected = {
     'PASSWORD_RESET_TTL_MINUTES': '25',
     'PASSWORD_RESET_RETENTION_DAYS': '8',
     'PASSWORD_RESET_CLEANUP_INTERVAL_MS': '5400000',
+    'EMAIL_VERIFICATION_BASE_URL': 'https://app.example.test/verify-email',
+    'EMAIL_VERIFICATION_FROM_ADDRESS': 'security@example.test',
+    'EMAIL_VERIFICATION_TTL_HOURS': '36',
+    'EMAIL_VERIFICATION_RETENTION_DAYS': '9',
+    'EMAIL_VERIFICATION_CLEANUP_INTERVAL_MS': '4200000',
     'PLATFORM_FEE_BASIS_POINTS': '175',
     'PAYOUT_PROVIDER': 'disabled',
     'PAYOUT_SANDBOX_ENABLED': 'false',
@@ -138,7 +148,6 @@ assert web.get('healthcheck', {}).get('test'), 'web healthcheck missing'
 assert web.get('depends_on', {}).get('api', {}).get('condition') == 'service_healthy', web.get('depends_on')
 PY
 
-# The prod Spring profile owns the Secure-cookie and password-recovery delivery invariants.
 python3 - "$prod_profile" <<'PY'
 import pathlib
 import sys
@@ -147,14 +156,16 @@ text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 assert 'expiration-ms: ${JWT_EXPIRATION_MS:600000}' in text, 'production access-token default is not 10 minutes'
 assert 'cookie-secure: true' in text, 'production refresh cookies are not hard-wired Secure'
 assert 'same-site: ${AUTH_COOKIE_SAME_SITE:Strict}' in text, 'production SameSite policy missing'
-assert 'delivery: smtp' in text, 'production password recovery must use SMTP delivery'
+assert 'password-recovery:' in text and 'delivery: smtp' in text, 'production password recovery must use SMTP delivery'
 assert 'reset-base-url: ${PASSWORD_RESET_BASE_URL}' in text, 'production password reset URL is not required'
 assert 'from-address: ${PASSWORD_RECOVERY_FROM_ADDRESS}' in text, 'production password recovery sender is not required'
+assert 'email-verification:' in text, 'production email verification block missing'
+assert 'required: true' in text, 'production email verification must be mandatory'
+assert 'verify-base-url: ${EMAIL_VERIFICATION_BASE_URL}' in text, 'production email verification URL is not required'
+assert 'from-address: ${EMAIL_VERIFICATION_FROM_ADDRESS}' in text, 'production email verification sender is not required'
 PY
 
-# The production deployment must fail closed instead of silently inheriting local/CI secrets or
-# silently disabling account-recovery delivery when an operator forgets required configuration.
-for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_URL PASSWORD_RECOVERY_FROM_ADDRESS; do
+for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_URL PASSWORD_RECOVERY_FROM_ADDRESS EMAIL_VERIFICATION_BASE_URL EMAIL_VERIFICATION_FROM_ADDRESS; do
   if env -u "$missing" docker compose -f "$compose_file" config >/tmp/dofast-prod-compose-missing-secret.log 2>&1; then
     echo "Production Compose unexpectedly accepted missing $missing"
     cat /tmp/dofast-prod-compose-missing-secret.log
@@ -163,4 +174,4 @@ for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_UR
 done
 rm -f /tmp/dofast-prod-compose-missing-secret.log
 
-echo 'Production Compose forwards finance/payout/auth/password-recovery/tracking settings, enforces Secure refresh cookies, and persists encrypted attachments: OK'
+echo 'Production Compose forwards finance/payout/auth/recovery/email-verification/tracking settings, enforces Secure refresh cookies, and persists encrypted attachments: OK'
