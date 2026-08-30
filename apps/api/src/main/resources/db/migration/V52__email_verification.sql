@@ -2,8 +2,10 @@ ALTER TABLE users
     ADD COLUMN email_verified_at TIMESTAMP NULL;
 
 -- Preserve access for accounts created before email-verification enforcement.
+-- The users table intentionally has no created_at/updated_at columns in the current schema,
+-- so the migration timestamp itself is the safest deterministic backfill marker.
 UPDATE users
-SET email_verified_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
+SET email_verified_at = CURRENT_TIMESTAMP
 WHERE email_verified_at IS NULL;
 
 CREATE TABLE email_verification_tokens (
@@ -16,7 +18,9 @@ CREATE TABLE email_verification_tokens (
     invalidated_at TIMESTAMP NULL,
     CONSTRAINT fk_email_verification_tokens_user
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT uk_email_verification_tokens_hash UNIQUE (token_hash)
+    CONSTRAINT uk_email_verification_tokens_hash UNIQUE (token_hash),
+    CONSTRAINT ck_email_verification_tokens_lifecycle
+        CHECK (expires_at > created_at)
 );
 
 CREATE INDEX idx_email_verification_tokens_user_active
