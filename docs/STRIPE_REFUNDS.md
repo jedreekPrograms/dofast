@@ -43,7 +43,9 @@ The existing signed `/webhooks/stripe` endpoint processes managed:
 
 Events are deduplicated by Stripe event id. Each managed refund is validated against its local PaymentIntent, amount, currency and doFast metadata. `event.created` ordering prevents an older event from regressing newer state.
 
-Refund statuses are persisted as `PENDING`, `REQUIRES_ACTION`, `SUCCEEDED`, `FAILED`, or `CANCELED`. A later provider failure can supersede an earlier success observation because Stripe can report failed refunds asynchronously.
+Refund statuses are persisted as `PENDING`, `REQUIRES_ACTION`, `SUCCEEDED`, `FAILED`, or `CANCELED`. A genuinely newer provider failure can supersede an earlier success observation because Stripe can report failed refunds asynchronously.
+
+Stripe event timestamps have second-level precision, so two different webhook events can share the same `event.created`. If two same-second events conflict after a provider-resolved state has already been observed, doFast no longer lets delivery order choose the financial outcome. The refund moves to `REVIEW_REQUIRED`, keeps the wallet reservation untouched, preserves the last unambiguous provider observation, and waits for a strictly newer signed provider event (or operator reconciliation) to resolve the state. This avoids both premature wallet restoration and silent local state regression.
 
 When Stripe definitively reports `FAILED` or `CANCELED`, the held amount is credited back exactly once as `STRIPE_REFUND_RESTORE`. A successful refund never returns the reserved money to the wallet.
 
