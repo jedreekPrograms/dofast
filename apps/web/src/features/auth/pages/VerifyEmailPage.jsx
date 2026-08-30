@@ -6,7 +6,7 @@ export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') || ''
   const [status, setStatus] = useState(token ? 'verifying' : 'idle')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(searchParams.get('email') || '')
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
 
