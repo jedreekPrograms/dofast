@@ -77,11 +77,13 @@ class PasswordRecoveryServiceTest {
     void requestInvalidatesPreviousTokensPersistsOnlyHashAndQueuesRawTokenInMemory() {
         User user = activeLocalUser();
         when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(user));
         when(tokenRepository.saveAndFlush(any(PasswordResetToken.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         service.requestReset("USER@example.com");
 
+        verify(userRepository).findByIdForUpdate(9L);
         verify(tokenRepository).invalidateActiveForUser(eq(9L), any(LocalDateTime.class));
         ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
         verify(tokenRepository).saveAndFlush(tokenCaptor.capture());
@@ -101,16 +103,18 @@ class PasswordRecoveryServiceTest {
     void validResetChangesPasswordConsumesTokenAndRevokesSessions() {
         User user = activeLocalUser();
         String rawToken = "known-reset-token";
+        String tokenHash = secrets.hash(rawToken);
         PasswordResetToken token = PasswordResetToken.create(
                 user,
-                secrets.hash(rawToken),
+                tokenHash,
                 LocalDateTime.now().minusMinutes(2),
                 LocalDateTime.now().plusMinutes(20)
         );
         ReflectionTestUtils.setField(token, "id", 41L);
 
-        when(tokenRepository.findByTokenHashForUpdate(secrets.hash(rawToken))).thenReturn(Optional.of(token));
+        when(tokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(token));
         when(userRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(user));
+        when(tokenRepository.findByTokenHashForUpdate(tokenHash)).thenReturn(Optional.of(token));
         when(passwordEncoder.matches("NewPass456!", "old-hash")).thenReturn(false);
         when(passwordEncoder.encode("NewPass456!")).thenReturn("new-hash");
         when(userRepository.save(user)).thenReturn(user);
@@ -132,21 +136,24 @@ class PasswordRecoveryServiceTest {
     void expiredTokenIsInvalidatedAndRejected() {
         User user = activeLocalUser();
         String rawToken = "expired-reset-token";
+        String tokenHash = secrets.hash(rawToken);
         PasswordResetToken token = PasswordResetToken.create(
                 user,
-                secrets.hash(rawToken),
+                tokenHash,
                 LocalDateTime.now().minusHours(1),
                 LocalDateTime.now().minusMinutes(1)
         );
-        when(tokenRepository.findByTokenHashForUpdate(secrets.hash(rawToken))).thenReturn(Optional.of(token));
+        when(tokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(token));
+        when(userRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(user));
+        when(tokenRepository.findByTokenHashForUpdate(tokenHash)).thenReturn(Optional.of(token));
 
         assertThrows(
                 BusinessException.class,
                 () -> service.resetPassword(new ResetPasswordRequest(rawToken, "NewPass456!"))
         );
 
+        verify(userRepository).findByIdForUpdate(9L);
         verify(tokenRepository).save(token);
-        verify(userRepository, never()).findByIdForUpdate(any());
     }
 
     private User activeLocalUser() {
