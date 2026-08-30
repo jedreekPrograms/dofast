@@ -65,6 +65,8 @@ function AuthProvider({ children }) {
   async function logout() {
     try {
       await logoutUserSession()
+    } catch (error) {
+      void error
     } finally {
       clearAccessToken()
       setUser(null)
