@@ -33,19 +33,31 @@ public class JwtUtil {
         this.expirationMs = expirationMs;
     }
 
-    public String generateToken(String email) {
+    public String generateToken(String email, long authVersion) {
+        if (authVersion < 0) {
+            throw new IllegalArgumentException("Authentication version cannot be negative");
+        }
         long now = System.currentTimeMillis();
         return Jwts.builder()
                 .setSubject(email)
                 .setId(UUID.randomUUID().toString())
                 .claim("typ", "access")
+                .claim("av", authVersion)
                 .setIssuedAt(new Date(now))
                 .setExpiration(new Date(now + expirationMs))
                 .signWith(signingKey, SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    public String extractEmail(String token) {
+    /**
+     * Kept for focused tests and legacy callers that construct a version-zero user.
+     * Production authentication paths should pass the user's current authVersion explicitly.
+     */
+    public String generateToken(String email) {
+        return generateToken(email, 0L);
+    }
+
+    public AccessTokenIdentity parseAccessToken(String token) {
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(signingKey)
                 .build()
@@ -54,10 +66,25 @@ public class JwtUtil {
         if (!"access".equals(claims.get("typ", String.class))) {
             throw new JwtException("JWT is not an access token");
         }
-        return claims.getSubject();
+        String email = claims.getSubject();
+        Object rawAuthVersion = claims.get("av");
+        if (email == null || email.isBlank() || !(rawAuthVersion instanceof Number number)) {
+            throw new JwtException("JWT access identity is incomplete");
+        }
+        long authVersion = number.longValue();
+        if (authVersion < 0) {
+            throw new JwtException("JWT authentication version is invalid");
+        }
+        return new AccessTokenIdentity(email, authVersion);
+    }
+
+    public String extractEmail(String token) {
+        return parseAccessToken(token).email();
     }
 
     public long getExpirationMs() {
         return expirationMs;
     }
+
+    public record AccessTokenIdentity(String email, long authVersion) {}
 }
