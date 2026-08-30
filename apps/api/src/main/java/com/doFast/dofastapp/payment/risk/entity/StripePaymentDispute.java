@@ -47,6 +47,9 @@ public class StripePaymentDispute {
     @Column(name = "stripe_status", nullable = false, length = 32)
     private String stripeStatus;
 
+    @Column(name = "stripe_state_event_created_at")
+    private LocalDateTime stripeStateEventCreatedAt;
+
     @Column(name = "funds_withdrawn", nullable = false)
     private boolean fundsWithdrawn;
 
@@ -88,6 +91,7 @@ public class StripePaymentDispute {
     public String getCurrency() { return currency; }
     public String getReason() { return reason; }
     public String getStripeStatus() { return stripeStatus; }
+    public LocalDateTime getStripeStateEventCreatedAt() { return stripeStateEventCreatedAt; }
     public boolean isFundsWithdrawn() { return fundsWithdrawn; }
     public boolean isFundsReinstated() { return fundsReinstated; }
     public BigDecimal getWalletRecoveredAmount() { return walletRecoveredAmount; }
@@ -108,6 +112,21 @@ public class StripePaymentDispute {
             String status,
             LocalDateTime now
     ) {
+        initialize(disputeId, paymentIntentId, chargeId, userId, amount, currency, reason, status, now, null);
+    }
+
+    public void initialize(
+            String disputeId,
+            String paymentIntentId,
+            String chargeId,
+            Long userId,
+            BigDecimal amount,
+            String currency,
+            String reason,
+            String status,
+            LocalDateTime now,
+            LocalDateTime stripeEventCreatedAt
+    ) {
         this.stripeDisputeId = disputeId;
         this.stripePaymentIntentId = paymentIntentId;
         this.stripeChargeId = chargeId;
@@ -116,6 +135,7 @@ public class StripePaymentDispute {
         this.currency = currency;
         this.reason = reason;
         this.stripeStatus = status;
+        this.stripeStateEventCreatedAt = stripeEventCreatedAt;
         this.fundsWithdrawn = false;
         this.fundsReinstated = false;
         this.walletRecoveredAmount = BigDecimal.ZERO.setScale(2);
@@ -127,15 +147,51 @@ public class StripePaymentDispute {
     }
 
     public void refresh(String chargeId, String reason, String status, LocalDateTime now) {
+        refreshIdentity(chargeId);
+        this.reason = reason;
+        this.stripeStatus = status;
+        this.updatedAt = now;
+    }
+
+    public boolean refreshFromStripeEvent(
+            String chargeId,
+            String reason,
+            String status,
+            LocalDateTime stripeEventCreatedAt,
+            LocalDateTime now
+    ) {
+        if (stripeEventCreatedAt == null) {
+            throw new IllegalArgumentException("Stripe event creation time is required");
+        }
+        refreshIdentity(chargeId);
+        if (this.stripeStateEventCreatedAt != null
+                && stripeEventCreatedAt.isBefore(this.stripeStateEventCreatedAt)) {
+            return false;
+        }
+        if (this.stripeStateEventCreatedAt != null
+                && stripeEventCreatedAt.isEqual(this.stripeStateEventCreatedAt)
+                && isTerminalStripeStatus(this.stripeStatus)
+                && !this.stripeStatus.equals(status)) {
+            return false;
+        }
+        this.reason = reason;
+        this.stripeStatus = status;
+        this.stripeStateEventCreatedAt = stripeEventCreatedAt;
+        this.updatedAt = now;
+        return true;
+    }
+
+    private boolean isTerminalStripeStatus(String status) {
+        return "won".equals(status) || "lost".equals(status) || "prevented".equals(status) || "warning_closed".equals(status);
+    }
+
+    private void refreshIdentity(String chargeId) {
         if (chargeId != null && !chargeId.isBlank()) {
             if (stripeChargeId != null && !stripeChargeId.equals(chargeId)) {
                 throw new IllegalStateException("Stripe dispute changed charge identity");
             }
             stripeChargeId = chargeId;
         }
-        this.reason = reason;
-        this.stripeStatus = status;
-        this.updatedAt = now;
     }
 
     public void markFundsWithdrawn(LocalDateTime now) {

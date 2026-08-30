@@ -23,11 +23,20 @@ The signed Stripe webhook accepts these dispute events:
 
 Browser state, emails, dispute status strings, and job-dispute actions are never settlement authority for this flow.
 
+### Delivery ordering
+
+Stripe may retry or deliver webhook events out of order. Flyway V53 therefore adds a durable `stripe_state_event_created_at` watermark to every dispute. Provider status, reason and mutable provider metadata advance only from a signed event whose Stripe `Event.created` timestamp is not older than the stored watermark. A delayed older `charge.dispute.updated` can no longer regress a newer `closed`/review state.
+
+Charge identity is validated before the ordering gate, so even a stale signed event cannot silently change the immutable charge binding. Stripe timestamps have second precision; when two events share the same timestamp, an already terminal provider status (`won`, `lost`, `prevented`, `warning_closed`) is not replaced by a different same-second status.
+
+The ordering watermark controls provider metadata only. `funds_withdrawn` and `funds_reinstated` remain separately idempotent financial signals keyed by Stripe event ID, because balance movement must still be applied safely even when its delivery order differs from status events. Historical rows created before V53 have a null watermark; the next valid signed dispute event establishes it without rewriting historical state during migration.
+
 ## Identity and validation
 
 Every Stripe dispute must reference a PaymentIntent that already exists in `payment_transactions`. Processing fails closed when:
 
 - the PaymentIntent has not been settled by doFast yet;
+- the signed Stripe event does not contain a valid provider creation timestamp;
 - the currency is not PLN;
 - the disputed amount is non-positive or exceeds the original external settlement;
 - a later webhook changes dispute, PaymentIntent, user, amount, currency, or charge identity;
@@ -37,9 +46,9 @@ The one-dispute-per-settled-PaymentIntent constraint is deliberately conservativ
 
 ## Durable exposure model
 
-Flyway V47 adds `stripe_payment_disputes` and `stripe_payment_dispute_events`.
+Flyway V47 adds `stripe_payment_disputes` and `stripe_payment_dispute_events`; V53 adds the provider-state ordering watermark.
 
-The dispute row stores the provider identities, amount/currency, provider status, whether funds were withdrawn/reinstated, cumulative wallet recovery, cumulative wallet reinstatement, remaining outstanding exposure, and a recovery sequence. Stripe event IDs are claimed in a separate table so retries are idempotent and conflicting event-ID reuse fails closed.
+The dispute row stores the provider identities, amount/currency, provider status, provider-state event time, whether funds were withdrawn/reinstated, cumulative wallet recovery, cumulative wallet reinstatement, remaining outstanding exposure, and a recovery sequence. Stripe event IDs are claimed in a separate table so retries are idempotent and conflicting event-ID reuse fails closed.
 
 Wallet balances and `wallet_transactions.balance_after` remain non-negative. Chargebacks never punch a negative number through the existing ledger invariant.
 
@@ -69,4 +78,4 @@ It also does not submit evidence to Stripe or automate dispute representment. St
 
 ## Required validation
 
-Changes to this flow must keep Maven verification, the full container/runtime smoke, and the Payments ledger smoke green. The ledger smoke sends cryptographically signed Stripe webhook payloads and verifies partial immediate recovery, scheduled recovery of later credits, reinstatement, and replay idempotency against PostgreSQL/Flyway V47.
+Changes to this flow must keep Maven verification, the full container/runtime smoke, and the Payments ledger smoke green. Entity tests explicitly cover state-watermark advancement, stale-event non-regression, stale-event identity validation and same-second terminal-state protection. The ledger smoke sends cryptographically signed Stripe webhook payloads and verifies partial immediate recovery, scheduled recovery of later credits, reinstatement, and replay idempotency against PostgreSQL/Flyway migrations.

@@ -144,7 +144,12 @@ public class StripeWebhookController {
         }
 
         try {
-            boolean processed = paymentDisputeService.process(dispute, event.getId(), event.getType());
+            boolean processed = paymentDisputeService.process(
+                    dispute,
+                    event.getId(),
+                    event.getType(),
+                    event.getCreated()
+            );
             if (!processed) {
                 log.info("Stripe dispute event {} / dispute {} was already processed", event.getId(), dispute.getId());
                 return ResponseEntity.ok("already processed");
