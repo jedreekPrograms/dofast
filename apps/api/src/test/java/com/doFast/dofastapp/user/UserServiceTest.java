@@ -7,7 +7,9 @@ import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.auth.GoogleIdentity;
 import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
 import com.doFast.dofastapp.user.auth.apple.AppleIdentity;
+import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.dto.AuthResponse;
+import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
 import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
 import com.doFast.dofastapp.user.dto.LoginRequest;
 import com.doFast.dofastapp.user.dto.UserRequest;
@@ -30,6 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,6 +54,7 @@ class UserServiceTest {
     @Mock private WalletService walletService;
     @Mock private UserAuthIdentityRepository authIdentityRepository;
     @Mock private GoogleIdentityVerifier googleIdentityVerifier;
+    @Mock private AuthRefreshSessionRepository refreshSessionRepository;
 
     private UserService userService;
 
@@ -61,7 +66,8 @@ class UserServiceTest {
                 jwtUtil,
                 walletService,
                 authIdentityRepository,
-                googleIdentityVerifier
+                googleIdentityVerifier,
+                refreshSessionRepository
         );
     }
 
@@ -149,6 +155,27 @@ class UserServiceTest {
         assertEquals("token", response.accessToken());
         assertEquals("Bearer", response.tokenType());
         assertEquals(UserRole.USER, response.user().role());
+    }
+
+    @Test
+    void passwordChangeRevokesAllActiveRefreshSessions() {
+        User user = activeUser();
+        ChangePasswordRequest request = new ChangePasswordRequest("OldPass123!", "NewPass456!");
+
+        when(userRepository.findById(9L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("OldPass123!", "hash")).thenReturn(true);
+        when(passwordEncoder.matches("NewPass456!", "hash")).thenReturn(false);
+        when(passwordEncoder.encode("NewPass456!")).thenReturn("new-hash");
+        when(userRepository.save(user)).thenReturn(user);
+
+        userService.changePassword(user, request);
+
+        assertEquals("new-hash", user.getPassword());
+        verify(refreshSessionRepository).revokeAllActiveForUser(
+                eq(9L),
+                eq("PASSWORD_CHANGED"),
+                any(LocalDateTime.class)
+        );
     }
 
     @Test
