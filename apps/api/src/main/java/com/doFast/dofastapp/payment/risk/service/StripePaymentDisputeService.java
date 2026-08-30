@@ -13,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Locale;
 
 @Service
@@ -48,7 +50,7 @@ public class StripePaymentDisputeService {
     }
 
     @Transactional
-    public boolean process(Dispute stripeDispute, String eventId, String eventType) {
+    public boolean process(Dispute stripeDispute, String eventId, String eventType, Long eventCreatedEpochSeconds) {
         if (stripeDispute == null) {
             throw new IllegalStateException("Stripe event does not contain a dispute");
         }
@@ -60,6 +62,7 @@ public class StripePaymentDisputeService {
         );
         String normalizedEventId = requireValue(eventId, "Stripe dispute event is missing id", 255);
         String normalizedEventType = requireSupportedEventType(eventType);
+        LocalDateTime stripeEventCreatedAt = requireEventCreatedAt(eventCreatedEpochSeconds);
         String status = requireValue(stripeDispute.getStatus(), "Stripe dispute is missing status", 32);
         String currency = requireValue(stripeDispute.getCurrency(), "Stripe dispute is missing currency", 3)
                 .toUpperCase(Locale.ROOT);
@@ -90,6 +93,7 @@ public class StripePaymentDisputeService {
                 amount,
                 currency,
                 status,
+                stripeEventCreatedAt,
                 now
         );
 
@@ -122,6 +126,7 @@ public class StripePaymentDisputeService {
             BigDecimal amount,
             String currency,
             String status,
+            LocalDateTime stripeEventCreatedAt,
             LocalDateTime now
     ) {
         StripePaymentDispute exposure = disputeRepository.findByStripeDisputeId(disputeId).orElse(null);
@@ -140,7 +145,8 @@ public class StripePaymentDisputeService {
                     currency,
                     nullableLimited(stripeDispute.getReason(), 64, "Stripe dispute reason is too long"),
                     status,
-                    now
+                    now,
+                    stripeEventCreatedAt
             );
             return disputeRepository.saveAndFlush(exposure);
         }
@@ -152,10 +158,11 @@ public class StripePaymentDisputeService {
         if (!samePayment || !sameUser || !sameAmount || !sameCurrency) {
             throw new ConflictException("Stripe dispute identity changed across webhook events");
         }
-        exposure.refresh(
+        exposure.refreshFromStripeEvent(
                 stripeDispute.getCharge(),
                 nullableLimited(stripeDispute.getReason(), 64, "Stripe dispute reason is too long"),
                 status,
+                stripeEventCreatedAt,
                 now
         );
         return exposure;
@@ -179,6 +186,17 @@ public class StripePaymentDisputeService {
         }
         exposure.markFundsReinstated(returnAmount, now);
         disputeRepository.save(exposure);
+    }
+
+    private LocalDateTime requireEventCreatedAt(Long epochSeconds) {
+        if (epochSeconds == null || epochSeconds <= 0) {
+            throw new IllegalStateException("Stripe dispute event is missing creation time");
+        }
+        try {
+            return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneOffset.UTC);
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException("Stripe dispute event contains invalid creation time", ex);
+        }
     }
 
     private String requireSupportedEventType(String eventType) {
