@@ -180,15 +180,22 @@ public class StripeRefundRequest {
         if (eventCreatedAt != null && providerEventCreatedAt != null && eventCreatedAt < providerEventCreatedAt) {
             return false;
         }
+
+        String normalizedProviderStatus = normalize(providerStatus);
+        StripeRefundStatus mappedStatus = mapProviderStatus(normalizedProviderStatus);
+        if (isTerminal(status) && mappedStatus != status) {
+            return false;
+        }
+
         if (eventCreatedAt != null) {
             providerEventCreatedAt = eventCreatedAt;
         }
-        stripeStatus = normalize(providerStatus);
+        stripeStatus = normalizedProviderStatus;
         failureReason = normalizeFailure(providerFailureReason);
         if (submittedAt == null) {
             submittedAt = now;
         }
-        applyProviderStatus(stripeStatus, now);
+        applyProviderStatus(mappedStatus, now);
         updatedAt = now;
         return true;
     }
@@ -213,27 +220,35 @@ public class StripeRefundRequest {
     }
 
     private void applyProviderStatus(String providerStatus, LocalDateTime now) {
-        StripeRefundStatus mapped = switch (providerStatus == null ? "" : providerStatus) {
+        applyProviderStatus(mapProviderStatus(providerStatus), now);
+    }
+
+    private void applyProviderStatus(StripeRefundStatus mapped, LocalDateTime now) {
+        if (isTerminal(status) && mapped != status) {
+            return;
+        }
+        status = mapped;
+        if (isTerminal(mapped)) {
+            resolvedAt = now;
+        } else {
+            resolvedAt = null;
+        }
+    }
+
+    private StripeRefundStatus mapProviderStatus(String providerStatus) {
+        return switch (providerStatus == null ? "" : providerStatus) {
             case "succeeded" -> StripeRefundStatus.SUCCEEDED;
             case "failed" -> StripeRefundStatus.FAILED;
             case "canceled" -> StripeRefundStatus.CANCELED;
             case "requires_action" -> StripeRefundStatus.REQUIRES_ACTION;
             default -> StripeRefundStatus.PENDING;
         };
+    }
 
-        if ((status == StripeRefundStatus.FAILED || status == StripeRefundStatus.CANCELED)
-                && mapped != StripeRefundStatus.FAILED
-                && mapped != StripeRefundStatus.CANCELED) {
-            return;
-        }
-        status = mapped;
-        if (mapped == StripeRefundStatus.SUCCEEDED
-                || mapped == StripeRefundStatus.FAILED
-                || mapped == StripeRefundStatus.CANCELED) {
-            resolvedAt = now;
-        } else {
-            resolvedAt = null;
-        }
+    private boolean isTerminal(StripeRefundStatus value) {
+        return value == StripeRefundStatus.SUCCEEDED
+                || value == StripeRefundStatus.FAILED
+                || value == StripeRefundStatus.CANCELED;
     }
 
     private String normalize(String value) {
