@@ -48,6 +48,11 @@ management:
       probes:
         enabled: true
       show-details: never
+  health:
+    # Transactional email delivery is AFTER_COMMIT and external SMTP outages must not take the API
+    # out of service. Mail delivery failures are handled/monitored separately from API readiness.
+    mail:
+      enabled: false
 
 logging:
   level:
