@@ -80,7 +80,7 @@ public class PasswordRecoveryService {
         }
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public void resetPassword(ResetPasswordRequest request) {
         LocalDateTime now = LocalDateTime.now();
         PasswordResetToken token = tokenRepository.findByTokenHashForUpdate(secrets.hash(request.token()))
