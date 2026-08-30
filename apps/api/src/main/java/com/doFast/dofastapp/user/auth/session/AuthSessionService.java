@@ -6,6 +6,7 @@ import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserStatus;
+import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.user.service.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,25 +29,34 @@ public class AuthSessionService {
     private final AuthSessionProperties properties;
     private final JwtUtil jwtUtil;
     private final UserService userService;
+    private final UserRepository userRepository;
 
     public AuthSessionService(
             AuthRefreshSessionRepository sessionRepository,
             AuthSessionSecrets secrets,
             AuthSessionProperties properties,
             JwtUtil jwtUtil,
-            UserService userService
+            UserService userService,
+            UserRepository userRepository
     ) {
         this.sessionRepository = sessionRepository;
         this.secrets = secrets;
         this.properties = properties;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
+        this.userRepository = userRepository;
     }
 
     @Transactional
-    public AuthSessionGrant issue(User user) {
+    public AuthSessionGrant issue(AuthResponse authResponse) {
+        if (authResponse == null || authResponse.user() == null || authResponse.user().id() == null
+                || authResponse.accessToken() == null || authResponse.accessToken().isBlank()) {
+            throw new IllegalArgumentException("Complete authentication response is required");
+        }
+        User user = userRepository.findById(authResponse.user().id())
+                .orElseThrow(this::invalidSession);
         requireActive(user);
-        return issueSuccessor(user, UUID.randomUUID(), LocalDateTime.now());
+        return issueGrant(user, UUID.randomUUID(), LocalDateTime.now(), authResponse);
     }
 
     @Transactional
@@ -73,7 +83,14 @@ public class AuthSessionService {
             throw new ForbiddenOperationException("Konto jest obecnie zawieszone");
         }
 
-        AuthSessionGrant successor = issueSuccessor(user, current.getFamilyId(), now);
+        String accessToken = jwtUtil.generateToken(user.getEmail());
+        AuthResponse response = new AuthResponse(
+                accessToken,
+                "Bearer",
+                jwtUtil.getExpirationMs(),
+                userService.toResponse(user)
+        );
+        AuthSessionGrant successor = issueGrant(user, current.getFamilyId(), now, response);
         current.markUsed(now);
         current.revoke(ROTATED, now);
         sessionRepository.save(current);
@@ -114,7 +131,12 @@ public class AuthSessionService {
         return sessionRepository.deleteExpiredOrOldRevoked(LocalDateTime.now().minus(properties.retention()));
     }
 
-    private AuthSessionGrant issueSuccessor(User user, UUID familyId, LocalDateTime now) {
+    private AuthSessionGrant issueGrant(
+            User user,
+            UUID familyId,
+            LocalDateTime now,
+            AuthResponse response
+    ) {
         String refreshToken = secrets.generate();
         String csrfToken = secrets.generate();
         AuthRefreshSession session = AuthRefreshSession.create(
@@ -126,14 +148,6 @@ public class AuthSessionService {
                 now.plus(properties.refreshTtl())
         );
         sessionRepository.saveAndFlush(session);
-
-        String accessToken = jwtUtil.generateToken(user.getEmail());
-        AuthResponse response = new AuthResponse(
-                accessToken,
-                "Bearer",
-                jwtUtil.getExpirationMs(),
-                userService.toResponse(user)
-        );
         return new AuthSessionGrant(response, refreshToken, csrfToken);
     }
 
