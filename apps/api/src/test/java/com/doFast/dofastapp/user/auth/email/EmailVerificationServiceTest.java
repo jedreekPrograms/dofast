@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.user.auth.email;
 
+import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.user.auth.session.AuthSessionSecrets;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -88,7 +90,53 @@ class EmailVerificationServiceTest {
         service.verify(raw);
 
         assertTrue(user.isEmailVerified());
+        assertTrue(token.getUsedAt() != null);
         verify(tokenRepository).invalidateActiveForUser(eq(9L), any(LocalDateTime.class));
+    }
+
+    @Test
+    void expiredTokenIsInvalidatedAndRejected() {
+        EmailVerificationService service = service(true, "smtp");
+        User user = localUser();
+        String raw = "expired-email-token";
+        EmailVerificationToken token = EmailVerificationToken.create(
+                user,
+                secrets.hash(raw),
+                LocalDateTime.now().minusHours(2),
+                LocalDateTime.now().minusMinutes(1)
+        );
+        when(tokenRepository.findByTokenHash(secrets.hash(raw))).thenReturn(Optional.of(token));
+        when(userRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(user));
+        when(tokenRepository.findByTokenHashForUpdate(secrets.hash(raw))).thenReturn(Optional.of(token));
+
+        assertThrows(BusinessException.class, () -> service.verify(raw));
+
+        assertTrue(token.getInvalidatedAt() != null);
+        assertFalse(user.isEmailVerified());
+        verify(tokenRepository).save(token);
+        verify(userRepository, never()).save(user);
+    }
+
+    @Test
+    void consumedTokenCannotBeReplayed() {
+        EmailVerificationService service = service(true, "smtp");
+        User user = localUser();
+        String raw = "used-email-token";
+        EmailVerificationToken token = EmailVerificationToken.create(
+                user,
+                secrets.hash(raw),
+                LocalDateTime.now().minusMinutes(2),
+                LocalDateTime.now().plusHours(1)
+        );
+        token.markUsed(LocalDateTime.now().minusMinutes(1));
+        when(tokenRepository.findByTokenHash(secrets.hash(raw))).thenReturn(Optional.of(token));
+        when(userRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(user));
+        when(tokenRepository.findByTokenHashForUpdate(secrets.hash(raw))).thenReturn(Optional.of(token));
+
+        assertThrows(BusinessException.class, () -> service.verify(raw));
+
+        assertFalse(user.isEmailVerified());
+        verify(userRepository, never()).save(user);
     }
 
     @Test
