@@ -16,7 +16,14 @@ dofast:
   security:
     jwt:
       secret: ${JWT_SECRET}
-      expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+      expiration-ms: ${JWT_EXPIRATION_MS:600000}
+    session:
+      refresh-ttl-days: ${AUTH_REFRESH_TTL_DAYS:30}
+      reuse-grace-seconds: ${AUTH_REFRESH_REUSE_GRACE_SECONDS:15}
+      retention-days: ${AUTH_SESSION_RETENTION_DAYS:7}
+      cleanup-interval-ms: ${AUTH_SESSION_CLEANUP_INTERVAL_MS:3600000}
+      cookie-secure: true
+      same-site: ${AUTH_COOKIE_SAME_SITE:Strict}
   payments:
     platform-fee-basis-points: ${PLATFORM_FEE_BASIS_POINTS}
   routing:

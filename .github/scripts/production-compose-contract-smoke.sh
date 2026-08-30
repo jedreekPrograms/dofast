@@ -3,6 +3,7 @@ set -euo pipefail
 trap 'echo "Production Compose contract smoke failed at line $LINENO"' ERR
 
 compose_file='infra/compose/compose.prod.yaml'
+prod_profile='apps/api/src/main/resources/application-prod.yml'
 rendered=$(mktemp)
 trap 'rm -f "$rendered"' EXIT
 
@@ -12,7 +13,12 @@ export DB_PASSWORD='prod-contract-db-password'
 export DB_POOL_MAX_SIZE=17
 export DB_POOL_MIN_IDLE=3
 export JWT_SECRET='prod-contract-jwt-secret-which-is-long-enough-for-validation'
-export JWT_EXPIRATION_MS=1800000
+export JWT_EXPIRATION_MS=600000
+export AUTH_REFRESH_TTL_DAYS=21
+export AUTH_REFRESH_REUSE_GRACE_SECONDS=20
+export AUTH_SESSION_RETENTION_DAYS=9
+export AUTH_SESSION_CLEANUP_INTERVAL_MS=7200000
+export AUTH_COOKIE_SAME_SITE=Strict
 export WEBSOCKET_ALLOWED_ORIGIN_PATTERNS='https://app.example.test'
 export STRIPE_SECRET_KEY='sk_test_prod_contract'
 export STRIPE_WEBHOOK_SECRET='whsec_prod_contract'
@@ -65,6 +71,12 @@ env = api['environment']
 expected = {
     'DB_POOL_MAX_SIZE': '17',
     'DB_POOL_MIN_IDLE': '3',
+    'JWT_EXPIRATION_MS': '600000',
+    'AUTH_REFRESH_TTL_DAYS': '21',
+    'AUTH_REFRESH_REUSE_GRACE_SECONDS': '20',
+    'AUTH_SESSION_RETENTION_DAYS': '9',
+    'AUTH_SESSION_CLEANUP_INTERVAL_MS': '7200000',
+    'AUTH_COOKIE_SAME_SITE': 'Strict',
     'PLATFORM_FEE_BASIS_POINTS': '175',
     'PAYOUT_PROVIDER': 'disabled',
     'PAYOUT_SANDBOX_ENABLED': 'false',
@@ -91,6 +103,7 @@ expected = {
 for key, value in expected.items():
     assert env.get(key) == value, (key, env.get(key), value)
 
+assert 'AUTH_COOKIE_SECURE' not in env, 'production Compose must not override the prod Secure-cookie invariant'
 assert env['ATTACHMENT_ENCRYPTION_KEY_BASE64'], 'production attachment encryption key was dropped'
 assert env['PAYOUT_SANDBOX_ENABLED'] == 'false', 'production contract must not enable sandbox payout mode'
 
@@ -107,6 +120,18 @@ assert web.get('healthcheck', {}).get('test'), 'web healthcheck missing'
 assert web.get('depends_on', {}).get('api', {}).get('condition') == 'service_healthy', web.get('depends_on')
 PY
 
+# The prod Spring profile owns the Secure-cookie invariant. Operators may tune SameSite/TTL,
+# but they cannot accidentally expose the HttpOnly refresh token over plaintext HTTP.
+python3 - "$prod_profile" <<'PY'
+import pathlib
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+assert 'expiration-ms: ${JWT_EXPIRATION_MS:600000}' in text, 'production access-token default is not 10 minutes'
+assert 'cookie-secure: true' in text, 'production refresh cookies are not hard-wired Secure'
+assert 'same-site: ${AUTH_COOKIE_SAME_SITE:Strict}' in text, 'production SameSite policy missing'
+PY
+
 # The production deployment must fail closed instead of silently inheriting the local/CI
 # attachment encryption key when the operator forgets the secret.
 if env -u ATTACHMENT_ENCRYPTION_KEY_BASE64 \
@@ -117,4 +142,4 @@ if env -u ATTACHMENT_ENCRYPTION_KEY_BASE64 \
 fi
 rm -f /tmp/dofast-prod-compose-missing-secret.log
 
-echo 'Production Compose forwards finance/payout/reconciliation/tracking settings and persists encrypted attachments: OK'
+echo 'Production Compose forwards finance/payout/auth/tracking settings, enforces Secure refresh cookies, and persists encrypted attachments: OK'

@@ -53,7 +53,7 @@ The Apple flow uses the authorization-code flow with a server-generated one-time
 5. the API locks and consumes the challenge exactly once, rejecting an expired, reused or mismatched state/nonce;
 6. the API generates a short-lived ES256 Apple client secret from the server-only `.p8` private key and exchanges the authorization code at Apple's token endpoint;
 7. the API verifies the `id_token` returned directly by Apple's token endpoint against Apple's JWK set, expected issuer, audience, expiry and the exact nonce;
-8. only the resulting stable Apple `sub` is treated as the external identity, then doFast issues its normal bearer JWT.
+8. only the resulting stable Apple `sub` is treated as the external identity, then doFast issues its normal browser session.
 
 The API stores no Apple access token or refresh token because the current product only needs authentication. The authorization code is single-use and the doFast login challenge is also single-use.
 
@@ -92,17 +92,49 @@ There are no hard-coded administrator credentials in the repository. A dedicated
 
 For production, bootstrap values are deployment secrets and must not be committed. After the first administrator exists, future administrator lifecycle should move to an audited administrative workflow.
 
-## Authentication
+## Authentication and browser sessions
 
-The API remains stateless and uses signed bearer JWTs. Local-password login and successful Google/Apple authentication converge on the same doFast access-token response, so downstream authorization, WebSocket access and domain services do not depend on the upstream identity provider. Invalid credentials return `401`; suspended accounts return `403`.
+Password, Google and Apple authentication converge on the same doFast session boundary. The normal API remains stateless and authorizes requests with signed bearer JWT access tokens; the refresh cookie is **not** accepted as ambient authentication for ordinary domain endpoints.
 
-The web client currently stores the access token in `sessionStorage`, so it survives a page refresh but is cleared when the browser session ends. Before handling real customer money, the authentication roadmap includes short-lived access tokens plus a hardened HttpOnly refresh-session flow and the accompanying CSRF model.
+Access tokens are deliberately short lived. The normal value is 10 minutes and the application rejects access-token TTL configuration above 15 minutes. The web client keeps the access token only in JavaScript module memory: it is not written to `localStorage` or `sessionStorage`. Reloading a page therefore discards the bearer and restores the browser session through the refresh flow instead of recovering a long-lived credential from Web Storage.
+
+A successful password, Google or Apple login also creates a durable `auth_refresh_sessions` row and returns two cookies:
+
+- `dofast_refresh` — a cryptographically random opaque refresh credential, `HttpOnly`, scoped to `/`;
+- `dofast_csrf` — a separate random CSRF value readable by the browser client.
+
+Only SHA-256 hashes of both values are stored in PostgreSQL. Raw refresh/CSRF secrets exist only in the browser cookies and in the request that rotates them.
+
+`POST /users/session/refresh` requires all three values to agree: the HttpOnly refresh cookie, the readable CSRF cookie and the `X-CSRF-Token` header. The cookie/header pair is compared in constant time and the resulting CSRF value must also match the hash bound to the locked refresh-session row. Ordinary Bearer-authenticated API calls do not become cookie authenticated, so this explicit CSRF boundary stays limited to refresh/logout operations.
+
+Every successful refresh rotates both browser secrets. The old row is marked `ROTATED`, a successor is created in the same session family and a new short-lived access JWT is issued. The frontend coalesces concurrent 401 responses in a tab into one refresh request and retries each original request once with the resulting Bearer.
+
+A short reuse grace window prevents a near-simultaneous duplicate refresh from destroying the valid successor family. A rotated token used after that grace is treated as replay: the active session family is revoked with `REUSE_DETECTED`. This contains a copied refresh credential without revoking unrelated sessions on the user's other devices.
+
+Logout revokes the current refresh authority and clears both browser cookies. The controller clears cookies even when malformed/missing CSRF prevents a trustworthy server-side revoke, so the browser cannot become stuck with an inaccessible HttpOnly credential. Changing the local password atomically revokes **all** active refresh sessions for that user in the same database transaction as the password update. A previously issued stateless access JWT can still live until its short expiry; the first-party web client immediately discards its bearer after password change.
+
+Suspended accounts cannot refresh. Separately, the JWT filter reloads the user on every Bearer-authenticated request and requires `ACTIVE`, so suspension takes effect immediately even if an access JWT has not expired yet.
+
+Default browser-session configuration:
+
+```text
+JWT_EXPIRATION_MS=600000
+AUTH_REFRESH_TTL_DAYS=30
+AUTH_REFRESH_REUSE_GRACE_SECONDS=15
+AUTH_SESSION_RETENTION_DAYS=7
+AUTH_SESSION_CLEANUP_INTERVAL_MS=3600000
+AUTH_COOKIE_SAME_SITE=Strict
+```
+
+Local HTTP development uses `AUTH_COOKIE_SECURE=false`. The production Spring profile hard-wires `Secure=true`; the production Compose file cannot override that invariant. The deployed web and `/api` gateway are expected to be same-origin. A cross-site `VITE_API_BASE_URL` is not compatible with the default `SameSite=Strict` session policy and must not be introduced casually.
+
+Memory-only access tokens reduce credential persistence and theft from browser storage, but they are not an XSS defense: malicious script executing in the live origin can still act with the current session. CSP, dependency hygiene, rate limiting and the remaining production security work stay relevant.
 
 ## Authorization
 
 The JWT filter reloads the account on every authenticated request. This intentionally means role/status changes take effect immediately even when an older token still exists.
 
-Spring Security grants `ROLE_USER` or `ROLE_ADMIN`; `/admin/**` requires `ROLE_ADMIN`. Public endpoints are intentionally limited to registration/login (including provider login/challenges), marketplace discovery, public profile summaries, health and the Stripe webhook endpoint.
+Spring Security grants `ROLE_USER` or `ROLE_ADMIN`; `/admin/**` requires `ROLE_ADMIN`. Public endpoints are intentionally limited to registration/login (including provider login/challenges), refresh/logout, marketplace discovery, public profile summaries, health and the Stripe webhook endpoint. Refresh/logout are public only at the Spring routing layer: their own opaque-cookie/CSRF validation is the authentication boundary.
 
 ## Current administrative surface
 

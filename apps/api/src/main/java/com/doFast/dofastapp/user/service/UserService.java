@@ -8,6 +8,7 @@ import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.auth.GoogleIdentity;
 import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
 import com.doFast.dofastapp.user.auth.apple.AppleIdentity;
+import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
 import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
@@ -28,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.Locale;
 
@@ -36,6 +38,7 @@ import java.util.Locale;
 public class UserService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final String PASSWORD_CHANGED_SESSION_REASON = "PASSWORD_CHANGED";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -43,6 +46,7 @@ public class UserService {
     private final WalletService walletService;
     private final UserAuthIdentityRepository authIdentityRepository;
     private final GoogleIdentityVerifier googleIdentityVerifier;
+    private final AuthRefreshSessionRepository refreshSessionRepository;
 
     public UserService(
             UserRepository userRepository,
@@ -50,7 +54,8 @@ public class UserService {
             JwtUtil jwtUtil,
             WalletService walletService,
             UserAuthIdentityRepository authIdentityRepository,
-            GoogleIdentityVerifier googleIdentityVerifier
+            GoogleIdentityVerifier googleIdentityVerifier,
+            AuthRefreshSessionRepository refreshSessionRepository
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -58,6 +63,7 @@ public class UserService {
         this.walletService = walletService;
         this.authIdentityRepository = authIdentityRepository;
         this.googleIdentityVerifier = googleIdentityVerifier;
+        this.refreshSessionRepository = refreshSessionRepository;
     }
 
     @Transactional
@@ -164,6 +170,11 @@ public class UserService {
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+        refreshSessionRepository.revokeAllActiveForUser(
+                user.getId(),
+                PASSWORD_CHANGED_SESSION_REASON,
+                LocalDateTime.now()
+        );
     }
 
     @Transactional

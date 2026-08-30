@@ -1,29 +1,29 @@
 import { useEffect, useState } from 'react'
-import { clearAccessToken, getAccessToken, setAccessToken } from '../../shared/api/apiClient.js'
+import { clearAccessToken, setAccessToken } from '../../shared/api/apiClient.js'
 import {
   changeCurrentUserPassword,
-  getCurrentUser,
   loginUser,
   loginUserWithApple,
   loginUserWithGoogle,
+  logoutUserSession,
   registerUser,
+  restoreUserSession,
   updateCurrentUser,
 } from './api/authApi.js'
 import { AuthContext } from './AuthContext.js'
 
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [ready, setReady] = useState(() => !getAccessToken())
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    if (!getAccessToken()) {
-      return undefined
-    }
-
     let active = true
-    getCurrentUser()
-      .then((currentUser) => {
-        if (active) setUser(currentUser)
+
+    restoreUserSession()
+      .then((response) => {
+        if (!active || !response) return
+        setAccessToken(response.accessToken)
+        setUser(response.user)
       })
       .catch(() => {
         clearAccessToken()
@@ -62,10 +62,16 @@ function AuthProvider({ children }) {
     return login({ email: payload.email, password: payload.password })
   }
 
-  function logout() {
-    clearAccessToken()
-    setUser(null)
-    setReady(true)
+  async function logout() {
+    try {
+      await logoutUserSession()
+    } catch (error) {
+      void error
+    } finally {
+      clearAccessToken()
+      setUser(null)
+      setReady(true)
+    }
   }
 
   async function updateProfile(payload) {
@@ -76,6 +82,7 @@ function AuthProvider({ children }) {
 
   async function changePassword(payload) {
     await changeCurrentUserPassword(payload)
+    await logout()
   }
 
   return (
