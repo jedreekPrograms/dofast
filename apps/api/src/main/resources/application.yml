@@ -64,7 +64,14 @@ dofast:
   security:
     jwt:
       secret: ${JWT_SECRET:local-only-change-this-jwt-secret-please-32-bytes-minimum}
-      expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+      expiration-ms: ${JWT_EXPIRATION_MS:600000}
+    session:
+      refresh-ttl-days: ${AUTH_REFRESH_TTL_DAYS:30}
+      reuse-grace-seconds: ${AUTH_REFRESH_REUSE_GRACE_SECONDS:15}
+      retention-days: ${AUTH_SESSION_RETENTION_DAYS:7}
+      cleanup-interval-ms: ${AUTH_SESSION_CLEANUP_INTERVAL_MS:3600000}
+      cookie-secure: ${AUTH_COOKIE_SECURE:false}
+      same-site: ${AUTH_COOKIE_SAME_SITE:Strict}
     admin-bootstrap:
       email: ${ADMIN_BOOTSTRAP_EMAIL:}
       password: ${ADMIN_BOOTSTRAP_PASSWORD:}
