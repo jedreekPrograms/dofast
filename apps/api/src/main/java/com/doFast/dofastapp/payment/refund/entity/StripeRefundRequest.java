@@ -180,10 +180,25 @@ public class StripeRefundRequest {
         if (eventCreatedAt != null && providerEventCreatedAt != null && eventCreatedAt < providerEventCreatedAt) {
             return false;
         }
+
+        String normalizedProviderStatus = normalize(providerStatus);
+        StripeRefundStatus mappedStatus = mapProviderStatus(normalizedProviderStatus);
+        if (eventCreatedAt != null
+                && providerEventCreatedAt != null
+                && eventCreatedAt.equals(providerEventCreatedAt)
+                && isProviderResolved(status)
+                && mappedStatus != status) {
+            status = StripeRefundStatus.REVIEW_REQUIRED;
+            failureReason = "conflicting_same_second_event";
+            resolvedAt = null;
+            updatedAt = now;
+            return true;
+        }
+
         if (eventCreatedAt != null) {
             providerEventCreatedAt = eventCreatedAt;
         }
-        stripeStatus = normalize(providerStatus);
+        stripeStatus = normalizedProviderStatus;
         failureReason = normalizeFailure(providerFailureReason);
         if (submittedAt == null) {
             submittedAt = now;
@@ -213,13 +228,7 @@ public class StripeRefundRequest {
     }
 
     private void applyProviderStatus(String providerStatus, LocalDateTime now) {
-        StripeRefundStatus mapped = switch (providerStatus == null ? "" : providerStatus) {
-            case "succeeded" -> StripeRefundStatus.SUCCEEDED;
-            case "failed" -> StripeRefundStatus.FAILED;
-            case "canceled" -> StripeRefundStatus.CANCELED;
-            case "requires_action" -> StripeRefundStatus.REQUIRES_ACTION;
-            default -> StripeRefundStatus.PENDING;
-        };
+        StripeRefundStatus mapped = mapProviderStatus(providerStatus);
 
         if ((status == StripeRefundStatus.FAILED || status == StripeRefundStatus.CANCELED)
                 && mapped != StripeRefundStatus.FAILED
@@ -227,13 +236,27 @@ public class StripeRefundRequest {
             return;
         }
         status = mapped;
-        if (mapped == StripeRefundStatus.SUCCEEDED
-                || mapped == StripeRefundStatus.FAILED
-                || mapped == StripeRefundStatus.CANCELED) {
+        if (isProviderResolved(mapped)) {
             resolvedAt = now;
         } else {
             resolvedAt = null;
         }
+    }
+
+    private StripeRefundStatus mapProviderStatus(String providerStatus) {
+        return switch (providerStatus == null ? "" : providerStatus) {
+            case "succeeded" -> StripeRefundStatus.SUCCEEDED;
+            case "failed" -> StripeRefundStatus.FAILED;
+            case "canceled" -> StripeRefundStatus.CANCELED;
+            case "requires_action" -> StripeRefundStatus.REQUIRES_ACTION;
+            default -> StripeRefundStatus.PENDING;
+        };
+    }
+
+    private boolean isProviderResolved(StripeRefundStatus value) {
+        return value == StripeRefundStatus.SUCCEEDED
+                || value == StripeRefundStatus.FAILED
+                || value == StripeRefundStatus.CANCELED;
     }
 
     private String normalize(String value) {

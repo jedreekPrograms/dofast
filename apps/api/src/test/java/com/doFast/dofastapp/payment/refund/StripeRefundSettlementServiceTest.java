@@ -79,4 +79,112 @@ class StripeRefundSettlementServiceTest {
         );
         verify(request).markWalletRestored(any(LocalDateTime.class));
     }
+
+    @Test
+    void sameSecondConflictMovesResolvedRefundToManualReview() {
+        StripeRefundRequest request = StripeRefundRequest.create(
+                7L,
+                "pi_refund_same_second",
+                "same-second-ordering",
+                new BigDecimal("15.00"),
+                "PLN",
+                LocalDateTime.parse("2026-08-31T01:00:00")
+        );
+
+        assertThat(request.applyProviderEvent(
+                "re_same_second",
+                "succeeded",
+                null,
+                300L,
+                LocalDateTime.parse("2026-08-31T01:01:00")
+        )).isTrue();
+
+        assertThat(request.applyProviderEvent(
+                "re_same_second",
+                "failed",
+                "declined",
+                300L,
+                LocalDateTime.parse("2026-08-31T01:01:01")
+        )).isTrue();
+
+        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.REVIEW_REQUIRED);
+        assertThat(request.getStripeStatus()).isEqualTo("succeeded");
+        assertThat(request.getFailureReason()).isEqualTo("conflicting_same_second_event");
+        assertThat(request.getProviderEventCreatedAt()).isEqualTo(300L);
+        assertThat(request.getResolvedAt()).isNull();
+    }
+
+    @Test
+    void newerProviderEventCanResolveSameSecondReviewState() {
+        StripeRefundRequest request = StripeRefundRequest.create(
+                7L,
+                "pi_refund_review_recovery",
+                "review-recovery",
+                new BigDecimal("15.00"),
+                "PLN",
+                LocalDateTime.parse("2026-08-31T01:00:00")
+        );
+
+        request.applyProviderEvent(
+                "re_review_recovery",
+                "succeeded",
+                null,
+                300L,
+                LocalDateTime.parse("2026-08-31T01:01:00")
+        );
+        request.applyProviderEvent(
+                "re_review_recovery",
+                "failed",
+                "declined",
+                300L,
+                LocalDateTime.parse("2026-08-31T01:01:01")
+        );
+
+        assertThat(request.applyProviderEvent(
+                "re_review_recovery",
+                "failed",
+                "declined",
+                301L,
+                LocalDateTime.parse("2026-08-31T01:02:00")
+        )).isTrue();
+
+        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.FAILED);
+        assertThat(request.getStripeStatus()).isEqualTo("failed");
+        assertThat(request.getFailureReason()).isEqualTo("declined");
+        assertThat(request.getProviderEventCreatedAt()).isEqualTo(301L);
+        assertThat(request.getResolvedAt()).isNotNull();
+    }
+
+    @Test
+    void staleEventCannotMutateProviderState() {
+        StripeRefundRequest request = StripeRefundRequest.create(
+                7L,
+                "pi_refund_stale",
+                "stale-ordering",
+                new BigDecimal("15.00"),
+                "PLN",
+                LocalDateTime.parse("2026-08-31T01:00:00")
+        );
+
+        assertThat(request.applyProviderEvent(
+                "re_stale",
+                "canceled",
+                "requested_by_customer",
+                500L,
+                LocalDateTime.parse("2026-08-31T01:01:00")
+        )).isTrue();
+
+        assertThat(request.applyProviderEvent(
+                "re_stale",
+                "pending",
+                "temporary",
+                499L,
+                LocalDateTime.parse("2026-08-31T01:02:00")
+        )).isFalse();
+
+        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.CANCELED);
+        assertThat(request.getStripeStatus()).isEqualTo("canceled");
+        assertThat(request.getFailureReason()).isEqualTo("requested_by_customer");
+        assertThat(request.getProviderEventCreatedAt()).isEqualTo(500L);
+    }
 }
