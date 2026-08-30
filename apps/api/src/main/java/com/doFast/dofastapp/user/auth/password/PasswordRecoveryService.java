@@ -6,8 +6,7 @@ import com.doFast.dofastapp.user.auth.session.AuthSessionSecrets;
 import com.doFast.dofastapp.user.dto.ResetPasswordRequest;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.repository.UserRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +17,6 @@ import java.util.Locale;
 @Service
 public class PasswordRecoveryService {
 
-    private static final Logger log = LoggerFactory.getLogger(PasswordRecoveryService.class);
     private static final String PASSWORD_RESET_SESSION_REASON = "PASSWORD_RESET";
 
     private final UserRepository userRepository;
@@ -27,7 +25,7 @@ public class PasswordRecoveryService {
     private final AuthSessionSecrets secrets;
     private final AuthRefreshSessionRepository refreshSessionRepository;
     private final PasswordRecoveryProperties properties;
-    private final PasswordRecoveryMailer mailer;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PasswordRecoveryService(
             UserRepository userRepository,
@@ -36,7 +34,7 @@ public class PasswordRecoveryService {
             AuthSessionSecrets secrets,
             AuthRefreshSessionRepository refreshSessionRepository,
             PasswordRecoveryProperties properties,
-            PasswordRecoveryMailer mailer
+            ApplicationEventPublisher eventPublisher
     ) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
@@ -44,7 +42,7 @@ public class PasswordRecoveryService {
         this.secrets = secrets;
         this.refreshSessionRepository = refreshSessionRepository;
         this.properties = properties;
-        this.mailer = mailer;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -71,13 +69,11 @@ public class PasswordRecoveryService {
         );
         tokenRepository.saveAndFlush(token);
 
-        try {
-            mailer.sendResetLink(user.getEmail(), rawToken);
-        } catch (RuntimeException deliveryFailure) {
-            token.invalidate(now);
-            tokenRepository.save(token);
-            log.warn("Password recovery email delivery failed for user id {}", user.getId(), deliveryFailure);
-        }
+        eventPublisher.publishEvent(new PasswordRecoveryDeliveryRequested(
+                user.getId(),
+                user.getEmail(),
+                rawToken
+        ));
     }
 
     @Transactional(noRollbackFor = BusinessException.class)
