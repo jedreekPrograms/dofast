@@ -163,16 +163,26 @@ public class StripePaymentDispute {
         if (stripeEventCreatedAt == null) {
             throw new IllegalArgumentException("Stripe event creation time is required");
         }
+        refreshIdentity(chargeId);
         if (this.stripeStateEventCreatedAt != null
                 && stripeEventCreatedAt.isBefore(this.stripeStateEventCreatedAt)) {
             return false;
         }
-        refreshIdentity(chargeId);
+        if (this.stripeStateEventCreatedAt != null
+                && stripeEventCreatedAt.isEqual(this.stripeStateEventCreatedAt)
+                && isTerminalStripeStatus(this.stripeStatus)
+                && !this.stripeStatus.equals(status)) {
+            return false;
+        }
         this.reason = reason;
         this.stripeStatus = status;
         this.stripeStateEventCreatedAt = stripeEventCreatedAt;
         this.updatedAt = now;
         return true;
+    }
+
+    private boolean isTerminalStripeStatus(String status) {
+        return "won".equals(status) || "lost".equals(status) || "prevented".equals(status) || "warning_closed".equals(status);
     }
 
     private void refreshIdentity(String chargeId) {
