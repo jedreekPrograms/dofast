@@ -11,6 +11,7 @@ import java.util.Locale;
 public class EmailVerificationProperties {
     private final Duration tokenTtl;
     private final Duration retention;
+    private final boolean required;
     private final String delivery;
     private final String verifyBaseUrl;
     private final String fromAddress;
@@ -18,6 +19,7 @@ public class EmailVerificationProperties {
     public EmailVerificationProperties(
             @Value("${dofast.security.email-verification.token-ttl-hours:24}") int tokenTtlHours,
             @Value("${dofast.security.email-verification.retention-days:7}") int retentionDays,
+            @Value("${dofast.security.email-verification.required:false}") boolean required,
             @Value("${dofast.security.email-verification.delivery:disabled}") String delivery,
             @Value("${dofast.security.email-verification.verify-base-url:}") String verifyBaseUrl,
             @Value("${dofast.security.email-verification.from-address:}") String fromAddress
@@ -26,14 +28,17 @@ public class EmailVerificationProperties {
         if (retentionDays < 1 || retentionDays > 30) throw new IllegalArgumentException("Email verification retention must be between 1 and 30 days");
         this.tokenTtl = Duration.ofHours(tokenTtlHours);
         this.retention = Duration.ofDays(retentionDays);
+        this.required = required;
         this.delivery = normalizeDelivery(delivery);
         this.verifyBaseUrl = normalizeOptional(verifyBaseUrl);
         this.fromAddress = normalizeOptional(fromAddress);
+        if (required && !smtpEnabled()) throw new IllegalArgumentException("Required email verification needs SMTP delivery");
         if (smtpEnabled()) validateSmtp();
     }
 
     public Duration tokenTtl() { return tokenTtl; }
     public Duration retention() { return retention; }
+    public boolean required() { return required; }
     public boolean smtpEnabled() { return "smtp".equals(delivery); }
     public String verifyBaseUrl() { return verifyBaseUrl; }
     public String fromAddress() { return fromAddress; }
