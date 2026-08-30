@@ -5,6 +5,18 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
     show-sql: false
+  mail:
+    host: ${SMTP_HOST}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
 
 stripe:
   secret:
@@ -24,6 +36,13 @@ dofast:
       cleanup-interval-ms: ${AUTH_SESSION_CLEANUP_INTERVAL_MS:3600000}
       cookie-secure: true
       same-site: ${AUTH_COOKIE_SAME_SITE:Strict}
+    password-recovery:
+      delivery: smtp
+      token-ttl-minutes: ${PASSWORD_RESET_TTL_MINUTES:30}
+      retention-days: ${PASSWORD_RESET_RETENTION_DAYS:7}
+      cleanup-interval-ms: ${PASSWORD_RESET_CLEANUP_INTERVAL_MS:3600000}
+      reset-base-url: ${PASSWORD_RESET_BASE_URL}
+      from-address: ${PASSWORD_RECOVERY_FROM_ADDRESS}
   payments:
     platform-fee-basis-points: ${PLATFORM_FEE_BASIS_POINTS}
   routing:
