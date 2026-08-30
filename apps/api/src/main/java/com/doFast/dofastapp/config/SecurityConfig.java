@@ -26,9 +26,6 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // Normal application requests authenticate with an explicit Bearer access token and therefore do not
-                // rely on ambient cookies. Only /users/session/refresh and /users/session/logout consume the refresh
-                // cookie; those endpoints enforce a session-bound double-submit CSRF token in their controller boundary.
                 .csrf(csrf -> csrf.disable())
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .formLogin(formLogin -> formLogin.disable())
@@ -49,7 +46,9 @@ public class SecurityConfig {
                                 "/users/session/refresh",
                                 "/users/session/logout",
                                 "/users/password/forgot",
-                                "/users/password/reset"
+                                "/users/password/reset",
+                                "/users/email-verification/resend",
+                                "/users/email-verification/verify"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby", "/job-categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/*/profile", "/reviews/users/*").permitAll()
