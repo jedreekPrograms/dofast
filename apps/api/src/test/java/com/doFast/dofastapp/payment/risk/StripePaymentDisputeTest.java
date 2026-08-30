@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class StripePaymentDisputeTest {
 
@@ -52,7 +53,72 @@ class StripePaymentDisputeTest {
         assertThat(dispute.getWalletRecoveredAmount()).isEqualByComparingTo("0.00");
     }
 
+    @Test
+    void olderStripeEventCannotRegressNewerDisputeState() {
+        LocalDateTime stripeCreatedAt = LocalDateTime.of(2026, 8, 30, 20, 0);
+        StripePaymentDispute dispute = dispute("50.00", stripeCreatedAt, "needs_response");
+
+        boolean newerApplied = dispute.refreshFromStripeEvent(
+                "ch_test",
+                "general",
+                "under_review",
+                stripeCreatedAt.plusSeconds(20),
+                stripeCreatedAt.plusMinutes(1)
+        );
+        boolean olderApplied = dispute.refreshFromStripeEvent(
+                "ch_test",
+                "fraudulent",
+                "needs_response",
+                stripeCreatedAt.plusSeconds(10),
+                stripeCreatedAt.plusMinutes(2)
+        );
+
+        assertThat(newerApplied).isTrue();
+        assertThat(olderApplied).isFalse();
+        assertThat(dispute.getStripeStatus()).isEqualTo("under_review");
+        assertThat(dispute.getReason()).isEqualTo("general");
+        assertThat(dispute.getStripeStateEventCreatedAt()).isEqualTo(stripeCreatedAt.plusSeconds(20));
+    }
+
+    @Test
+    void staleStripeEventStillCannotChangeImmutableChargeIdentity() {
+        LocalDateTime stripeCreatedAt = LocalDateTime.of(2026, 8, 30, 20, 0);
+        StripePaymentDispute dispute = dispute("50.00", stripeCreatedAt.plusSeconds(20), "under_review");
+
+        assertThatThrownBy(() -> dispute.refreshFromStripeEvent(
+                "ch_other",
+                "fraudulent",
+                "needs_response",
+                stripeCreatedAt.plusSeconds(10),
+                stripeCreatedAt.plusMinutes(1)
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("changed charge identity");
+    }
+
+    @Test
+    void equalTimestampCannotRegressTerminalStripeStatus() {
+        LocalDateTime stripeCreatedAt = LocalDateTime.of(2026, 8, 30, 20, 0);
+        StripePaymentDispute dispute = dispute("50.00", stripeCreatedAt, "won");
+
+        boolean applied = dispute.refreshFromStripeEvent(
+                "ch_test",
+                "fraudulent",
+                "under_review",
+                stripeCreatedAt,
+                stripeCreatedAt.plusMinutes(1)
+        );
+
+        assertThat(applied).isFalse();
+        assertThat(dispute.getStripeStatus()).isEqualTo("won");
+        assertThat(dispute.getStripeStateEventCreatedAt()).isEqualTo(stripeCreatedAt);
+    }
+
     private StripePaymentDispute dispute(String amount) {
+        return dispute(amount, null, "needs_response");
+    }
+
+    private StripePaymentDispute dispute(String amount, LocalDateTime stripeEventCreatedAt, String status) {
         StripePaymentDispute dispute = new StripePaymentDispute();
         dispute.initialize(
                 "dp_test",
@@ -62,8 +128,9 @@ class StripePaymentDisputeTest {
                 new BigDecimal(amount),
                 "PLN",
                 "fraudulent",
-                "needs_response",
-                LocalDateTime.now()
+                status,
+                LocalDateTime.now(),
+                stripeEventCreatedAt
         );
         return dispute;
     }
