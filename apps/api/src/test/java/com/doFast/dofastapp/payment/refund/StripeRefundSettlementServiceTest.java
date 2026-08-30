@@ -79,4 +79,103 @@ class StripeRefundSettlementServiceTest {
         );
         verify(request).markWalletRestored(any(LocalDateTime.class));
     }
+
+    @Test
+    void succeededRefundCannotRegressOnLaterProviderEvent() {
+        StripeRefundRequest request = StripeRefundRequest.create(
+                7L,
+                "pi_refund_terminal",
+                "terminal-ordering",
+                new BigDecimal("15.00"),
+                "PLN",
+                LocalDateTime.parse("2026-08-31T01:00:00")
+        );
+
+        boolean succeeded = request.applyProviderEvent(
+                "re_terminal",
+                "succeeded",
+                null,
+                200L,
+                LocalDateTime.parse("2026-08-31T01:01:00")
+        );
+        boolean regressed = request.applyProviderEvent(
+                "re_terminal",
+                "pending",
+                null,
+                201L,
+                LocalDateTime.parse("2026-08-31T01:02:00")
+        );
+
+        assertThat(succeeded).isTrue();
+        assertThat(regressed).isFalse();
+        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.SUCCEEDED);
+        assertThat(request.getStripeStatus()).isEqualTo("succeeded");
+        assertThat(request.getProviderEventCreatedAt()).isEqualTo(200L);
+    }
+
+    @Test
+    void terminalRefundCannotFlipOnSameSecondConflictingEvent() {
+        StripeRefundRequest request = StripeRefundRequest.create(
+                7L,
+                "pi_refund_same_second",
+                "same-second-ordering",
+                new BigDecimal("15.00"),
+                "PLN",
+                LocalDateTime.parse("2026-08-31T01:00:00")
+        );
+
+        assertThat(request.applyProviderEvent(
+                "re_same_second",
+                "failed",
+                "declined",
+                300L,
+                LocalDateTime.parse("2026-08-31T01:01:00")
+        )).isTrue();
+
+        assertThat(request.applyProviderEvent(
+                "re_same_second",
+                "succeeded",
+                null,
+                300L,
+                LocalDateTime.parse("2026-08-31T01:01:01")
+        )).isFalse();
+
+        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.FAILED);
+        assertThat(request.getStripeStatus()).isEqualTo("failed");
+        assertThat(request.getFailureReason()).isEqualTo("declined");
+        assertThat(request.getProviderEventCreatedAt()).isEqualTo(300L);
+    }
+
+    @Test
+    void staleEventCannotMutateTerminalProviderMetadata() {
+        StripeRefundRequest request = StripeRefundRequest.create(
+                7L,
+                "pi_refund_stale",
+                "stale-ordering",
+                new BigDecimal("15.00"),
+                "PLN",
+                LocalDateTime.parse("2026-08-31T01:00:00")
+        );
+
+        assertThat(request.applyProviderEvent(
+                "re_stale",
+                "canceled",
+                "requested_by_customer",
+                500L,
+                LocalDateTime.parse("2026-08-31T01:01:00")
+        )).isTrue();
+
+        assertThat(request.applyProviderEvent(
+                "re_stale",
+                "pending",
+                "temporary",
+                499L,
+                LocalDateTime.parse("2026-08-31T01:02:00")
+        )).isFalse();
+
+        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.CANCELED);
+        assertThat(request.getStripeStatus()).isEqualTo("canceled");
+        assertThat(request.getFailureReason()).isEqualTo("requested_by_customer");
+        assertThat(request.getProviderEventCreatedAt()).isEqualTo(500L);
+    }
 }
