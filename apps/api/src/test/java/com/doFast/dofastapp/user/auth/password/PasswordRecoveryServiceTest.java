@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -36,7 +37,7 @@ class PasswordRecoveryServiceTest {
     @Mock private PasswordResetTokenRepository tokenRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuthRefreshSessionRepository refreshSessionRepository;
-    @Mock private PasswordRecoveryMailer mailer;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private AuthSessionSecrets secrets;
     private PasswordRecoveryService service;
@@ -58,22 +59,22 @@ class PasswordRecoveryServiceTest {
                 secrets,
                 refreshSessionRepository,
                 properties,
-                mailer
+                eventPublisher
         );
     }
 
     @Test
-    void unknownEmailDoesNotCreateTokenOrSendMail() {
+    void unknownEmailDoesNotCreateTokenOrQueueDelivery() {
         when(userRepository.findByEmailIgnoreCase("missing@example.com")).thenReturn(Optional.empty());
 
         service.requestReset(" Missing@Example.com ");
 
         verify(tokenRepository, never()).saveAndFlush(any(PasswordResetToken.class));
-        verify(mailer, never()).sendResetLink(any(), any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
-    void requestInvalidatesPreviousTokensAndPersistsOnlyHash() {
+    void requestInvalidatesPreviousTokensPersistsOnlyHashAndQueuesRawTokenInMemory() {
         User user = activeLocalUser();
         when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
         when(tokenRepository.saveAndFlush(any(PasswordResetToken.class)))
@@ -87,10 +88,13 @@ class PasswordRecoveryServiceTest {
         PasswordResetToken stored = tokenCaptor.getValue();
         assertEquals(64, stored.getTokenHash().length());
 
-        ArgumentCaptor<String> rawTokenCaptor = ArgumentCaptor.forClass(String.class);
-        verify(mailer).sendResetLink(eq("user@example.com"), rawTokenCaptor.capture());
-        assertNotEquals(rawTokenCaptor.getValue(), stored.getTokenHash());
-        assertEquals(stored.getTokenHash(), secrets.hash(rawTokenCaptor.getValue()));
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        PasswordRecoveryDeliveryRequested event = (PasswordRecoveryDeliveryRequested) eventCaptor.getValue();
+        assertEquals(9L, event.userId());
+        assertEquals("user@example.com", event.recipientEmail());
+        assertNotEquals(event.rawResetToken(), stored.getTokenHash());
+        assertEquals(stored.getTokenHash(), secrets.hash(event.rawResetToken()));
     }
 
     @Test
