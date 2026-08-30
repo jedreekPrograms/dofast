@@ -45,6 +45,9 @@ public class User {
     @Column(name = "password_login_enabled", nullable = false)
     private boolean passwordLoginEnabled = true;
 
+    @Column(name = "auth_version", nullable = false)
+    private long authVersion = 0;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role = UserRole.USER;
@@ -78,10 +81,18 @@ public class User {
         updatedAt = LocalDateTime.now();
     }
 
+    public void incrementAuthVersion() {
+        if (authVersion == Long.MAX_VALUE) {
+            throw new IllegalStateException("Authentication version exhausted");
+        }
+        authVersion++;
+    }
+
     public Long getId() { return id; }
     public String getEmail() { return email; }
     public String getPassword() { return password; }
     public boolean isPasswordLoginEnabled() { return passwordLoginEnabled; }
+    public long getAuthVersion() { return authVersion; }
     public String getNickname() { return nickname; }
     public String getBio() { return bio; }
     public String getPublicLocation() { return publicLocation; }
