@@ -26,16 +26,23 @@ Never reuse `.env.example` as a production secret file. It contains local/test p
 
 ## Finance and payout configuration
 
-The production Compose file forwards the current platform-fee and payout dispatcher settings instead of relying on hidden application defaults.
+The production Compose file forwards the current platform-fee, payout dispatcher and submitted-payout reconciliation settings instead of relying on hidden application defaults.
 
 Worker payout remains fail-closed:
 
 - `PAYOUT_PROVIDER` defaults to `disabled`;
 - `PAYOUT_SANDBOX_ENABLED` is hard-disabled in the production Compose file and cannot be enabled by a host environment variable;
 - Stripe Connect recipient onboarding defaults to disabled;
-- Stripe Connect live dispatch defaults to disabled and requires its independent kill switch.
+- Stripe Connect live dispatch defaults to disabled and requires its independent kill switch;
+- Stripe Connect submitted-payout reconciliation defaults to disabled and requires its own independent kill switch.
 
-Enabling Stripe Connect money movement is an explicit operational action. Existing signed webhook settlement remains part of the API contract for payouts already submitted before a kill switch is turned off.
+`PAYOUT_STRIPE_CONNECT_RECONCILIATION_ENABLED=true` does **not** enable new money movement. The reconciler only retrieves an already-created Stripe connected-account Payout by the durable `provider_reference` stored on a local `SUBMITTED` request. It never creates a new platform Transfer or connected-account Payout.
+
+This separation allows operators to disable new Stripe Connect dispatch while still resolving payouts that were already accepted by Stripe. `PAYOUT_SUBMITTED_RECONCILIATION_SECONDS` controls the grace period/backoff between provider reads, while `PAYOUT_STRIPE_CONNECT_RECONCILIATION_INTERVAL_MS` controls the scheduler cadence.
+
+Signed webhook settlement remains the preferred fast path. Reconciliation is a missed/delayed-webhook safety net and reuses the same terminal settlement and transfer-reversal logic. Provider read failures, unknown statuses or identity mismatches do not release reserved wallet funds and do not return a submitted payout to the dispatch queue.
+
+Enabling Stripe Connect money movement is an explicit operational action. Existing signed webhook settlement and, when explicitly enabled, read-only reconciliation remain available for payouts already submitted before the dispatch kill switch is turned off.
 
 ## Persistent data
 
@@ -66,7 +73,7 @@ Do not expose a real customer deployment over plain HTTP. Stripe return URLs, Ap
 
 `.github/scripts/production-compose-contract-smoke.sh` renders the production Compose file with deterministic placeholder settings and verifies that:
 
-- current finance, payout and tracking settings reach the API container;
+- current finance, payout, submitted-payout reconciliation and tracking settings reach the API container;
 - sandbox payouts stay disabled;
 - attachment encryption configuration is present;
 - encrypted attachment storage is backed by a persistent volume;
