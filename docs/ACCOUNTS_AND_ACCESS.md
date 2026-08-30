@@ -17,6 +17,8 @@ Authentication methods are kept separate from the core user record. `user_auth_i
 
 `users.password_login_enabled` explicitly distinguishes accounts that can authenticate with a local password from accounts created only through a federated identity. Federated-only accounts still contain an unguessable password hash to satisfy the legacy non-null schema, but password authentication is disabled and does not depend on that placeholder.
 
+`users.auth_version` is a monotonic credential version. Signed access JWTs carry the current value in the `av` claim and the authentication filter compares it with the current database value on every Bearer request. Password change and password reset increment it, which immediately invalidates access JWTs issued before the credential change.
+
 ## Sign in with Google
 
 The web client uses Google Identity Services only to obtain a Google ID token. It sends that credential to `POST /users/login/google`; the browser never decides whether a Google identity is trusted.
@@ -107,13 +109,15 @@ Only SHA-256 hashes of both values are stored in PostgreSQL. Raw refresh/CSRF se
 
 `POST /users/session/refresh` requires all three values to agree: the HttpOnly refresh cookie, the readable CSRF cookie and the `X-CSRF-Token` header. The cookie/header pair is compared in constant time and the resulting CSRF value must also match the hash bound to the locked refresh-session row. Ordinary Bearer-authenticated API calls do not become cookie authenticated, so this explicit CSRF boundary stays limited to refresh/logout operations.
 
-Every successful refresh rotates both browser secrets. The old row is marked `ROTATED`, a successor is created in the same session family and a new short-lived access JWT is issued. The frontend coalesces concurrent 401 responses in a tab into one refresh request and retries each original request once with the resulting Bearer.
+Every successful refresh rotates both browser secrets. The old row is marked `ROTATED`, a successor is created in the same session family and a new short-lived access JWT is issued with the user's current `auth_version`. The frontend coalesces concurrent 401 responses in a tab into one refresh request and retries each original request once with the resulting Bearer.
 
 A short reuse grace window prevents a near-simultaneous duplicate refresh from destroying the valid successor family. A rotated token used after that grace is treated as replay: the active session family is revoked with `REUSE_DETECTED`. This contains a copied refresh credential without revoking unrelated sessions on the user's other devices.
 
-Logout revokes the current refresh authority and clears both browser cookies. The controller clears cookies even when malformed/missing CSRF prevents a trustworthy server-side revoke, so the browser cannot become stuck with an inaccessible HttpOnly credential. Changing the local password atomically revokes **all** active refresh sessions for that user in the same database transaction as the password update. A previously issued stateless access JWT can still live until its short expiry; the first-party web client immediately discards its bearer after password change.
+Logout revokes the current refresh authority and clears both browser cookies. The controller clears cookies even when malformed/missing CSRF prevents a trustworthy server-side revoke, so the browser cannot become stuck with an inaccessible HttpOnly credential.
 
-Suspended accounts cannot refresh. Separately, the JWT filter reloads the user on every Bearer-authenticated request and requires `ACTIVE`, so suspension takes effect immediately even if an access JWT has not expired yet.
+Changing the local password atomically updates the password hash, increments `auth_version` and revokes **all** active refresh sessions. The credential-version comparison means access JWTs issued before the change immediately stop authenticating as well; the system no longer waits for their normal short expiry.
+
+Suspended accounts cannot refresh. Separately, the JWT filter reloads the user on every Bearer-authenticated request and requires both `ACTIVE` status and an exact `auth_version` match, so account suspension and credential changes take effect immediately.
 
 Default browser-session configuration:
 
@@ -130,11 +134,23 @@ Local HTTP development uses `AUTH_COOKIE_SECURE=false`. The production Spring pr
 
 Memory-only access tokens reduce credential persistence and theft from browser storage, but they are not an XSS defense: malicious script executing in the live origin can still act with the current session. CSP, dependency hygiene, rate limiting and the remaining production security work stay relevant.
 
+## Password recovery
+
+`POST /users/password/forgot` is public and always returns the same `202 Accepted` empty response for a valid email payload. It does not disclose whether the email exists or whether the account supports local password authentication. Federated-only accounts are ignored internally and receive the same public behavior.
+
+For eligible local-password accounts, the backend creates a random opaque one-time reset credential and persists only its SHA-256 hash in `auth_password_reset_tokens`. A new request invalidates earlier active reset links. The default TTL is 30 minutes and the configured range is limited to 5–60 minutes.
+
+Outbound delivery is deliberately separated from the request transaction. The raw token is carried only in an in-memory application event. An asynchronous `AFTER_COMMIT` listener sends the SMTP email after the reset row is durable, so the public request is not blocked on SMTP latency and the raw token never needs to be stored in an outbox or database column. Delivery errors log only the internal user id.
+
+`POST /users/password/reset` pessimistically locks the matching token hash. A successful reset updates the password hash, increments `auth_version`, marks the link used, invalidates other active reset links and revokes all active refresh sessions with `PASSWORD_RESET`. The used link cannot be replayed, and access JWTs issued before the reset immediately fail their credential-version check.
+
+The web exposes `/forgot-password` and `/reset-password?token=...`. Local/CI delivery is disabled by default; production hard-wires SMTP delivery and requires an HTTPS reset URL and verified sender configuration. Full details and the runtime contract are documented in `docs/PASSWORD_RECOVERY.md`.
+
 ## Authorization
 
-The JWT filter reloads the account on every authenticated request. This intentionally means role/status changes take effect immediately even when an older token still exists.
+The JWT filter reloads the account on every authenticated request. Role/status and credential-version changes therefore take effect immediately even when a cryptographically valid older token still exists.
 
-Spring Security grants `ROLE_USER` or `ROLE_ADMIN`; `/admin/**` requires `ROLE_ADMIN`. Public endpoints are intentionally limited to registration/login (including provider login/challenges), refresh/logout, marketplace discovery, public profile summaries, health and the Stripe webhook endpoint. Refresh/logout are public only at the Spring routing layer: their own opaque-cookie/CSRF validation is the authentication boundary.
+Spring Security grants `ROLE_USER` or `ROLE_ADMIN`; `/admin/**` requires `ROLE_ADMIN`. Public endpoints are intentionally limited to registration/login (including provider login/challenges), refresh/logout, forgot/reset password, marketplace discovery, public profile summaries, health and the Stripe webhook endpoint. Refresh/logout are public only at the Spring routing layer: their own opaque-cookie/CSRF validation is the authentication boundary. Reset-password endpoints are public by necessity and protect themselves with generic responses, opaque high-entropy one-time credentials and strict validation.
 
 ## Current administrative surface
 
