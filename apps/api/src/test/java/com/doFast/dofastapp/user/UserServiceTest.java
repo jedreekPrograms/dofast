@@ -158,11 +158,11 @@ class UserServiceTest {
     }
 
     @Test
-    void passwordChangeRevokesAllActiveRefreshSessions() {
+    void passwordChangeRevokesAllSessionsAndIncrementsCredentialVersion() {
         User user = activeUser();
         ChangePasswordRequest request = new ChangePasswordRequest("OldPass123!", "NewPass456!");
 
-        when(userRepository.findById(9L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("OldPass123!", "hash")).thenReturn(true);
         when(passwordEncoder.matches("NewPass456!", "hash")).thenReturn(false);
         when(passwordEncoder.encode("NewPass456!")).thenReturn("new-hash");
@@ -171,6 +171,7 @@ class UserServiceTest {
         userService.changePassword(user, request);
 
         assertEquals("new-hash", user.getPassword());
+        assertEquals(1L, user.getAuthVersion());
         verify(refreshSessionRepository).revokeAllActiveForUser(
                 eq(9L),
                 eq("PASSWORD_CHANGED"),
@@ -193,7 +194,7 @@ class UserServiceTest {
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmailIgnoreCase("person@gmail.com")).thenReturn(Optional.empty());
         stubFederatedUserSave(22L);
-        when(jwtUtil.generateToken("person@gmail.com")).thenReturn("google-session-token");
+        when(jwtUtil.generateToken("person@gmail.com", 0L)).thenReturn("google-session-token");
         when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
 
         AuthResponse response = userService.loginWithGoogle(request);
@@ -266,7 +267,7 @@ class UserServiceTest {
                 .thenReturn(Optional.empty());
         when(userRepository.existsByEmailIgnoreCase("private-relay@privaterelay.appleid.com")).thenReturn(false);
         stubFederatedUserSave(31L);
-        when(jwtUtil.generateToken("private-relay@privaterelay.appleid.com")).thenReturn("apple-session-token");
+        when(jwtUtil.generateToken("private-relay@privaterelay.appleid.com", 0L)).thenReturn("apple-session-token");
         when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
 
         AuthResponse response = userService.loginWithAppleIdentity(appleIdentity);
@@ -322,7 +323,7 @@ class UserServiceTest {
     }
 
     private void stubJwt(User user) {
-        when(jwtUtil.generateToken(user.getEmail())).thenReturn("token");
+        when(jwtUtil.generateToken(user.getEmail(), user.getAuthVersion())).thenReturn("token");
         when(jwtUtil.getExpirationMs()).thenReturn(3600000L);
     }
 
