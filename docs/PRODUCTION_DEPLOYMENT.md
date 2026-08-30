@@ -24,6 +24,25 @@ Google/Apple authentication variables are optional only when the corresponding s
 
 Never reuse `.env.example` as a production secret file. It contains local/test placeholders and development-oriented values.
 
+## Authentication and browser-session configuration
+
+Production uses short-lived Bearer access tokens plus rotating opaque browser refresh sessions. Access JWTs default to 10 minutes and the application rejects configured lifetimes above 15 minutes. The web client keeps the access JWT only in memory, not in browser Web Storage.
+
+The production Spring profile hard-wires refresh cookies as `Secure=true`. `infra/compose/compose.prod.yaml` intentionally does **not** expose an `AUTH_COOKIE_SECURE` override, so an operator cannot accidentally downgrade the HttpOnly refresh cookie to plaintext HTTP while still using the production profile.
+
+The production Compose file forwards these tunable session controls:
+
+- `JWT_EXPIRATION_MS` — defaults to `600000` (10 minutes);
+- `AUTH_REFRESH_TTL_DAYS` — refresh-session lifetime, default 30 days;
+- `AUTH_REFRESH_REUSE_GRACE_SECONDS` — near-simultaneous rotation grace, default 15 seconds;
+- `AUTH_SESSION_RETENTION_DAYS` — expired/revoked session audit retention, default 7 days;
+- `AUTH_SESSION_CLEANUP_INTERVAL_MS` — cleanup scheduler cadence;
+- `AUTH_COOKIE_SAME_SITE` — `Strict` by default; the application accepts only `Strict` or `Lax`.
+
+The production web gateway is expected to keep the browser and `/api` on the same site/origin. The default `SameSite=Strict` model is deliberately incompatible with casually moving the API to an unrelated cross-site origin.
+
+Only SHA-256 hashes of refresh and CSRF secrets are stored in PostgreSQL. Successful refresh rotates both secrets. Password changes revoke every active refresh session for the user, and replay of an already rotated refresh credential outside the configured grace revokes the active session family. A stateless access token may remain usable until its short expiry unless account status changes; the JWT filter reloads the user and rejects suspended accounts immediately.
+
 ## Finance and payout configuration
 
 The production Compose file forwards the current platform-fee, payout dispatcher and submitted-payout reconciliation settings instead of relying on hidden application defaults.
@@ -67,17 +86,21 @@ This prevents a nominally running web container from being treated as ready whil
 
 The repository nginx container currently serves HTTP on its internal/public Compose port. A real deployment must terminate HTTPS in a trusted edge layer such as a cloud load balancer, ingress proxy or equivalent and forward the correct scheme/origin information.
 
-Do not expose a real customer deployment over plain HTTP. Stripe return URLs, Apple authentication redirects, Stripe Connect onboarding URLs and WebSocket origins must use the production HTTPS origin.
+Do not expose a real customer deployment over plain HTTP. Secure refresh cookies, Stripe return URLs, Apple authentication redirects, Stripe Connect onboarding URLs and WebSocket origins all depend on the production HTTPS boundary.
 
 ## CI contract
 
 `.github/scripts/production-compose-contract-smoke.sh` renders the production Compose file with deterministic placeholder settings and verifies that:
 
-- current finance, payout, submitted-payout reconciliation and tracking settings reach the API container;
+- current auth-session, finance, payout, submitted-payout reconciliation and tracking settings reach the API container;
+- the production access-token default stays at 10 minutes;
+- the production Spring profile hard-wires `Secure` refresh cookies and Compose cannot override that invariant;
 - sandbox payouts stay disabled;
 - attachment encryption configuration is present;
 - encrypted attachment storage is backed by a persistent volume;
 - API/web health checks and health-based startup ordering remain present;
 - omitting the production attachment encryption key causes Compose configuration to fail.
+
+The main CI runtime additionally executes `.github/scripts/auth-session-smoke.sh`. It verifies real login cookies, double-submit CSRF enforcement, refresh rotation, hash-only persistence and logout revocation against the Docker/PostgreSQL stack before the broader marketplace lifecycle smokes run.
 
 The main CI workflow gates its container runtime smoke on this production-configuration contract so future application settings cannot silently drift away from `compose.prod.yaml`.
