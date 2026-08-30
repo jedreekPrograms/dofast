@@ -183,8 +183,16 @@ public class StripeRefundRequest {
 
         String normalizedProviderStatus = normalize(providerStatus);
         StripeRefundStatus mappedStatus = mapProviderStatus(normalizedProviderStatus);
-        if (isTerminal(status) && mappedStatus != status) {
-            return false;
+        if (eventCreatedAt != null
+                && providerEventCreatedAt != null
+                && eventCreatedAt.equals(providerEventCreatedAt)
+                && isProviderResolved(status)
+                && mappedStatus != status) {
+            status = StripeRefundStatus.REVIEW_REQUIRED;
+            failureReason = "conflicting_same_second_event";
+            resolvedAt = null;
+            updatedAt = now;
+            return true;
         }
 
         if (eventCreatedAt != null) {
@@ -195,7 +203,7 @@ public class StripeRefundRequest {
         if (submittedAt == null) {
             submittedAt = now;
         }
-        applyProviderStatus(mappedStatus, now);
+        applyProviderStatus(stripeStatus, now);
         updatedAt = now;
         return true;
     }
@@ -220,15 +228,15 @@ public class StripeRefundRequest {
     }
 
     private void applyProviderStatus(String providerStatus, LocalDateTime now) {
-        applyProviderStatus(mapProviderStatus(providerStatus), now);
-    }
+        StripeRefundStatus mapped = mapProviderStatus(providerStatus);
 
-    private void applyProviderStatus(StripeRefundStatus mapped, LocalDateTime now) {
-        if (isTerminal(status) && mapped != status) {
+        if ((status == StripeRefundStatus.FAILED || status == StripeRefundStatus.CANCELED)
+                && mapped != StripeRefundStatus.FAILED
+                && mapped != StripeRefundStatus.CANCELED) {
             return;
         }
         status = mapped;
-        if (isTerminal(mapped)) {
+        if (isProviderResolved(mapped)) {
             resolvedAt = now;
         } else {
             resolvedAt = null;
@@ -245,7 +253,7 @@ public class StripeRefundRequest {
         };
     }
 
-    private boolean isTerminal(StripeRefundStatus value) {
+    private boolean isProviderResolved(StripeRefundStatus value) {
         return value == StripeRefundStatus.SUCCEEDED
                 || value == StripeRefundStatus.FAILED
                 || value == StripeRefundStatus.CANCELED;
