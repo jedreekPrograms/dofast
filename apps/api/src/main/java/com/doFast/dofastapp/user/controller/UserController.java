@@ -1,5 +1,8 @@
 package com.doFast.dofastapp.user.controller;
 
+import com.doFast.dofastapp.user.auth.session.AuthSessionCookieService;
+import com.doFast.dofastapp.user.auth.session.AuthSessionGrant;
+import com.doFast.dofastapp.user.auth.session.AuthSessionService;
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
 import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
@@ -9,6 +12,7 @@ import com.doFast.dofastapp.user.dto.UserRequest;
 import com.doFast.dofastapp.user.dto.UserResponse;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.service.UserService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -25,9 +29,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final AuthSessionService sessionService;
+    private final AuthSessionCookieService cookieService;
 
-    public UserController(UserService userService) {
+    public UserController(
+            UserService userService,
+            AuthSessionService sessionService,
+            AuthSessionCookieService cookieService
+    ) {
         this.userService = userService;
+        this.sessionService = sessionService;
+        this.cookieService = cookieService;
     }
 
     @PostMapping
@@ -37,13 +49,19 @@ public class UserController {
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@RequestBody @Valid LoginRequest request) {
-        return userService.login(request);
+    public AuthResponse login(
+            @RequestBody @Valid LoginRequest request,
+            HttpServletResponse response
+    ) {
+        return issueSession(userService.login(request), response);
     }
 
     @PostMapping("/login/google")
-    public AuthResponse loginWithGoogle(@RequestBody @Valid GoogleLoginRequest request) {
-        return userService.loginWithGoogle(request);
+    public AuthResponse loginWithGoogle(
+            @RequestBody @Valid GoogleLoginRequest request,
+            HttpServletResponse response
+    ) {
+        return issueSession(userService.loginWithGoogle(request), response);
     }
 
     @GetMapping("/me")
@@ -66,5 +84,11 @@ public class UserController {
             @RequestBody @Valid ChangePasswordRequest request
     ) {
         userService.changePassword(user, request);
+    }
+
+    private AuthResponse issueSession(AuthResponse authResponse, HttpServletResponse response) {
+        AuthSessionGrant grant = sessionService.issue(authResponse);
+        cookieService.write(response, grant);
+        return grant.response();
     }
 }
