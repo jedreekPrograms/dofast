@@ -1,4 +1,9 @@
-import { apiRequest } from '../../../shared/api/apiClient.js'
+import {
+  apiRequest,
+  hasRefreshSessionHint,
+  logoutAuthSession,
+  refreshAccessToken,
+} from '../../../shared/api/apiClient.js'
 
 export function registerUser(payload) {
   return apiRequest('/users', {
@@ -37,6 +42,15 @@ export function loginUserWithApple(payload) {
     auth: false,
     body: JSON.stringify(payload),
   })
+}
+
+export function restoreUserSession() {
+  if (!hasRefreshSessionHint()) return Promise.resolve(null)
+  return refreshAccessToken()
+}
+
+export function logoutUserSession() {
+  return logoutAuthSession()
 }
 
 export function getCurrentUser() {
