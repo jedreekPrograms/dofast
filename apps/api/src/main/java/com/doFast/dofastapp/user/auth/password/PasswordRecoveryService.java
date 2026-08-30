@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Objects;
 
 @Service
 public class PasswordRecoveryService {
@@ -52,7 +53,14 @@ public class PasswordRecoveryService {
         }
 
         String email = normalizeEmail(rawEmail);
-        User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        User candidate = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        if (candidate == null || !candidate.isPasswordLoginEnabled()) {
+            return;
+        }
+
+        // Serialize forgot/reset work by the user row. Without this lock, two concurrent forgot
+        // requests can both invalidate the previous token and then each create a fresh active one.
+        User user = userRepository.findByIdForUpdate(candidate.getId()).orElse(null);
         if (user == null || !user.isPasswordLoginEnabled()) {
             return;
         }
@@ -78,10 +86,23 @@ public class PasswordRecoveryService {
 
     @Transactional(noRollbackFor = BusinessException.class)
     public void resetPassword(ResetPasswordRequest request) {
-        LocalDateTime now = LocalDateTime.now();
-        PasswordResetToken token = tokenRepository.findByTokenHashForUpdate(secrets.hash(request.token()))
+        String tokenHash = secrets.hash(request.token());
+
+        // Probe only to discover the owner, then acquire locks in the same user -> token order as
+        // forgot-password. The token is fetched again under PESSIMISTIC_WRITE before any decision.
+        PasswordResetToken probe = tokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(this::invalidResetToken);
+        Long userId = probe.getUser().getId();
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(this::invalidResetToken);
+        PasswordResetToken token = tokenRepository.findByTokenHashForUpdate(tokenHash)
                 .orElseThrow(this::invalidResetToken);
 
+        if (!Objects.equals(token.getUser().getId(), user.getId())) {
+            throw invalidResetToken();
+        }
+
+        LocalDateTime now = LocalDateTime.now();
         if (!token.activeAt(now)) {
             if (token.getUsedAt() == null && token.getInvalidatedAt() == null) {
                 token.invalidate(now);
@@ -90,8 +111,6 @@ public class PasswordRecoveryService {
             throw invalidResetToken();
         }
 
-        User user = userRepository.findByIdForUpdate(token.getUser().getId())
-                .orElseThrow(this::invalidResetToken);
         if (!user.isPasswordLoginEnabled()) {
             token.invalidate(now);
             tokenRepository.save(token);
