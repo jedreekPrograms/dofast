@@ -43,17 +43,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         String token = authHeader.substring(7);
-        String email;
+        JwtUtil.AccessTokenIdentity identity;
         try {
-            email = jwtUtil.extractEmail(token);
+            identity = jwtUtil.parseAccessToken(token);
         } catch (Exception ignored) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        User user = userRepository.findByEmailIgnoreCase(identity.email()).orElse(null);
         if (user != null
                 && user.getStatus() == UserStatus.ACTIVE
+                && user.getAuthVersion() == identity.authVersion()
                 && SecurityContextHolder.getContext().getAuthentication() == null) {
             SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
             UsernamePasswordAuthenticationToken authToken =

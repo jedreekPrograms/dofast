@@ -110,7 +110,7 @@ class AuthSessionServiceTest {
                 .thenReturn(Optional.of(current));
         when(sessionRepository.saveAndFlush(any(AuthRefreshSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(jwtUtil.generateToken("user@example.com")).thenReturn("fresh-access");
+        when(jwtUtil.generateToken("user@example.com", 0L)).thenReturn("fresh-access");
         when(jwtUtil.getExpirationMs()).thenReturn(600_000L);
         when(userService.toResponse(user)).thenReturn(userResponse);
 

@@ -21,6 +21,22 @@ export function loginUser(payload) {
   })
 }
 
+export function requestPasswordReset(email) {
+  return apiRequest('/users/password/forgot', {
+    method: 'POST',
+    auth: false,
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function resetPassword(token, newPassword) {
+  return apiRequest('/users/password/reset', {
+    method: 'POST',
+    auth: false,
+    body: JSON.stringify({ token, newPassword }),
+  })
+}
+
 export function loginUserWithGoogle(credential) {
   return apiRequest('/users/login/google', {
     method: 'POST',

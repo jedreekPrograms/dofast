@@ -96,6 +96,7 @@ function LoginPage() {
             <span>Hasło</span>
             <input name="password" type="password" value={form.password} onChange={updateField} autoComplete="current-password" required />
           </label>
+          <div className="auth-card__switch"><Link to="/forgot-password">Nie pamiętasz hasła?</Link></div>
           {error && <div className="form-message form-message--error" role="alert">{error}</div>}
           <button className="button button--primary" type="submit" disabled={submitting}>
             {submitting ? 'Logowanie…' : 'Zaloguj się'}

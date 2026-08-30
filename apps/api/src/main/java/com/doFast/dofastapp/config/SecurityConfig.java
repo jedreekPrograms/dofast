@@ -47,7 +47,9 @@ public class SecurityConfig {
                                 "/users/login/apple",
                                 "/users/login/apple/challenge",
                                 "/users/session/refresh",
-                                "/users/session/logout"
+                                "/users/session/logout",
+                                "/users/password/forgot",
+                                "/users/password/reset"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby", "/job-categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/*/profile", "/reviews/users/*").permitAll()

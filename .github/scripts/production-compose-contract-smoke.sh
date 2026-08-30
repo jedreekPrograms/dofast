@@ -19,6 +19,15 @@ export AUTH_REFRESH_REUSE_GRACE_SECONDS=20
 export AUTH_SESSION_RETENTION_DAYS=9
 export AUTH_SESSION_CLEANUP_INTERVAL_MS=7200000
 export AUTH_COOKIE_SAME_SITE=Strict
+export SMTP_HOST='smtp.example.test'
+export SMTP_PORT=2525
+export SMTP_USERNAME='dofast-prod-contract'
+export SMTP_PASSWORD='prod-contract-smtp-password'
+export PASSWORD_RESET_BASE_URL='https://app.example.test/reset-password'
+export PASSWORD_RECOVERY_FROM_ADDRESS='security@example.test'
+export PASSWORD_RESET_TTL_MINUTES=25
+export PASSWORD_RESET_RETENTION_DAYS=8
+export PASSWORD_RESET_CLEANUP_INTERVAL_MS=5400000
 export WEBSOCKET_ALLOWED_ORIGIN_PATTERNS='https://app.example.test'
 export STRIPE_SECRET_KEY='sk_test_prod_contract'
 export STRIPE_WEBHOOK_SECRET='whsec_prod_contract'
@@ -77,6 +86,15 @@ expected = {
     'AUTH_SESSION_RETENTION_DAYS': '9',
     'AUTH_SESSION_CLEANUP_INTERVAL_MS': '7200000',
     'AUTH_COOKIE_SAME_SITE': 'Strict',
+    'SMTP_HOST': 'smtp.example.test',
+    'SMTP_PORT': '2525',
+    'SMTP_USERNAME': 'dofast-prod-contract',
+    'SMTP_PASSWORD': 'prod-contract-smtp-password',
+    'PASSWORD_RESET_BASE_URL': 'https://app.example.test/reset-password',
+    'PASSWORD_RECOVERY_FROM_ADDRESS': 'security@example.test',
+    'PASSWORD_RESET_TTL_MINUTES': '25',
+    'PASSWORD_RESET_RETENTION_DAYS': '8',
+    'PASSWORD_RESET_CLEANUP_INTERVAL_MS': '5400000',
     'PLATFORM_FEE_BASIS_POINTS': '175',
     'PAYOUT_PROVIDER': 'disabled',
     'PAYOUT_SANDBOX_ENABLED': 'false',
@@ -120,8 +138,7 @@ assert web.get('healthcheck', {}).get('test'), 'web healthcheck missing'
 assert web.get('depends_on', {}).get('api', {}).get('condition') == 'service_healthy', web.get('depends_on')
 PY
 
-# The prod Spring profile owns the Secure-cookie invariant. Operators may tune SameSite/TTL,
-# but they cannot accidentally expose the HttpOnly refresh token over plaintext HTTP.
+# The prod Spring profile owns the Secure-cookie and password-recovery delivery invariants.
 python3 - "$prod_profile" <<'PY'
 import pathlib
 import sys
@@ -130,16 +147,20 @@ text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 assert 'expiration-ms: ${JWT_EXPIRATION_MS:600000}' in text, 'production access-token default is not 10 minutes'
 assert 'cookie-secure: true' in text, 'production refresh cookies are not hard-wired Secure'
 assert 'same-site: ${AUTH_COOKIE_SAME_SITE:Strict}' in text, 'production SameSite policy missing'
+assert 'delivery: smtp' in text, 'production password recovery must use SMTP delivery'
+assert 'reset-base-url: ${PASSWORD_RESET_BASE_URL}' in text, 'production password reset URL is not required'
+assert 'from-address: ${PASSWORD_RECOVERY_FROM_ADDRESS}' in text, 'production password recovery sender is not required'
 PY
 
-# The production deployment must fail closed instead of silently inheriting the local/CI
-# attachment encryption key when the operator forgets the secret.
-if env -u ATTACHMENT_ENCRYPTION_KEY_BASE64 \
-  docker compose -f "$compose_file" config >/tmp/dofast-prod-compose-missing-secret.log 2>&1; then
-  echo 'Production Compose unexpectedly accepted a missing attachment encryption key'
-  cat /tmp/dofast-prod-compose-missing-secret.log
-  exit 1
-fi
+# The production deployment must fail closed instead of silently inheriting local/CI secrets or
+# silently disabling account-recovery delivery when an operator forgets required configuration.
+for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_URL PASSWORD_RECOVERY_FROM_ADDRESS; do
+  if env -u "$missing" docker compose -f "$compose_file" config >/tmp/dofast-prod-compose-missing-secret.log 2>&1; then
+    echo "Production Compose unexpectedly accepted missing $missing"
+    cat /tmp/dofast-prod-compose-missing-secret.log
+    exit 1
+  fi
+done
 rm -f /tmp/dofast-prod-compose-missing-secret.log
 
-echo 'Production Compose forwards finance/payout/auth/tracking settings, enforces Secure refresh cookies, and persists encrypted attachments: OK'
+echo 'Production Compose forwards finance/payout/auth/password-recovery/tracking settings, enforces Secure refresh cookies, and persists encrypted attachments: OK'
