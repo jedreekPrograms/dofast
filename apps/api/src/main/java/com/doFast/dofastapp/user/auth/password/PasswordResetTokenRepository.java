@@ -13,6 +13,9 @@ import java.util.Optional;
 
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
 
+    @EntityGraph(attributePaths = "user")
+    Optional<PasswordResetToken> findByTokenHash(String tokenHash);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = "user")
     @Query("select token from PasswordResetToken token where token.tokenHash = :tokenHash")
