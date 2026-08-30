@@ -21,6 +21,22 @@ export function loginUser(payload) {
   })
 }
 
+export function resendEmailVerification(email) {
+  return apiRequest('/users/email-verification/resend', {
+    method: 'POST',
+    auth: false,
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function verifyEmail(token) {
+  return apiRequest('/users/email-verification/verify', {
+    method: 'POST',
+    auth: false,
+    body: JSON.stringify({ token }),
+  })
+}
+
 export function requestPasswordReset(email) {
   return apiRequest('/users/password/forgot', {
     method: 'POST',

@@ -28,8 +28,12 @@ function RegisterPage() {
     setSubmitting(true)
     setError('')
     try {
-      await register(form)
-      navigate('/my-jobs', { replace: true })
+      const created = await register(form)
+      if (created.emailVerified) {
+        navigate('/my-jobs', { replace: true })
+      } else {
+        navigate(`/verify-email?email=${encodeURIComponent(created.email)}`, { replace: true })
+      }
     } catch (requestError) {
       setError(requestError.message || 'Nie udało się utworzyć konta.')
     } finally {

@@ -48,6 +48,11 @@ management:
       probes:
         enabled: true
       show-details: never
+  health:
+    # Transactional email delivery is AFTER_COMMIT and external SMTP outages must not take the API
+    # out of service. Mail delivery failures are handled/monitored separately from API readiness.
+    mail:
+      enabled: false
 
 logging:
   level:
@@ -79,6 +84,14 @@ dofast:
       cleanup-interval-ms: ${PASSWORD_RESET_CLEANUP_INTERVAL_MS:3600000}
       reset-base-url: ${PASSWORD_RESET_BASE_URL:}
       from-address: ${PASSWORD_RECOVERY_FROM_ADDRESS:}
+    email-verification:
+      required: ${EMAIL_VERIFICATION_REQUIRED:false}
+      delivery: ${EMAIL_VERIFICATION_DELIVERY:disabled}
+      token-ttl-hours: ${EMAIL_VERIFICATION_TTL_HOURS:24}
+      retention-days: ${EMAIL_VERIFICATION_RETENTION_DAYS:7}
+      cleanup-interval-ms: ${EMAIL_VERIFICATION_CLEANUP_INTERVAL_MS:3600000}
+      verify-base-url: ${EMAIL_VERIFICATION_BASE_URL:}
+      from-address: ${EMAIL_VERIFICATION_FROM_ADDRESS:}
     admin-bootstrap:
       email: ${ADMIN_BOOTSTRAP_EMAIL:}
       password: ${ADMIN_BOOTSTRAP_PASSWORD:}

@@ -5,6 +5,7 @@ import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.review.repository.ReviewRepository;
 import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
+import com.doFast.dofastapp.user.auth.email.EmailVerificationService;
 import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.dto.UpdateProfileRequest;
 import com.doFast.dofastapp.user.entity.User;
@@ -38,6 +39,7 @@ class UserProfileDetailsTest {
     @Mock private UserAuthIdentityRepository authIdentityRepository;
     @Mock private GoogleIdentityVerifier googleIdentityVerifier;
     @Mock private AuthRefreshSessionRepository refreshSessionRepository;
+    @Mock private EmailVerificationService emailVerificationService;
     @Mock private ReviewRepository reviewRepository;
     @Mock private JobRepository jobRepository;
     @Mock private VerificationService verificationService;
@@ -56,7 +58,8 @@ class UserProfileDetailsTest {
                 walletService,
                 authIdentityRepository,
                 googleIdentityVerifier,
-                refreshSessionRepository
+                refreshSessionRepository,
+                emailVerificationService
         );
 
         var response = service.updateProfile(

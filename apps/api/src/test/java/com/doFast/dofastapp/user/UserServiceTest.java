@@ -7,6 +7,7 @@ import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.user.auth.GoogleIdentity;
 import com.doFast.dofastapp.user.auth.GoogleIdentityVerifier;
 import com.doFast.dofastapp.user.auth.apple.AppleIdentity;
+import com.doFast.dofastapp.user.auth.email.EmailVerificationService;
 import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
@@ -55,6 +56,7 @@ class UserServiceTest {
     @Mock private UserAuthIdentityRepository authIdentityRepository;
     @Mock private GoogleIdentityVerifier googleIdentityVerifier;
     @Mock private AuthRefreshSessionRepository refreshSessionRepository;
+    @Mock private EmailVerificationService emailVerificationService;
 
     private UserService userService;
 
@@ -67,7 +69,8 @@ class UserServiceTest {
                 walletService,
                 authIdentityRepository,
                 googleIdentityVerifier,
-                refreshSessionRepository
+                refreshSessionRepository,
+                emailVerificationService
         );
     }
 
@@ -92,6 +95,7 @@ class UserServiceTest {
         assertEquals(UserRole.USER, response.role());
         assertEquals(UserStatus.ACTIVE, response.status());
         verify(walletService).createWalletForUser(15L);
+        verify(emailVerificationService).initializeLocalAccount(any(User.class));
     }
 
     @Test
@@ -140,12 +144,26 @@ class UserServiceTest {
     }
 
     @Test
+    void requiredVerificationBlocksValidPasswordUntilEmailIsVerified() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail("user@example.com");
+        request.setPassword("StrongPass123!");
+        User user = activeUser();
+        when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("StrongPass123!", "hash")).thenReturn(true);
+        when(emailVerificationService.required()).thenReturn(true);
+
+        assertThrows(ForbiddenOperationException.class, () -> userService.login(request));
+    }
+
+    @Test
     void successfulLoginReturnsBearerTokenAndCurrentRole() {
         LoginRequest request = new LoginRequest();
         request.setEmail("user@example.com");
         request.setPassword("StrongPass123!");
 
         User user = activeUser();
+        user.markEmailVerified(LocalDateTime.now());
         when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("StrongPass123!", "hash")).thenReturn(true);
         stubJwt(user);
@@ -182,16 +200,10 @@ class UserServiceTest {
     @Test
     void googleLoginCreatesOauthOnlyUserWalletAndProviderIdentity() {
         GoogleLoginRequest request = new GoogleLoginRequest("google-id-token");
-        GoogleIdentity googleIdentity = new GoogleIdentity(
-                "google-subject-123",
-                "Person@Gmail.com",
-                "Google Person",
-                true
-        );
+        GoogleIdentity googleIdentity = new GoogleIdentity("google-subject-123", "Person@Gmail.com", "Google Person", true);
 
         when(googleIdentityVerifier.verify("google-id-token")).thenReturn(googleIdentity);
-        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123"))
-                .thenReturn(Optional.empty());
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123")).thenReturn(Optional.empty());
         when(userRepository.findByEmailIgnoreCase("person@gmail.com")).thenReturn(Optional.empty());
         stubFederatedUserSave(22L);
         when(jwtUtil.generateToken("person@gmail.com", 0L)).thenReturn("google-session-token");
@@ -208,18 +220,12 @@ class UserServiceTest {
     @Test
     void returningGoogleSubjectUsesLinkedUserWithoutEmailLookup() {
         GoogleLoginRequest request = new GoogleLoginRequest("google-id-token");
-        GoogleIdentity googleIdentity = new GoogleIdentity(
-                "google-subject-123",
-                "changed@gmail.com",
-                "Google Person",
-                true
-        );
+        GoogleIdentity googleIdentity = new GoogleIdentity("google-subject-123", "changed@gmail.com", "Google Person", true);
         User user = activeUser();
         UserAuthIdentity identity = linkedIdentity(user, AuthProvider.GOOGLE, "google-subject-123");
 
         when(googleIdentityVerifier.verify("google-id-token")).thenReturn(googleIdentity);
-        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123"))
-                .thenReturn(Optional.of(identity));
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123")).thenReturn(Optional.of(identity));
         stubJwt(user);
 
         AuthResponse response = userService.loginWithGoogle(request);
@@ -232,39 +238,23 @@ class UserServiceTest {
     @Test
     void googleDoesNotAutoLinkExistingThirdPartyEmailWhenGoogleIsNotAuthoritative() {
         GoogleLoginRequest request = new GoogleLoginRequest("google-id-token");
-        GoogleIdentity googleIdentity = new GoogleIdentity(
-                "google-subject-123",
-                "user@example.com",
-                "Example User",
-                false
-        );
+        GoogleIdentity googleIdentity = new GoogleIdentity("google-subject-123", "user@example.com", "Example User", false);
         User user = activeUser();
 
         when(googleIdentityVerifier.verify("google-id-token")).thenReturn(googleIdentity);
-        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123"))
-                .thenReturn(Optional.empty());
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "google-subject-123")).thenReturn(Optional.empty());
         when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
 
-        ConflictException exception = assertThrows(
-                ConflictException.class,
-                () -> userService.loginWithGoogle(request)
-        );
-
+        ConflictException exception = assertThrows(ConflictException.class, () -> userService.loginWithGoogle(request));
         assertFalse(exception.getMessage().isBlank());
         verify(authIdentityRepository, never()).save(any(UserAuthIdentity.class));
     }
 
     @Test
     void appleLoginCreatesFederatedUserWalletAndAppleIdentity() {
-        AppleIdentity appleIdentity = new AppleIdentity(
-                "apple-subject-123",
-                "private-relay@privaterelay.appleid.com",
-                "Apple Person",
-                true
-        );
+        AppleIdentity appleIdentity = new AppleIdentity("apple-subject-123", "private-relay@privaterelay.appleid.com", "Apple Person", true);
 
-        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123"))
-                .thenReturn(Optional.empty());
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123")).thenReturn(Optional.empty());
         when(userRepository.existsByEmailIgnoreCase("private-relay@privaterelay.appleid.com")).thenReturn(false);
         stubFederatedUserSave(31L);
         when(jwtUtil.generateToken("private-relay@privaterelay.appleid.com", 0L)).thenReturn("apple-session-token");
@@ -286,13 +276,10 @@ class UserServiceTest {
     void returningAppleSubjectDoesNotNeedEmailFromAppleAgain() {
         User user = activeUser();
         UserAuthIdentity linked = linkedIdentity(user, AuthProvider.APPLE, "apple-subject-123");
-        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123"))
-                .thenReturn(Optional.of(linked));
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123")).thenReturn(Optional.of(linked));
         stubJwt(user);
 
-        AuthResponse response = userService.loginWithAppleIdentity(
-                new AppleIdentity("apple-subject-123", null, null, false)
-        );
+        AuthResponse response = userService.loginWithAppleIdentity(new AppleIdentity("apple-subject-123", null, null, false));
 
         assertEquals("user@example.com", response.user().email());
         verify(userRepository, never()).existsByEmailIgnoreCase(anyString());
@@ -300,16 +287,12 @@ class UserServiceTest {
 
     @Test
     void appleNeverSilentlyLinksAnExistingAccountByEmail() {
-        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123"))
-                .thenReturn(Optional.empty());
+        when(authIdentityRepository.findByProviderAndProviderSubject(AuthProvider.APPLE, "apple-subject-123")).thenReturn(Optional.empty());
         when(userRepository.existsByEmailIgnoreCase("user@example.com")).thenReturn(true);
 
-        assertThrows(
-                ConflictException.class,
-                () -> userService.loginWithAppleIdentity(
-                        new AppleIdentity("apple-subject-123", "user@example.com", "Existing User", false)
-                )
-        );
+        assertThrows(ConflictException.class, () -> userService.loginWithAppleIdentity(
+                new AppleIdentity("apple-subject-123", "user@example.com", "Existing User", false)
+        ));
         verify(authIdentityRepository, never()).save(any(UserAuthIdentity.class));
     }
 

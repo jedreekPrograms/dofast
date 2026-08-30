@@ -65,6 +65,7 @@ class AuthSessionServiceTest {
                 null,
                 UserRole.USER,
                 UserStatus.ACTIVE,
+                true,
                 LocalDateTime.now().minusDays(30)
         );
     }

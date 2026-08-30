@@ -13,5 +13,6 @@ public record UserResponse(
         String publicLocation,
         UserRole role,
         UserStatus status,
+        boolean emailVerified,
         LocalDateTime createdAt
 ) {}
