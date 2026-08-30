@@ -59,7 +59,7 @@ public class AuthSessionService {
         return issueGrant(user, UUID.randomUUID(), LocalDateTime.now(), authResponse);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {AuthenticationFailedException.class, ForbiddenOperationException.class})
     public AuthSessionGrant refresh(String rawRefreshToken, String rawCsrfToken) {
         LocalDateTime now = LocalDateTime.now();
         AuthRefreshSession current = sessionRepository.findByTokenHashForUpdate(secrets.hash(rawRefreshToken))
