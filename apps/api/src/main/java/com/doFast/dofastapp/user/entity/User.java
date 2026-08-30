@@ -48,6 +48,9 @@ public class User {
     @Column(name = "auth_version", nullable = false)
     private long authVersion = 0;
 
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role = UserRole.USER;
@@ -88,11 +91,17 @@ public class User {
         authVersion++;
     }
 
+    public boolean isEmailVerified() { return emailVerifiedAt != null; }
+    public void markEmailVerified(LocalDateTime verifiedAt) {
+        if (emailVerifiedAt == null) emailVerifiedAt = verifiedAt;
+    }
+
     public Long getId() { return id; }
     public String getEmail() { return email; }
     public String getPassword() { return password; }
     public boolean isPasswordLoginEnabled() { return passwordLoginEnabled; }
     public long getAuthVersion() { return authVersion; }
+    public LocalDateTime getEmailVerifiedAt() { return emailVerifiedAt; }
     public String getNickname() { return nickname; }
     public String getBio() { return bio; }
     public String getPublicLocation() { return publicLocation; }
@@ -107,6 +116,7 @@ public class User {
     public void setPublicLocation(String publicLocation) { this.publicLocation = publicLocation; }
     public void setPassword(String password) { this.password = password; }
     public void setPasswordLoginEnabled(boolean passwordLoginEnabled) { this.passwordLoginEnabled = passwordLoginEnabled; }
+    public void setEmailVerifiedAt(LocalDateTime emailVerifiedAt) { this.emailVerifiedAt = emailVerifiedAt; }
     public void setRole(UserRole role) { this.role = role; }
     public void setStatus(UserStatus status) { this.status = status; }
 }
