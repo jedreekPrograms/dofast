@@ -23,6 +23,10 @@ COPY apps/web/ ./
 RUN npm run build
 
 FROM nginx:1.29-alpine AS runtime
+# The nginx tag can temporarily lag behind Alpine security package rebuilds.
+# Apply repository-available runtime fixes so the shipped image does not retain
+# known fixable HIGH/CRITICAL vulnerabilities between upstream image refreshes.
+RUN apk upgrade --no-cache
 COPY infra/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /workspace/dist /usr/share/nginx/html
 
