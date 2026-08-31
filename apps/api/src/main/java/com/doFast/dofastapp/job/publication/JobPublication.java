@@ -94,6 +94,21 @@ public class JobPublication {
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 
+    @Column(name = "stripe_cleanup_attempt_count", nullable = false)
+    private int stripePaymentIntentCleanupAttemptCount;
+
+    @Column(name = "stripe_cleanup_next_attempt_at")
+    private LocalDateTime stripePaymentIntentCleanupNextAttemptAt;
+
+    @Column(name = "stripe_cleanup_completed_at")
+    private LocalDateTime stripePaymentIntentCleanupCompletedAt;
+
+    @Column(name = "stripe_cleanup_review_required", nullable = false)
+    private boolean stripePaymentIntentCleanupReviewRequired;
+
+    @Column(name = "stripe_cleanup_last_error", length = 128)
+    private String stripePaymentIntentCleanupLastError;
+
     public JobPublication() {}
 
     public void initializePaymentRequired(
@@ -187,6 +202,7 @@ public class JobPublication {
         }
         this.recoveryReason = JobPublicationRecoveryReason.CANCELLED_BEFORE_PAYMENT_CONFIRMED;
         recordSuccessfulPayment(now);
+        completeStripePaymentIntentCleanup("PROVIDER_SUCCEEDED", now);
     }
 
     public void cancel(LocalDateTime now) {
@@ -195,6 +211,65 @@ public class JobPublication {
         this.recoveryReason = null;
         this.cancelledAt = now;
         this.updatedAt = now;
+        scheduleStripePaymentIntentCleanup(now);
+    }
+
+    private void scheduleStripePaymentIntentCleanup(LocalDateTime now) {
+        if (stripePaymentIntentId == null || stripePaymentIntentId.isBlank() || paymentReceivedAt != null) {
+            return;
+        }
+        stripePaymentIntentCleanupAttemptCount = 0;
+        stripePaymentIntentCleanupNextAttemptAt = now;
+        stripePaymentIntentCleanupCompletedAt = null;
+        stripePaymentIntentCleanupReviewRequired = false;
+        stripePaymentIntentCleanupLastError = null;
+    }
+
+    public boolean claimStripePaymentIntentCleanup(LocalDateTime now, LocalDateTime leaseUntil) {
+        if (status != JobPublicationStatus.CANCELLED
+                || stripePaymentIntentId == null
+                || stripePaymentIntentId.isBlank()
+                || paymentReceivedAt != null
+                || stripePaymentIntentCleanupCompletedAt != null
+                || stripePaymentIntentCleanupReviewRequired
+                || stripePaymentIntentCleanupNextAttemptAt == null
+                || stripePaymentIntentCleanupNextAttemptAt.isAfter(now)) {
+            return false;
+        }
+        stripePaymentIntentCleanupAttemptCount++;
+        stripePaymentIntentCleanupNextAttemptAt = leaseUntil;
+        stripePaymentIntentCleanupLastError = null;
+        updatedAt = now;
+        return true;
+    }
+
+    public void completeStripePaymentIntentCleanup(String providerState, LocalDateTime now) {
+        stripePaymentIntentCleanupCompletedAt = now;
+        stripePaymentIntentCleanupNextAttemptAt = null;
+        stripePaymentIntentCleanupReviewRequired = false;
+        stripePaymentIntentCleanupLastError = normalizeCleanupError(providerState);
+        updatedAt = now;
+    }
+
+    public void retryStripePaymentIntentCleanup(String failureCode, LocalDateTime nextAttemptAt, LocalDateTime now) {
+        stripePaymentIntentCleanupNextAttemptAt = Objects.requireNonNull(nextAttemptAt, "nextAttemptAt");
+        stripePaymentIntentCleanupLastError = normalizeCleanupError(failureCode);
+        updatedAt = now;
+    }
+
+    public void requireStripePaymentIntentCleanupReview(String failureCode, LocalDateTime now) {
+        stripePaymentIntentCleanupReviewRequired = true;
+        stripePaymentIntentCleanupNextAttemptAt = null;
+        stripePaymentIntentCleanupLastError = normalizeCleanupError(failureCode);
+        updatedAt = now;
+    }
+
+    private String normalizeCleanupError(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.length() <= 128 ? normalized : normalized.substring(0, 128);
     }
 
     public Long getId() { return id; }
@@ -218,4 +293,9 @@ public class JobPublication {
     public JobPublicationRecoveryReason getRecoveryReason() { return recoveryReason; }
     public LocalDateTime getPublishedAt() { return publishedAt; }
     public LocalDateTime getCancelledAt() { return cancelledAt; }
+    public int getStripePaymentIntentCleanupAttemptCount() { return stripePaymentIntentCleanupAttemptCount; }
+    public LocalDateTime getStripePaymentIntentCleanupNextAttemptAt() { return stripePaymentIntentCleanupNextAttemptAt; }
+    public LocalDateTime getStripePaymentIntentCleanupCompletedAt() { return stripePaymentIntentCleanupCompletedAt; }
+    public boolean isStripePaymentIntentCleanupReviewRequired() { return stripePaymentIntentCleanupReviewRequired; }
+    public String getStripePaymentIntentCleanupLastError() { return stripePaymentIntentCleanupLastError; }
 }
