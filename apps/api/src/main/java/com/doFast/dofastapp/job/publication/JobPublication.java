@@ -202,7 +202,7 @@ public class JobPublication {
         }
         this.recoveryReason = JobPublicationRecoveryReason.CANCELLED_BEFORE_PAYMENT_CONFIRMED;
         recordSuccessfulPayment(now);
-        completeStripePaymentIntentCleanup("PROVIDER_SUCCEEDED", now);
+        completeStripePaymentIntentCleanup(now);
     }
 
     public void cancel(LocalDateTime now) {
@@ -243,11 +243,11 @@ public class JobPublication {
         return true;
     }
 
-    public void completeStripePaymentIntentCleanup(String providerState, LocalDateTime now) {
+    public void completeStripePaymentIntentCleanup(LocalDateTime now) {
         stripePaymentIntentCleanupCompletedAt = now;
         stripePaymentIntentCleanupNextAttemptAt = null;
         stripePaymentIntentCleanupReviewRequired = false;
-        stripePaymentIntentCleanupLastError = normalizeCleanupError(providerState);
+        stripePaymentIntentCleanupLastError = null;
         updatedAt = now;
     }
 
