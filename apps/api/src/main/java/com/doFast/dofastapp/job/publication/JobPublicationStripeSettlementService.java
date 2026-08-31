@@ -61,7 +61,6 @@ public class JobPublicationStripeSettlementService {
         );
 
         LocalDateTime now = LocalDateTime.now();
-        publication.recordSuccessfulPayment(now);
 
         if (publication.getStatus() == JobPublicationStatus.CANCELLED) {
             publication.markLatePaymentAfterCancellation(now);
@@ -69,6 +68,7 @@ public class JobPublicationStripeSettlementService {
         }
         if (publication.getStatus() == JobPublicationStatus.PUBLISHED
                 || publication.getStatus() == JobPublicationStatus.PAYMENT_RECEIVED) {
+            publication.recordSuccessfulPayment(now);
             return newlyProcessed;
         }
         if (publication.getStatus() != JobPublicationStatus.PAYMENT_REQUIRED) {
@@ -77,16 +77,24 @@ public class JobPublicationStripeSettlementService {
 
         JobPublicationRecoveryReason recoveryReason = settlementBlocker(publication, now);
         if (recoveryReason != null) {
+            // Keep PAYMENT_REQUIRED + payment_received_at=NULL while restoring the reservation.
+            // Wallet restoration uses saveAndFlush(), which may flush every managed entity in this
+            // transaction; publishing a transient PAYMENT_REQUIRED + paid timestamp would violate
+            // chk_job_publications_recovery_state before we can move to PAYMENT_RECEIVED.
             publicationService.restoreReservation(publication);
             publication.markPaymentReceived(recoveryReason, now);
             publicationRepository.save(publication);
             return newlyProcessed;
         }
 
+        // The same flush-safety rule applies to the publish path. Job creation/escrow performs
+        // wallet writes that may flush the persistence context, so the publication remains in its
+        // valid unpaid PAYMENT_REQUIRED representation until all dependent writes have succeeded.
         publicationService.restoreReservation(publication);
         JobRequest request = publicationService.deserialize(publication.getRequestPayload());
         JobResponse job = jobService.createJob(request, publication.getUser());
         publication.markPublished(job.id(), now);
+        publication.recordSuccessfulPayment(now);
         publicationRepository.save(publication);
         return newlyProcessed;
     }
