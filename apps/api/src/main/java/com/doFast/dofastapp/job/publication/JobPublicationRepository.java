@@ -42,6 +42,24 @@ public interface JobPublicationRepository extends JpaRepository<JobPublication, 
             select publication.id
             from JobPublication publication
             where publication.status = :status
+              and publication.stripePaymentIntentId is null
+              and publication.stripePaymentIntentCreateStartedAt is not null
+              and publication.paymentReceivedAt is null
+              and publication.stripePaymentIntentCreateReviewRequired = false
+              and publication.stripePaymentIntentCreateNextAttemptAt is not null
+              and publication.stripePaymentIntentCreateNextAttemptAt <= :now
+            order by publication.stripePaymentIntentCreateNextAttemptAt asc, publication.id asc
+            """)
+    List<Long> findDueStripePaymentIntentCreateRecoveryIds(
+            @Param("status") JobPublicationStatus status,
+            @Param("now") LocalDateTime now,
+            Pageable pageable
+    );
+
+    @Query("""
+            select publication.id
+            from JobPublication publication
+            where publication.status = :status
               and publication.stripePaymentIntentId is not null
               and publication.stripePaymentIntentCleanupCompletedAt is null
               and publication.stripePaymentIntentCleanupReviewRequired = false
