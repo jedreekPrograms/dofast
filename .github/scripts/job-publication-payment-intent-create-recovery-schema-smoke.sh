@@ -15,16 +15,17 @@ WHERE table_name = 'job_publications'
   );" | tr -d '[:space:]')
 test "$COLUMN_COUNT" = "5"
 
-DEFAULTS=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
-SELECT
-  (SELECT is_nullable || ':' || column_default
-   FROM information_schema.columns
-   WHERE table_name='job_publications' AND column_name='stripe_create_attempt_count')
-  || '|' ||
-  (SELECT is_nullable || ':' || column_default
-   FROM information_schema.columns
-   WHERE table_name='job_publications' AND column_name='stripe_create_review_required');" | tr -d '[:space:]')
-[[ "$DEFAULTS" == NO:0\|NO:false* ]]
+ATTEMPT_COLUMN_OK=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
+SELECT is_nullable = 'NO' AND column_default = '0'
+FROM information_schema.columns
+WHERE table_name='job_publications' AND column_name='stripe_create_attempt_count';" | tr -d '[:space:]')
+test "$ATTEMPT_COLUMN_OK" = "t"
+
+REVIEW_COLUMN_OK=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
+SELECT is_nullable = 'NO' AND column_default = 'false'
+FROM information_schema.columns
+WHERE table_name='job_publications' AND column_name='stripe_create_review_required';" | tr -d '[:space:]')
+test "$REVIEW_COLUMN_OK" = "t"
 
 CONSTRAINT_DEF=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
 SELECT pg_get_constraintdef(oid)
