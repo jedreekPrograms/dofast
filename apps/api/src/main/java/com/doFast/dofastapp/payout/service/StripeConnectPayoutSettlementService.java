@@ -39,10 +39,23 @@ public class StripeConnectPayoutSettlementService {
 
     @Transactional
     public PayoutProviderSettlementResult process(Payout stripePayout, String eventId, String connectedAccountId) {
+        return process(stripePayout, eventId, connectedAccountId, null);
+    }
+
+    @Transactional
+    public PayoutProviderSettlementResult process(
+            Payout stripePayout,
+            String eventId,
+            String connectedAccountId,
+            Long eventCreatedAt
+    ) {
         PayoutProviderSettlementOutcome outcome = terminalOutcome(stripePayout);
         if (outcome == null) return null;
         if (eventId == null || eventId.isBlank() || connectedAccountId == null || connectedAccountId.isBlank()) {
             throw new IllegalStateException("Stripe Connect payout event is missing required identity");
+        }
+        if (eventCreatedAt != null && eventCreatedAt <= 0) {
+            throw new IllegalStateException("Stripe Connect payout event timestamp is invalid");
         }
         if (stripePayout.getId() == null || stripePayout.getId().isBlank()) {
             throw new IllegalStateException("Stripe Connect payout does not contain an id");
@@ -57,6 +70,9 @@ public class StripeConnectPayoutSettlementService {
                 .orElseThrow(() -> new ResourceNotFoundException("Konto odbiorcy Stripe Connect nie istnieje"));
 
         validateProviderEvent(payout, recipient, stripePayout, connectedAccountId);
+        if (isStale(payout, eventCreatedAt)) {
+            return PayoutProviderSettlementResult.STALE;
+        }
 
         String failureCode = null;
         if (outcome == PayoutProviderSettlementOutcome.FAILED) {
@@ -73,13 +89,23 @@ public class StripeConnectPayoutSettlementService {
             );
         }
 
-        return settlementService.settle(new PayoutProviderSettlementCommand(
+        PayoutProviderSettlementResult result = settlementService.settle(new PayoutProviderSettlementCommand(
                 StripeConnectOnboardingService.PROVIDER_CODE,
                 eventId,
                 stripePayout.getId(),
                 outcome,
                 failureCode
         ));
+        if (eventCreatedAt != null && result != PayoutProviderSettlementResult.DUPLICATE) {
+            payout.recordProviderStateEventCreatedAt(eventCreatedAt);
+        }
+        return result;
+    }
+
+    private boolean isStale(PayoutRequest payout, Long eventCreatedAt) {
+        return eventCreatedAt != null
+                && payout.getProviderStateEventCreatedAt() != null
+                && eventCreatedAt < payout.getProviderStateEventCreatedAt();
     }
 
     private PayoutProviderSettlementOutcome terminalOutcome(Payout stripePayout) {

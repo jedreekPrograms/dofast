@@ -65,6 +65,9 @@ public class PayoutRequest {
     @Column(name = "provider_transfer_reference", length = 255)
     private String providerTransferReference;
 
+    @Column(name = "provider_state_event_created_at")
+    private Long providerStateEventCreatedAt;
+
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount;
 
@@ -121,6 +124,7 @@ public class PayoutRequest {
         this.lastErrorAt = null;
         this.providerReference = null;
         this.providerTransferReference = null;
+        this.providerStateEventCreatedAt = null;
     }
 
     public void startProcessing(LocalDateTime now) {
@@ -167,6 +171,16 @@ public class PayoutRequest {
             throw new IllegalStateException("Payout already has a different provider transfer reference");
         }
         this.providerTransferReference = normalized;
+    }
+
+    public void recordProviderStateEventCreatedAt(long eventCreatedAt) {
+        if (eventCreatedAt <= 0) {
+            throw new IllegalArgumentException("Provider state event timestamp must be positive");
+        }
+        if (providerStateEventCreatedAt != null && eventCreatedAt < providerStateEventCreatedAt) {
+            throw new IllegalStateException("Provider state event timestamp cannot move backwards");
+        }
+        providerStateEventCreatedAt = eventCreatedAt;
     }
 
     public void markSubmitted(String providerReference, LocalDateTime now) {
@@ -259,6 +273,7 @@ public class PayoutRequest {
     public String getProviderCode() { return providerCode; }
     public String getProviderReference() { return providerReference; }
     public String getProviderTransferReference() { return providerTransferReference; }
+    public Long getProviderStateEventCreatedAt() { return providerStateEventCreatedAt; }
     public int getAttemptCount() { return attemptCount; }
     public LocalDateTime getRequestedAt() { return requestedAt; }
     public LocalDateTime getNextAttemptAt() { return nextAttemptAt; }
