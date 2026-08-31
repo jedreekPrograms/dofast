@@ -5,8 +5,9 @@ import com.stripe.model.PaymentIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 @Service
@@ -20,39 +21,77 @@ public class JobPublicationPaymentIntentCleanupService {
             "requires_capture",
             "processing"
     );
+    private static final Set<String> TERMINAL_STATUSES = Set.of("canceled", "succeeded");
 
-    private final JobPublicationRepository publicationRepository;
+    private final JobPublicationPaymentIntentCleanupQueue queue;
 
-    public JobPublicationPaymentIntentCleanupService(JobPublicationRepository publicationRepository) {
-        this.publicationRepository = publicationRepository;
+    public JobPublicationPaymentIntentCleanupService(JobPublicationPaymentIntentCleanupQueue queue) {
+        this.queue = queue;
     }
 
-    @Transactional(readOnly = true)
-    public void cancelAttachedIntentBestEffort(Long publicationId) {
-        JobPublication publication = publicationRepository.findById(publicationId).orElse(null);
-        if (publication == null || publication.getStatus() != JobPublicationStatus.CANCELLED) {
-            return;
-        }
+    public List<Long> findDueIds(int limit) {
+        return queue.findDueIds(limit);
+    }
 
-        String paymentIntentId = publication.getStripePaymentIntentId();
-        if (paymentIntentId == null || paymentIntentId.isBlank()) {
+    /**
+     * Claims durable cleanup work in a short database transaction, performs the provider call after
+     * the claim transaction has committed, then records success/retry separately. If the process
+     * dies anywhere after the claim, the lease expires and another worker can safely re-read the
+     * authoritative PaymentIntent state.
+     */
+    public void process(Long publicationId) {
+        JobPublicationPaymentIntentCleanupCommand command = queue.claim(publicationId).orElse(null);
+        if (command == null) {
             return;
         }
 
         try {
-            PaymentIntent intent = PaymentIntent.retrieve(paymentIntentId);
-            if (intent != null && isCancellableStatus(intent.getStatus())) {
-                intent.cancel();
+            PaymentIntent intent = PaymentIntent.retrieve(command.paymentIntentId());
+            if (intent == null) {
+                queue.retry(publicationId, "PROVIDER_OBJECT_MISSING");
+                return;
             }
+
+            String providerStatus = normalizeStatus(intent.getStatus());
+            if (TERMINAL_STATUSES.contains(providerStatus)) {
+                queue.complete(publicationId, "PROVIDER_" + providerStatus.toUpperCase(Locale.ROOT));
+                return;
+            }
+            if (!isCancellableStatus(providerStatus)) {
+                queue.retry(publicationId, "UNEXPECTED_PROVIDER_STATUS_" + sanitizeStatus(providerStatus));
+                return;
+            }
+
+            PaymentIntent cancelled = intent.cancel();
+            String cancelledStatus = cancelled == null ? null : normalizeStatus(cancelled.getStatus());
+            if (cancelledStatus != null && !"canceled".equals(cancelledStatus)) {
+                queue.retry(publicationId, "CANCEL_RETURNED_" + sanitizeStatus(cancelledStatus));
+                return;
+            }
+            queue.complete(publicationId, "PROVIDER_CANCELED");
         } catch (StripeException ex) {
-            // Local cancellation, reservation release and late-webhook recovery remain authoritative.
-            // A transient provider failure must never roll those financial state changes back.
-            log.warn("Could not cancel Stripe PaymentIntent {} for cancelled job publication {}",
-                    paymentIntentId, publicationId, ex);
+            queue.retry(publicationId, "STRIPE_EXCEPTION");
+            log.warn("Could not clean up Stripe PaymentIntent {} for cancelled job publication {} on attempt {}",
+                    command.paymentIntentId(), publicationId, command.attemptCount(), ex);
+        } catch (RuntimeException ex) {
+            queue.retry(publicationId, "PROVIDER_RUNTIME_EXCEPTION");
+            log.warn("Unexpected provider cleanup failure for job publication {} on attempt {}",
+                    publicationId, command.attemptCount(), ex);
         }
     }
 
     static boolean isCancellableStatus(String status) {
-        return status != null && CANCELLABLE_STATUSES.contains(status);
+        return status != null && CANCELLABLE_STATUSES.contains(normalizeStatus(status));
+    }
+
+    private static String normalizeStatus(String status) {
+        return status == null ? "" : status.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String sanitizeStatus(String status) {
+        String normalized = status == null || status.isBlank()
+                ? "UNKNOWN"
+                : status.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]", "_");
+        return normalized.length() <= 64 ? normalized : normalized.substring(0, 64);
     }
 }
