@@ -58,7 +58,7 @@ bash .github/scripts/seed-wallet-funding.sh \
   "smoke:emergency:seed:$OWNER_ID"
 
 CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
-  "SELECT id FROM job_categories WHERE active=TRUE ORDER BY id LIMIT 1;")
+  "SELECT id FROM job_categories WHERE slug='mala-paczka' AND active=TRUE;")
 CATEGORY_ID="${CATEGORY_ID//[[:space:]]/}"
 test -n "$CATEGORY_ID"
 
