@@ -122,6 +122,8 @@ jobs:
         run: bash .github/scripts/nearby-category-smoke.sh
       - name: Verify encrypted job attachments and lifecycle privacy
         run: bash .github/scripts/job-attachments-smoke.sh
+      - name: Verify database and attachment backup restore drill
+        run: bash .github/scripts/backup-restore-smoke.sh
       - name: Verify receipt-backed job expense reimbursement
         run: bash .github/scripts/job-expense-smoke.sh
       - name: Start web gateway
