@@ -134,19 +134,14 @@ public class JobPublicationPaymentIntentCreateStateService {
     @Transactional
     public void retry(Long publicationId, String failureCode) {
         JobPublication publication = publicationRepository.findByIdForUpdate(publicationId).orElse(null);
-        if (publication == null || hasText(publication.getStripePaymentIntentId())) {
+        if (publication == null
+                || hasText(publication.getStripePaymentIntentId())
+                || publication.getPaymentReceivedAt() != null
+                || publication.isStripePaymentIntentCreateReviewRequired()) {
             return;
         }
 
         LocalDateTime now = LocalDateTime.now();
-        if (publication.getPaymentReceivedAt() != null) {
-            publication.retryStripePaymentIntentCreate(null, now, now);
-            publicationRepository.save(publication);
-            return;
-        }
-        if (publication.isStripePaymentIntentCreateReviewRequired()) {
-            return;
-        }
         if (!isWithinSafeReplayWindow(publication, now)) {
             publication.requireStripePaymentIntentCreateReview("IDEMPOTENCY_WINDOW_EXPIRED", now);
             publicationRepository.save(publication);
