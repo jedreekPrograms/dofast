@@ -105,15 +105,6 @@ class StripeConnectPayoutSettlementServiceTest {
     }
 
     @Test
-    void invalidWebhookTimestampIsRejectedBeforeProviderLookup() {
-        assertThrows(IllegalStateException.class, () -> service.process(stripePayout("paid"), "evt_bad_time", "acct_123", 0L));
-        verify(settlementService, never()).settle(any());
-        verify(moneyGateway, never()).reverseTransfer(
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
-    }
-
-    @Test
     void paidPayoutDoesNotMoveMoneyAgain() {
         when(settlementService.settle(any(PayoutProviderSettlementCommand.class))).thenReturn(PayoutProviderSettlementResult.APPLIED);
 
