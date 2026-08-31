@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.config;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -20,9 +21,20 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final PublicAuthRateLimitFilter publicAuthRateLimitFilter;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, PublicAuthRateLimitFilter publicAuthRateLimitFilter) {
+    public SecurityConfig(
+            JwtAuthFilter jwtAuthFilter,
+            @Value("${dofast.security.public-auth-rate-limit.max-requests:30}") int maxRequests,
+            @Value("${dofast.security.public-auth-rate-limit.window-seconds:60}") long windowSeconds,
+            @Value("${dofast.security.public-auth-rate-limit.max-entries:10000}") int maxEntries,
+            @Value("${dofast.security.public-auth-rate-limit.trust-forwarded-for:false}") boolean trustForwardedFor
+    ) {
         this.jwtAuthFilter = jwtAuthFilter;
-        this.publicAuthRateLimitFilter = publicAuthRateLimitFilter;
+        this.publicAuthRateLimitFilter = new PublicAuthRateLimitFilter(
+                maxRequests,
+                windowSeconds,
+                maxEntries,
+                trustForwardedFor
+        );
     }
 
     @Bean
