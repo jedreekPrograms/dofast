@@ -9,15 +9,18 @@ public class StripeRefundProviderResponseException extends RuntimeException {
 
     private final StripeRefundProviderResult providerResult;
     private final String violationCode;
+    private final boolean providerIdentityMatchesRequest;
 
     public StripeRefundProviderResponseException(
             String message,
             StripeRefundProviderResult providerResult,
-            String violationCode
+            String violationCode,
+            boolean providerIdentityMatchesRequest
     ) {
         super(message);
         this.providerResult = providerResult;
         this.violationCode = violationCode;
+        this.providerIdentityMatchesRequest = providerIdentityMatchesRequest;
     }
 
     public StripeRefundProviderResult providerResult() {
@@ -26,5 +29,9 @@ public class StripeRefundProviderResponseException extends RuntimeException {
 
     public String violationCode() {
         return violationCode;
+    }
+
+    public boolean providerIdentityMatchesRequest() {
+        return providerIdentityMatchesRequest;
     }
 }
