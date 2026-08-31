@@ -128,3 +128,49 @@ DB_STATE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
 test "${DB_STATE//[[:space:]]/}" = "TO_DESTINATION|null"
 
 echo 'Live tracking advances A -> stop 1 -> stop 2 -> B: OK'
+
+curl --fail --silent --show-error --output /tmp/multistop-completion.json \
+  -X POST -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/completion"
+curl --fail --silent --show-error --output /tmp/multistop-confirm.json \
+  -X POST -H "Authorization: Bearer $OWNER_TOKEN" "$api/jobs/$JOB_ID/confirm"
+
+TERMINAL_ROUTE_STATUS=$(curl --silent --output /tmp/multistop-terminal-route.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $OWNER_TOKEN" "$api/jobs/$JOB_ID/route")
+test "$TERMINAL_ROUTE_STATUS" = "403"
+
+# Make this terminal fixture older than the CI retention window. The cleanup scheduler runs every 500ms
+# in CI; production keeps its normal cadence and an explicitly configured retention period.
+docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 -c \
+  "UPDATE jobs SET completed_at = CURRENT_TIMESTAMP - INTERVAL '2 days' WHERE id = $JOB_ID AND status = 'DONE';" >/dev/null
+
+PURGED='f'
+for attempt in {1..30}; do
+  PURGED=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+    "SELECT exact_location_purged_at IS NOT NULL FROM jobs WHERE id=$JOB_ID;" | tr -d '[:space:]')
+  if test "$PURGED" = "t"; then
+    break
+  fi
+  sleep 0.5
+done
+test "$PURGED" = "t"
+
+PURGE_STATE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT (location IS NULL)::int || '|' || (location_private_label IS NULL)::int || '|' || (destination_location IS NULL)::int || '|' || (destination_private_label IS NULL)::int || '|' || (route_encoded_polyline IS NULL)::int || '|' || (route_quote_id IS NULL)::int FROM jobs WHERE id=$JOB_ID;" | tr -d '[:space:]')
+test "$PURGE_STATE" = "1|1|1|1|1|1"
+
+PRIVATE_STOP_FIELDS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT count(*) FROM job_route_stops WHERE job_id=$JOB_ID AND (location IS NOT NULL OR private_label IS NOT NULL OR place_id IS NOT NULL);" | tr -d '[:space:]')
+test "$PRIVATE_STOP_FIELDS" = "0"
+PUBLIC_STOP_FIELDS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT count(*) FROM job_route_stops WHERE job_id=$JOB_ID AND public_label IS NOT NULL;" | tr -d '[:space:]')
+test "$PUBLIC_STOP_FIELDS" = "2"
+
+QUOTE_ROWS=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT count(*) FROM route_quotes WHERE id='$QUOTE_ID'::uuid;" | tr -d '[:space:]')
+test "$QUOTE_ROWS" = "0"
+
+PRESERVED_HISTORY=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT status || '|' || price::text || '|' || (location_label IS NOT NULL)::int || '|' || (destination_label IS NOT NULL)::int || '|' || (route_distance_meters IS NOT NULL)::int FROM jobs WHERE id=$JOB_ID;" | tr -d '[:space:]')
+test "$PRESERVED_HISTORY" = "DONE|20.00|1|1|1"
+
+echo 'Terminal retention purges exact multi-stop route data while preserving public/accounting history: OK'
