@@ -55,6 +55,9 @@ export PAYOUT_STRIPE_CONNECT_RETURN_URL='https://app.example.test/wallet?stripe-
 export ROUTING_PROVIDER=google
 export GOOGLE_MAPS_ROUTES_API_KEY='prod-contract-routes-key'
 export TRACKING_CHECKPOINT_ARRIVAL_RADIUS_METERS=75
+export JOB_EXACT_LOCATION_RETENTION_DAYS=45
+export JOB_EXACT_LOCATION_CLEANUP_INTERVAL_MS=1800000
+export JOB_EXACT_LOCATION_CLEANUP_BATCH_SIZE=250
 export ATTACHMENT_ENCRYPTION_KEY_BASE64="$(python3 - <<'PY'
 import base64
 print(base64.b64encode(b'P' * 32).decode())
@@ -122,6 +125,9 @@ expected = {
     'PAYOUT_STRIPE_CONNECT_REFRESH_URL': 'https://app.example.test/wallet?stripe-connect=refresh',
     'PAYOUT_STRIPE_CONNECT_RETURN_URL': 'https://app.example.test/wallet?stripe-connect=return',
     'TRACKING_CHECKPOINT_ARRIVAL_RADIUS_METERS': '75',
+    'JOB_EXACT_LOCATION_RETENTION_DAYS': '45',
+    'JOB_EXACT_LOCATION_CLEANUP_INTERVAL_MS': '1800000',
+    'JOB_EXACT_LOCATION_CLEANUP_BATCH_SIZE': '250',
     'ATTACHMENT_STORAGE_ROOT': '/var/lib/dofast/attachments',
     'ATTACHMENT_MAX_FILE_SIZE': '8MB',
     'ATTACHMENT_MAX_REQUEST_SIZE': '9MB',
@@ -163,9 +169,10 @@ assert 'email-verification:' in text, 'production email verification block missi
 assert 'required: true' in text, 'production email verification must be mandatory'
 assert 'verify-base-url: ${EMAIL_VERIFICATION_BASE_URL}' in text, 'production email verification URL is not required'
 assert 'from-address: ${EMAIL_VERIFICATION_FROM_ADDRESS}' in text, 'production email verification sender is not required'
+assert 'retention-days: ${JOB_EXACT_LOCATION_RETENTION_DAYS}' in text, 'production exact-location retention must be explicit'
 PY
 
-for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_URL PASSWORD_RECOVERY_FROM_ADDRESS EMAIL_VERIFICATION_BASE_URL EMAIL_VERIFICATION_FROM_ADDRESS; do
+for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_URL PASSWORD_RECOVERY_FROM_ADDRESS EMAIL_VERIFICATION_BASE_URL EMAIL_VERIFICATION_FROM_ADDRESS JOB_EXACT_LOCATION_RETENTION_DAYS; do
   if env -u "$missing" docker compose -f "$compose_file" config >/tmp/dofast-prod-compose-missing-secret.log 2>&1; then
     echo "Production Compose unexpectedly accepted missing $missing"
     cat /tmp/dofast-prod-compose-missing-secret.log
@@ -174,4 +181,4 @@ for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_UR
 done
 rm -f /tmp/dofast-prod-compose-missing-secret.log
 
-echo 'Production Compose forwards finance/payout/auth/recovery/email-verification/tracking settings, enforces Secure refresh cookies, and persists encrypted attachments: OK'
+echo 'Production Compose forwards finance/payout/auth/recovery/email-verification/tracking/privacy settings, enforces explicit exact-location retention and Secure refresh cookies, and persists encrypted attachments: OK'
