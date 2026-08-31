@@ -4,11 +4,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -19,7 +16,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-@Component
 public class PublicAuthRateLimitFilter extends OncePerRequestFilter {
 
     private static final Set<String> LIMITED_PATHS = Set.of(
@@ -43,13 +39,7 @@ public class PublicAuthRateLimitFilter extends OncePerRequestFilter {
     private final int maxEntries;
     private final boolean trustForwardedFor;
 
-    @Autowired
-    public PublicAuthRateLimitFilter(
-            @Value("${dofast.security.public-auth-rate-limit.max-requests:30}") int maxRequests,
-            @Value("${dofast.security.public-auth-rate-limit.window-seconds:60}") long windowSeconds,
-            @Value("${dofast.security.public-auth-rate-limit.max-entries:10000}") int maxEntries,
-            @Value("${dofast.security.public-auth-rate-limit.trust-forwarded-for:false}") boolean trustForwardedFor
-    ) {
+    public PublicAuthRateLimitFilter(int maxRequests, long windowSeconds, int maxEntries, boolean trustForwardedFor) {
         this(maxRequests, windowSeconds, maxEntries, trustForwardedFor, Clock.systemUTC());
     }
 
