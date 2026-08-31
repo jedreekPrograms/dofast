@@ -369,12 +369,13 @@ public class JobService {
     }
 
     private boolean canAccessExactLocation(Job job, User currentUser) {
-        if (sameUser(job.getCreatedBy(), currentUser)) return true;
+        boolean requester = sameUser(job.getCreatedBy(), currentUser);
         boolean assignedWorker = sameUser(job.getTakenBy(), currentUser);
-        boolean activeJob = job.getStatus() == JobStatus.IN_PROGRESS
+        boolean activeAcceptedJob = job.getStatus() == JobStatus.IN_PROGRESS
                 || job.getStatus() == JobStatus.COMPLETION_REQUESTED
                 || job.getStatus() == JobStatus.DISPUTED;
-        return assignedWorker && activeJob;
+        boolean requesterPreAssignment = requester && job.getStatus() == JobStatus.OPEN;
+        return requesterPreAssignment || (activeAcceptedJob && (requester || assignedWorker));
     }
 
     private String exactOriginLabel(Job job) {
