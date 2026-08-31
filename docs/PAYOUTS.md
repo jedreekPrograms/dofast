@@ -106,7 +106,7 @@ Once `SUBMITTED`, `next_attempt_at` is reused as a read-only reconciliation leas
 The response must match payout id, amount, currency, user metadata, Transfer reference and connected account. Provider states are handled conservatively:
 
 - `pending` / `in_transit` -> remain `SUBMITTED`;
-- `paid` -> terminal paid settlement;
+- `paid` -> terminal paid settlement only after the platform Transfer is re-read and proven completely unreversed;
 - `failed` / `canceled` -> terminal failure settlement after safe provider-fund recovery;
 - unknown state, identity mismatch or provider-read failure -> remain `SUBMITTED`, retain the reserve and retry only the future read.
 
@@ -114,11 +114,13 @@ The response must match payout id, amount, currency, user metadata, Transfer ref
 
 The signed `/webhooks/stripe` endpoint handles connected-account payout events. `event.created` ordering prevents stale terminal events from regressing newer provider state, and contradictory terminal transitions fail closed.
 
-For `PAID`, no second wallet debit is created because `PAYOUT_RESERVE` already removed the money from spendable balance.
+For `PAID`, no second wallet debit is created because `PAYOUT_RESERVE` already removed the money from spendable balance. Before a live `SUBMITTED -> PAID` transition, doFast also retrieves the exact platform Transfer and revalidates amount, currency, destination account, payout id and user id. The Transfer must have `amount_reversed = 0` and must not be marked reversed. Any full or partial reversal makes `PAID` fail closed, leaving the payout and wallet reserve unresolved rather than recording money as paid when the platform Transfer has already been recovered.
 
 For `FAILED` or `CANCELED`, failed payout funds return to the connected Stripe balance rather than automatically to the doFast platform. doFast therefore validates and reverses the original platform Transfer first. Only after that provider recovery succeeds may local settlement move to `FAILED` and execute the idempotent `PAYOUT_RESTORE`.
 
-External transfer reversal is preflighted against local state before the provider call. Repeated already-failed events do not reverse money again. If transfer recovery is unavailable or ambiguous, processing fails and the wallet reservation remains held.
+External transfer reversal is preflighted against local state before the provider call. The reversal gateway always retrieves and identity-validates the Transfer before creating a reversal. If a previous reversal succeeded at Stripe but the process crashed before the local `FAILED` transaction committed, a retry observes `amount_reversed`/`reversed` from Stripe and does not create a second reversal. If a contradictory `paid` event wins the next retry after that crash, the new unreversed-Transfer guard rejects it before local paid settlement. This closes the external-reversal-success/local-transaction-rollback window without inventing a local provider state.
+
+Repeated already-failed events do not reverse money again. If transfer recovery or the authoritative Transfer read is unavailable or ambiguous, processing fails and the wallet reservation remains held.
 
 ## Administration
 
@@ -148,7 +150,7 @@ Provider account ids, Transfer ids, Payout ids, payout amounts and provider fail
 
 ## Database and CI
 
-Flyway migrations own payout persistence and provider references. This crash-window hardening requires **no new migration**: it uses the existing `processing_started_at`, `attempt_count`, `failure_code`, `provider_transfer_reference` and `provider_reference` fields.
+Flyway migrations own payout persistence and provider references. This crash-window hardening requires **no new migration**: it uses the existing `processing_started_at`, `attempt_count`, `failure_code`, `provider_transfer_reference` and `provider_reference` fields plus authoritative Stripe Transfer state during terminal settlement.
 
 `Worker payout smoke` runs against PostgreSQL and covers sandbox reservation/idempotency/cancellation/settlement plus a scheduler scenario that inserts an old Stripe Connect `PROCESSING` row. The smoke requires it to become exactly `REVIEW_REQUIRED|STRIPE_IDEMPOTENCY_WINDOW_EXPIRED`, with the original attempt count unchanged, no provider references invented and no `PAYOUT_RESTORE` created.
 
@@ -162,9 +164,12 @@ Unit tests additionally cover:
 - wrong signed-event identity metadata cannot attach an external payout;
 - stale/contradictory payout events cannot regress financial state;
 - failed payouts reverse the Transfer before wallet restoration;
+- reversal retry after provider success short-circuits from authoritative `amount_reversed` state;
+- `PAID` settlement requires an unreversed platform Transfer and rejects even a partial reversal;
+- a reversal-success/local-rollback crash cannot be followed by a contradictory local `PAID` transition;
 - submitted reconciliation remains read-only.
 
-Real Stripe Connect test-mode end-to-end validation with an Express account remains a separate launch gate. Only that can prove actual provider account creation, Transfer, connected-account Payout, webhook delivery and retrieval against Stripe's test environment.
+Real Stripe Connect test-mode end-to-end validation with an Express account remains a separate launch gate. Only that can prove actual provider account creation, Transfer, connected-account Payout, webhook delivery, Transfer reversal and retrieval against Stripe's test environment.
 
 ## Related publication-payment flow
 
