@@ -53,7 +53,8 @@ public class StripeRefundGateway {
             throw responseMismatch(
                     "Stripe refund does not match the requested PaymentIntent",
                     result,
-                    "provider_payment_intent_mismatch"
+                    "provider_payment_intent_mismatch",
+                    false
             );
         }
         if (refund.getAmount() == null
@@ -61,21 +62,24 @@ public class StripeRefundGateway {
             throw responseMismatch(
                     "Stripe refund does not match the requested amount",
                     result,
-                    "provider_amount_mismatch"
+                    "provider_amount_mismatch",
+                    true
             );
         }
         if (refund.getCurrency() == null || !command.currency().equalsIgnoreCase(refund.getCurrency())) {
             throw responseMismatch(
                     "Stripe refund does not match the requested currency",
                     result,
-                    "provider_currency_mismatch"
+                    "provider_currency_mismatch",
+                    true
             );
         }
         if (refund.getStatus() == null || refund.getStatus().isBlank()) {
             throw responseMismatch(
                     "Stripe returned a refund without a status",
                     result,
-                    "provider_status_missing"
+                    "provider_status_missing",
+                    true
             );
         }
     }
@@ -83,8 +87,14 @@ public class StripeRefundGateway {
     private StripeRefundProviderResponseException responseMismatch(
             String message,
             StripeRefundProviderResult result,
-            String violationCode
+            String violationCode,
+            boolean providerIdentityMatchesRequest
     ) {
-        return new StripeRefundProviderResponseException(message, result, violationCode);
+        return new StripeRefundProviderResponseException(
+                message,
+                result,
+                violationCode,
+                providerIdentityMatchesRequest
+        );
     }
 }
