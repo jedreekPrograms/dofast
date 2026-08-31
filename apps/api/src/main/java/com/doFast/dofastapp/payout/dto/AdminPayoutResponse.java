@@ -15,6 +15,7 @@ public record AdminPayoutResponse(
         String providerCode,
         String providerReference,
         String providerTransferReference,
+        boolean providerOutcomeAmbiguous,
         int attemptCount,
         String failureCode,
         LocalDateTime requestedAt,
