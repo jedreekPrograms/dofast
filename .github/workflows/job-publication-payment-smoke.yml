@@ -7,6 +7,7 @@ on:
       - ".github/workflows/job-publication-payment-smoke.yml"
       - ".github/scripts/job-publication-payment-smoke.sh"
       - ".github/scripts/job-publication-minimum-funding-smoke.sh"
+      - ".github/scripts/job-publication-payment-intent-create-recovery-schema-smoke.sh"
       - ".github/scripts/seed-wallet-funding.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/publication/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
@@ -14,6 +15,8 @@ on:
       - "apps/api/src/main/resources/db/migration/V40__job_publication_payments.sql"
       - "apps/api/src/main/resources/db/migration/V43__job_publication_payment_recovery.sql"
       - "apps/api/src/main/resources/db/migration/V49__wallet_source_of_funds.sql"
+      - "apps/api/src/main/resources/db/migration/V56__job_publication_payment_intent_cleanup_recovery.sql"
+      - "apps/api/src/main/resources/db/migration/V57__job_publication_payment_intent_create_recovery.sql"
       - "apps/web/src/features/jobs/**"
       - "apps/web/src/shared/payments/**"
   pull_request:
@@ -22,6 +25,7 @@ on:
       - ".github/workflows/job-publication-payment-smoke.yml"
       - ".github/scripts/job-publication-payment-smoke.sh"
       - ".github/scripts/job-publication-minimum-funding-smoke.sh"
+      - ".github/scripts/job-publication-payment-intent-create-recovery-schema-smoke.sh"
       - ".github/scripts/seed-wallet-funding.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/publication/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
@@ -29,6 +33,8 @@ on:
       - "apps/api/src/main/resources/db/migration/V40__job_publication_payments.sql"
       - "apps/api/src/main/resources/db/migration/V43__job_publication_payment_recovery.sql"
       - "apps/api/src/main/resources/db/migration/V49__wallet_source_of_funds.sql"
+      - "apps/api/src/main/resources/db/migration/V56__job_publication_payment_intent_cleanup_recovery.sql"
+      - "apps/api/src/main/resources/db/migration/V57__job_publication_payment_intent_create_recovery.sql"
       - "apps/web/src/features/jobs/**"
       - "apps/web/src/shared/payments/**"
 
@@ -79,6 +85,9 @@ jobs:
           docker compose ps
           docker compose logs db api
           exit 1
+
+      - name: Verify PaymentIntent create-recovery schema
+        run: bash .github/scripts/job-publication-payment-intent-create-recovery-schema-smoke.sh
 
       - name: Verify wallet reservation, recovery contract, idempotency, cancellation and fully-funded publication
         run: bash .github/scripts/job-publication-payment-smoke.sh
