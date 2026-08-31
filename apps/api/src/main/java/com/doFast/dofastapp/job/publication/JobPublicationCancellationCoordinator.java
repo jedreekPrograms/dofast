@@ -20,7 +20,7 @@ public class JobPublicationCancellationCoordinator {
 
     public JobPublicationResponse cancel(Long publicationId, User currentUser) {
         JobPublicationResponse response = publicationService.cancel(publicationId, currentUser);
-        paymentIntentCleanupService.cancelAttachedIntentBestEffort(publicationId);
+        paymentIntentCleanupService.process(publicationId);
         return response;
     }
 }
