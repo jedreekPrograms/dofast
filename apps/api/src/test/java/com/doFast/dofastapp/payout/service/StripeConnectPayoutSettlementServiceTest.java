@@ -77,6 +77,43 @@ class StripeConnectPayoutSettlementServiceTest {
     }
 
     @Test
+    void staleFailedWebhookCannotReverseTransferOrRegressSettlement() {
+        payout.recordProviderStateEventCreatedAt(200L);
+
+        PayoutProviderSettlementResult result = service.process(stripePayout("failed"), "evt_failed_stale", "acct_123", 199L);
+
+        assertEquals(PayoutProviderSettlementResult.STALE, result);
+        assertEquals(200L, payout.getProviderStateEventCreatedAt());
+        verify(moneyGateway, never()).reverseTransfer(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+        verify(settlementService, never()).settle(any());
+    }
+
+    @Test
+    void newerWebhookAdvancesDurableProviderOrderingWatermark() {
+        payout.recordProviderStateEventCreatedAt(200L);
+        when(settlementService.settle(any(PayoutProviderSettlementCommand.class))).thenReturn(PayoutProviderSettlementResult.APPLIED);
+
+        PayoutProviderSettlementResult result = service.process(stripePayout("paid"), "evt_paid_newer", "acct_123", 201L);
+
+        assertEquals(PayoutProviderSettlementResult.APPLIED, result);
+        assertEquals(201L, payout.getProviderStateEventCreatedAt());
+        verify(moneyGateway, never()).reverseTransfer(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void invalidWebhookTimestampIsRejectedBeforeProviderLookup() {
+        assertThrows(IllegalStateException.class, () -> service.process(stripePayout("paid"), "evt_bad_time", "acct_123", 0L));
+        verify(settlementService, never()).settle(any());
+        verify(moneyGateway, never()).reverseTransfer(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void paidPayoutDoesNotMoveMoneyAgain() {
         when(settlementService.settle(any(PayoutProviderSettlementCommand.class))).thenReturn(PayoutProviderSettlementResult.APPLIED);
 
