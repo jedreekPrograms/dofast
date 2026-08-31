@@ -178,7 +178,7 @@ STRIPE_LOTS_AFTER_FAILURE=$(docker compose exec -T db psql -U dofast -d dofast -
 BALANCE_AFTER_FAILURE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT balance FROM wallets WHERE id=$WALLET_ID;" | tr -d '[:space:]')
 PUBLICATION_AFTER_FAILURE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
-  "SELECT status || '|' || (payment_received_at IS NULL) || '|' || (published_job_id IS NULL) || '|' || (stripe_payment_intent_id IS NULL) || '|' || (request_payload IS NOT NULL) FROM job_publications WHERE id=$PUBLICATION_ID;" | tr -d '[:space:]')
+  "SELECT status || '|' || CASE WHEN payment_received_at IS NULL THEN '1' ELSE '0' END || '|' || CASE WHEN published_job_id IS NULL THEN '1' ELSE '0' END || '|' || CASE WHEN stripe_payment_intent_id IS NULL THEN '1' ELSE '0' END || '|' || CASE WHEN request_payload IS NOT NULL THEN '1' ELSE '0' END FROM job_publications WHERE id=$PUBLICATION_ID;" | tr -d '[:space:]')
 RESERVE_AFTER_FAILURE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT count(*) FROM wallet_transactions WHERE operation_key='${RESERVE_KEY}';" | tr -d '[:space:]')
 
@@ -191,7 +191,7 @@ test "$JOB_AFTER_FAILURE" = '0'
 test "$ESCROW_AFTER_FAILURE" = '0'
 test "$STRIPE_LOTS_AFTER_FAILURE" = '0'
 test "$BALANCE_AFTER_FAILURE" = '0.00'
-test "$PUBLICATION_AFTER_FAILURE" = 'PAYMENT_REQUIRED|t|t|t|t'
+test "$PUBLICATION_AFTER_FAILURE" = 'PAYMENT_REQUIRED|1|1|1|1'
 test "$RESERVE_AFTER_FAILURE" = '1'
 
 cleanup_failpoint
@@ -212,13 +212,13 @@ PAYMENT_STATE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
 test "$PAYMENT_STATE" = "${payment_intent_id}|${event_id}|${USER_ID}|45.00|PLN|JOB_PUBLICATION|${PUBLICATION_ID}"
 
 PUBLICATION_STATE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
-  "SELECT status || '|' || (payment_received_at IS NOT NULL) || '|' || published_job_id || '|' || stripe_payment_intent_id || '|' || (request_payload IS NULL) FROM job_publications WHERE id=$PUBLICATION_ID;" | tr -d '[:space:]')
+  "SELECT status || '|' || CASE WHEN payment_received_at IS NOT NULL THEN '1' ELSE '0' END || '|' || published_job_id || '|' || stripe_payment_intent_id || '|' || CASE WHEN request_payload IS NULL THEN '1' ELSE '0' END FROM job_publications WHERE id=$PUBLICATION_ID;" | tr -d '[:space:]')
 IFS='|' read -r PUB_STATUS PUB_PAID JOB_ID PUB_PI PUB_PAYLOAD_CLEARED <<< "$PUBLICATION_STATE"
 test "$PUB_STATUS" = 'PUBLISHED'
-test "$PUB_PAID" = 't'
+test "$PUB_PAID" = '1'
 test -n "$JOB_ID"
 test "$PUB_PI" = "$payment_intent_id"
-test "$PUB_PAYLOAD_CLEARED" = 't'
+test "$PUB_PAYLOAD_CLEARED" = '1'
 
 JOB_STATE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT status || '|' || price::text || '|' || created_by_id FROM jobs WHERE id=$JOB_ID AND title='Publication settlement crash smoke';" | tr -d '[:space:]')
