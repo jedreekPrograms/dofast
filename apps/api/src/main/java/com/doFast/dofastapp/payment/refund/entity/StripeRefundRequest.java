@@ -137,6 +137,32 @@ public class StripeRefundRequest {
         updatedAt = now;
     }
 
+    public boolean recordProviderResponseForReview(
+            String trustedRefundId,
+            String providerStatus,
+            String failureReason,
+            LocalDateTime now
+    ) {
+        // A signed webhook can race the synchronous provider response and settle this request first.
+        // Never regress or quarantine a state that has already moved beyond the dispatch claim.
+        if (status != StripeRefundStatus.DISPATCHING) {
+            return false;
+        }
+        if (trustedRefundId != null && !trustedRefundId.isBlank()) {
+            attachRefundId(trustedRefundId);
+        }
+        stripeStatus = normalize(providerStatus);
+        if (submittedAt == null) {
+            submittedAt = now;
+        }
+        status = StripeRefundStatus.REVIEW_REQUIRED;
+        this.failureReason = normalizeFailure(failureReason);
+        nextAttemptAt = null;
+        resolvedAt = null;
+        updatedAt = now;
+        return true;
+    }
+
     public void reschedule(String failureReason, LocalDateTime nextAttemptAt, LocalDateTime now) {
         if (status != StripeRefundStatus.DISPATCHING) {
             return;
