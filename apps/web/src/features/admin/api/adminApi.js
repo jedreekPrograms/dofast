@@ -100,11 +100,11 @@ export function enforceAdminJobReport(reportId, reason = '') {
   })
 }
 
-export function enforceAdminJobReportAccount(reportId, reason = '') {
+export function enforceAdminJobReportAccount(reportId, reason = '', action = 'SUSPEND_JOB_OWNER') {
   return apiRequest(`/admin/job-reports/${reportId}/account-enforcement`, {
     method: 'POST',
     body: JSON.stringify({
-      action: 'SUSPEND_JOB_OWNER',
+      action,
       reason: reason.trim() || null,
     }),
   })
