@@ -118,6 +118,37 @@ public class PayoutDispatchQueue {
     }
 
     @Transactional
+    public void quarantineProviderResponse(
+            Long payoutId,
+            String trustedTransferReference,
+            String trustedPayoutReference,
+            String failureCode
+    ) {
+        PayoutRequest payout = payoutRepository.findByIdForUpdate(payoutId)
+                .orElseThrow(() -> new IllegalStateException("Payout disappeared during provider response quarantine"));
+        LocalDateTime now = LocalDateTime.now();
+        boolean quarantined = payout.recordProviderResponseForReview(
+                safeProviderReference(trustedTransferReference),
+                safeProviderReference(trustedPayoutReference),
+                normalizeFailureCode(failureCode),
+                now
+        );
+        if (!quarantined) {
+            // A signed webhook or another authoritative path won the race. Never regress a newer
+            // SUBMITTED/PAID/FAILED state back to REVIEW_REQUIRED because of a late sync response.
+            return;
+        }
+        payoutRepository.saveAndFlush(payout);
+        record(
+                payout,
+                PayoutEventType.REVIEW_REQUIRED,
+                PayoutEventSource.PROVIDER,
+                "Stripe Connect zwrócił odpowiedź po operacji finansowej, ale odpowiedź narusza lokalny kontrakt. Automatyczny retry i zwrot rezerwy są zablokowane do zweryfikowanego webhooka lub ręcznej decyzji.",
+                now
+        );
+    }
+
+    @Transactional
     public void complete(Long payoutId, PayoutDispatchResult result) {
         PayoutRequest payout = payoutRepository.findByIdForUpdate(payoutId)
                 .orElseThrow(() -> new IllegalStateException("Payout disappeared during dispatch"));
@@ -203,6 +234,14 @@ public class PayoutDispatchQueue {
 
     private String providerIdempotencyKey(PayoutRequest payout) {
         return "payout:" + payout.getId() + ":provider";
+    }
+
+    private String safeProviderReference(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.length() <= 255 ? normalized : null;
     }
 
     private String normalizeFailureCode(String value) {
