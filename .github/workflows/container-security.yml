@@ -1,0 +1,87 @@
+name: Container security
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/container-security.yml"
+      - "apps/api/Dockerfile"
+      - "apps/api/pom.xml"
+      - "apps/api/src/**"
+      - "apps/web/Dockerfile"
+      - "apps/web/package.json"
+      - "apps/web/package-lock.json"
+      - "apps/web/src/**"
+      - "infra/nginx/**"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/container-security.yml"
+      - "apps/api/Dockerfile"
+      - "apps/api/pom.xml"
+      - "apps/api/src/**"
+      - "apps/web/Dockerfile"
+      - "apps/web/package.json"
+      - "apps/web/package-lock.json"
+      - "apps/web/src/**"
+      - "infra/nginx/**"
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan-production-image:
+    name: Scan ${{ matrix.name }} image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: apps/api/Dockerfile
+            image: dofast-api:security-scan
+          - name: web
+            dockerfile: apps/web/Dockerfile
+            image: dofast-web:security-scan
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build production image
+        shell: bash
+        run: docker build --pull -f "${{ matrix.dockerfile }}" -t "${{ matrix.image }}" .
+
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ matrix.image }}
+          format: cyclonedx
+          output: ${{ matrix.name }}-sbom.cdx.json
+          exit-code: "0"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-container-sbom
+          path: ${{ matrix.name }}-sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Block fixable high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ matrix.image }}
+          format: table
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-setup-trivy: true
