@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -28,6 +29,7 @@ public class WebSocketInboundRateLimitInterceptor implements ChannelInterceptor 
     private final long windowSeconds;
     private final int maxEntries;
 
+    @Autowired
     public WebSocketInboundRateLimitInterceptor(
             @Value("${dofast.security.websocket-rate-limit.max-messages:120}") int maxMessages,
             @Value("${dofast.security.websocket-rate-limit.window-seconds:10}") long windowSeconds,
