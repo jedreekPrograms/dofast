@@ -70,7 +70,7 @@ public class JobPublicationPaymentIntentCleanupQueue {
     }
 
     @Transactional
-    public void complete(Long publicationId, String providerState) {
+    public void complete(Long publicationId) {
         JobPublication publication = publicationRepository.findByIdForUpdate(publicationId).orElse(null);
         if (publication == null || publication.getStripePaymentIntentCleanupCompletedAt() != null) {
             return;
@@ -78,7 +78,7 @@ public class JobPublicationPaymentIntentCleanupQueue {
         if (publication.getStatus() != JobPublicationStatus.CANCELLED) {
             return;
         }
-        publication.completeStripePaymentIntentCleanup(providerState, LocalDateTime.now());
+        publication.completeStripePaymentIntentCleanup(LocalDateTime.now());
         publicationRepository.save(publication);
     }
 
@@ -94,7 +94,7 @@ public class JobPublicationPaymentIntentCleanupQueue {
 
         LocalDateTime now = LocalDateTime.now();
         if (publication.getPaymentReceivedAt() != null) {
-            publication.completeStripePaymentIntentCleanup("PROVIDER_SUCCEEDED", now);
+            publication.completeStripePaymentIntentCleanup(now);
             publicationRepository.save(publication);
             return;
         }
