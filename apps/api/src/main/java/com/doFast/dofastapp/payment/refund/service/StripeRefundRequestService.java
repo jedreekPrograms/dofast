@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -28,6 +29,12 @@ public class StripeRefundRequestService {
 
     private static final String CURRENCY = "PLN";
     private static final int MAX_DISPATCH_ATTEMPTS = 8;
+    private static final int STALE_RECOVERY_BATCH_SIZE = 100;
+    private static final Duration STALE_DISPATCH_TIMEOUT = Duration.ofMinutes(2);
+    // Stripe API v1 idempotency keys can be pruned once they are at least 24 hours old.
+    // Stop automatic retries one hour earlier so a crash/restart cannot turn an old ambiguous
+    // partial refund into a second provider-side refund after the original key was discarded.
+    private static final Duration PROVIDER_IDEMPOTENCY_RETRY_WINDOW = Duration.ofHours(23);
 
     private final StripeRefundRequestRepository refundRepository;
     private final PaymentTransactionRepository paymentRepository;
@@ -173,7 +180,22 @@ public class StripeRefundRequestService {
     @Transactional
     public int requeueStaleDispatches() {
         LocalDateTime now = LocalDateTime.now();
-        return refundRepository.requeueStaleDispatches(now.minusMinutes(2), now);
+        LocalDateTime staleBefore = now.minus(STALE_DISPATCH_TIMEOUT);
+        LocalDateTime unsafeRetryBefore = now.minus(PROVIDER_IDEMPOTENCY_RETRY_WINDOW);
+        List<StripeRefundRequest> stale = refundRepository.findStaleDispatchesForUpdate(
+                staleBefore,
+                STALE_RECOVERY_BATCH_SIZE
+        );
+        for (StripeRefundRequest request : stale) {
+            LocalDateTime lastDispatchAt = request.getUpdatedAt();
+            if (lastDispatchAt == null || !lastDispatchAt.isAfter(unsafeRetryBefore)) {
+                request.markReviewRequired("provider_idempotency_window_expired", now);
+            } else {
+                request.reschedule("stale_dispatch_recovered", now, now);
+            }
+        }
+        refundRepository.saveAll(stale);
+        return stale.size();
     }
 
     public List<Long> findDispatchableIds(int limit) {
