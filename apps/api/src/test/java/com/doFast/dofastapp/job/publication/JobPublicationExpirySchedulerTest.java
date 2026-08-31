@@ -11,7 +11,7 @@ import static org.mockito.Mockito.when;
 class JobPublicationExpirySchedulerTest {
 
     @Test
-    void cleansUpStripeIntentOnlyAfterLocalExpiryCommitted() {
+    void dispatchesDurableStripeCleanupOnlyAfterLocalExpiryCommitted() {
         JobPublicationService publicationService = mock(JobPublicationService.class);
         JobPublicationPaymentIntentCleanupService cleanupService = mock(JobPublicationPaymentIntentCleanupService.class);
         JobPublicationExpiryScheduler scheduler = new JobPublicationExpiryScheduler(publicationService, cleanupService);
@@ -22,15 +22,15 @@ class JobPublicationExpirySchedulerTest {
 
         var order = inOrder(publicationService, cleanupService);
         order.verify(publicationService).expireOneAndGetId();
-        order.verify(cleanupService).cancelAttachedIntentBestEffort(41L);
+        order.verify(cleanupService).process(41L);
         order.verify(publicationService).expireOneAndGetId();
-        order.verify(cleanupService).cancelAttachedIntentBestEffort(42L);
+        order.verify(cleanupService).process(42L);
         order.verify(publicationService).expireOneAndGetId();
         verify(publicationService, times(3)).expireOneAndGetId();
     }
 
     @Test
-    void doesNotCallProviderWhenNothingExpired() {
+    void doesNotCallProviderCleanupWhenNothingExpired() {
         JobPublicationService publicationService = mock(JobPublicationService.class);
         JobPublicationPaymentIntentCleanupService cleanupService = mock(JobPublicationPaymentIntentCleanupService.class);
         JobPublicationExpiryScheduler scheduler = new JobPublicationExpiryScheduler(publicationService, cleanupService);
@@ -40,6 +40,6 @@ class JobPublicationExpirySchedulerTest {
         scheduler.expirePendingPublications();
 
         verify(publicationService).expireOneAndGetId();
-        verify(cleanupService, times(0)).cancelAttachedIntentBestEffort(org.mockito.ArgumentMatchers.anyLong());
+        verify(cleanupService, times(0)).process(org.mockito.ArgumentMatchers.anyLong());
     }
 }
