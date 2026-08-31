@@ -212,7 +212,7 @@ function AdminPayoutsPage() {
                         minLength="5"
                         maxLength="1000"
                         value={reason}
-                        onChange={(event) => setReasonById((current) => ({ ...current, [item.id]: event.target.value }))
+                        onChange={(event) => setReasonById((current) => ({ ...current, [item.id]: event.target.value }))}
                         placeholder="Wymagany do trwałego audytu decyzji"
                       />
                     </label>
