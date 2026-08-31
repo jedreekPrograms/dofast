@@ -32,7 +32,12 @@ class StripeRefundDispatchServiceTest {
         verify(gateway).create(command);
         verify(requestService).recordProviderResult(41L, providerResult);
         verify(requestService, never()).recordDispatchFailure(41L);
-        verify(requestService, never()).recordProviderResponseForReview(41L, providerResult, "provider_amount_mismatch");
+        verify(requestService, never()).recordProviderResponseForReview(
+                41L,
+                providerResult,
+                "provider_amount_mismatch",
+                true
+        );
     }
 
     @Test
@@ -46,7 +51,8 @@ class StripeRefundDispatchServiceTest {
         StripeRefundProviderResponseException responseException = new StripeRefundProviderResponseException(
                 "Stripe refund does not match the requested amount",
                 providerResult,
-                "provider_amount_mismatch"
+                "provider_amount_mismatch",
+                true
         );
 
         when(requestService.claimForDispatch(41L)).thenReturn(command);
@@ -58,10 +64,40 @@ class StripeRefundDispatchServiceTest {
         verify(requestService).recordProviderResponseForReview(
                 41L,
                 providerResult,
-                "provider_amount_mismatch"
+                "provider_amount_mismatch",
+                true
         );
         verify(requestService, never()).recordDispatchFailure(41L);
         verify(requestService, never()).recordProviderResult(41L, providerResult);
+    }
+
+    @Test
+    void paymentIntentMismatchStopsRetryButDoesNotAttachUntrustedProviderIdentity() {
+        StripeRefundRequestService requestService = mock(StripeRefundRequestService.class);
+        StripeRefundGateway gateway = mock(StripeRefundGateway.class);
+        StripeRefundDispatchService dispatchService = new StripeRefundDispatchService(requestService, gateway);
+
+        StripeRefundDispatchCommand command = command();
+        StripeRefundProviderResult providerResult = providerResult();
+        StripeRefundProviderResponseException responseException = new StripeRefundProviderResponseException(
+                "Stripe refund does not match the requested PaymentIntent",
+                providerResult,
+                "provider_payment_intent_mismatch",
+                false
+        );
+
+        when(requestService.claimForDispatch(41L)).thenReturn(command);
+        when(gateway.create(command)).thenThrow(responseException);
+
+        dispatchService.dispatch(41L);
+
+        verify(requestService).recordProviderResponseForReview(
+                41L,
+                providerResult,
+                "provider_payment_intent_mismatch",
+                false
+        );
+        verify(requestService, never()).recordDispatchFailure(41L);
     }
 
     private StripeRefundDispatchCommand command() {
