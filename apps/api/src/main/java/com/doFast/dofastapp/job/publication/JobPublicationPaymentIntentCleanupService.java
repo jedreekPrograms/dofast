@@ -54,7 +54,7 @@ public class JobPublicationPaymentIntentCleanupService {
 
             String providerStatus = normalizeStatus(intent.getStatus());
             if (TERMINAL_STATUSES.contains(providerStatus)) {
-                queue.complete(publicationId, "PROVIDER_" + providerStatus.toUpperCase(Locale.ROOT));
+                queue.complete(publicationId);
                 return;
             }
             if (!isCancellableStatus(providerStatus)) {
@@ -68,7 +68,7 @@ public class JobPublicationPaymentIntentCleanupService {
                 queue.retry(publicationId, "CANCEL_RETURNED_" + sanitizeStatus(cancelledStatus));
                 return;
             }
-            queue.complete(publicationId, "PROVIDER_CANCELED");
+            queue.complete(publicationId);
         } catch (StripeException ex) {
             queue.retry(publicationId, "STRIPE_EXCEPTION");
             log.warn("Could not clean up Stripe PaymentIntent {} for cancelled job publication {} on attempt {}",
