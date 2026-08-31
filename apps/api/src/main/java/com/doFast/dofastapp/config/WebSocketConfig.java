@@ -12,13 +12,16 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final WebSocketSecurityInterceptor securityInterceptor;
+    private final WebSocketInboundRateLimitInterceptor rateLimitInterceptor;
     private final WebSocketOriginPolicy originPolicy;
 
     public WebSocketConfig(
             WebSocketSecurityInterceptor securityInterceptor,
+            WebSocketInboundRateLimitInterceptor rateLimitInterceptor,
             WebSocketOriginPolicy originPolicy
     ) {
         this.securityInterceptor = securityInterceptor;
+        this.rateLimitInterceptor = rateLimitInterceptor;
         this.originPolicy = originPolicy;
     }
 
@@ -31,7 +34,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(securityInterceptor);
+        // Authentication/authorization must run first so rate limiting can use the trusted principal.
+        registration.interceptors(securityInterceptor, rateLimitInterceptor);
     }
 
     @Override
