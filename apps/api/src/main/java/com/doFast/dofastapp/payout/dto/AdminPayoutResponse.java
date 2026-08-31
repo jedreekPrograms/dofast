@@ -14,6 +14,7 @@ public record AdminPayoutResponse(
         PayoutStatus status,
         String providerCode,
         String providerReference,
+        String providerTransferReference,
         int attemptCount,
         String failureCode,
         LocalDateTime requestedAt,
