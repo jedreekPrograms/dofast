@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.payout.service;
 
 import com.doFast.dofastapp.payout.entity.PayoutRequest;
+import com.doFast.dofastapp.payout.enums.PayoutStatus;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -24,6 +25,9 @@ final class PayoutProviderSafetyPolicy {
 
     static boolean requiresExternalProviderReconciliation(PayoutRequest payout) {
         return payout != null
-                && STRIPE_CONNECT_IDEMPOTENCY_WINDOW_EXPIRED.equals(payout.getFailureCode());
+                && payout.getStatus() == PayoutStatus.REVIEW_REQUIRED
+                && StripeConnectOnboardingService.PROVIDER_CODE.equals(payout.getProviderCode())
+                && payout.getProviderReference() == null
+                && payout.getAttemptCount() > 0;
     }
 }
