@@ -6,7 +6,7 @@ USER_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT id FROM users WHERE email='payout-worker@example.com';" | tr -d '[:space:]')
 test -n "$USER_ID"
 
-PAYOUT_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
+docker compose exec -T db psql -U dofast -d dofast -v ON_ERROR_STOP=1 >/dev/null <<SQL
 INSERT INTO payout_requests (
     user_id,
     request_key,
@@ -29,9 +29,11 @@ INSERT INTO payout_requests (
     CURRENT_TIMESTAMP - INTERVAL '26 hours',
     CURRENT_TIMESTAMP - INTERVAL '25 hours',
     CURRENT_TIMESTAMP - INTERVAL '25 hours'
-)
-RETURNING id;
-" | tr -d '[:space:]')
+);
+SQL
+
+PAYOUT_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
+  "SELECT id FROM payout_requests WHERE request_key='payout-idempotency-expiry-smoke';" | tr -d '[:space:]')
 test -n "$PAYOUT_ID"
 
 STATE=''
