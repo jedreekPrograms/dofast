@@ -48,6 +48,7 @@ class PasswordRecoveryServiceTest {
         PasswordRecoveryProperties properties = new PasswordRecoveryProperties(
                 30,
                 7,
+                60,
                 "smtp",
                 "https://app.example.test/reset-password",
                 "security@example.test"
@@ -84,6 +85,7 @@ class PasswordRecoveryServiceTest {
         service.requestReset("USER@example.com");
 
         verify(userRepository).findByIdForUpdate(9L);
+        verify(tokenRepository).existsByUserIdAndCreatedAtAfter(eq(9L), any(LocalDateTime.class));
         verify(tokenRepository).invalidateActiveForUser(eq(9L), any(LocalDateTime.class));
         ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
         verify(tokenRepository).saveAndFlush(tokenCaptor.capture());
@@ -97,6 +99,20 @@ class PasswordRecoveryServiceTest {
         assertEquals("user@example.com", event.recipientEmail());
         assertNotEquals(event.rawResetToken(), stored.getTokenHash());
         assertEquals(stored.getTokenHash(), secrets.hash(event.rawResetToken()));
+    }
+
+    @Test
+    void repeatedRequestInsideCooldownKeepsExistingTokenAndDoesNotQueueAnotherEmail() {
+        User user = activeLocalUser();
+        when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(user));
+        when(tokenRepository.existsByUserIdAndCreatedAtAfter(eq(9L), any(LocalDateTime.class))).thenReturn(true);
+
+        service.requestReset("user@example.com");
+
+        verify(tokenRepository, never()).invalidateActiveForUser(eq(9L), any(LocalDateTime.class));
+        verify(tokenRepository, never()).saveAndFlush(any(PasswordResetToken.class));
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
