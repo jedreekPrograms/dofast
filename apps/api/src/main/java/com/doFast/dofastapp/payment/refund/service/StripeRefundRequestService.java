@@ -166,12 +166,13 @@ public class StripeRefundRequestService {
     public void recordProviderResponseForReview(
             Long requestId,
             StripeRefundProviderResult result,
-            String violationCode
+            String violationCode,
+            boolean providerIdentityMatchesRequest
     ) {
         StripeRefundRequest request = refundRepository.findByIdForUpdate(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zwrot nie istnieje"));
         request.recordProviderResponseForReview(
-                result.refundId(),
+                providerIdentityMatchesRequest ? result.refundId() : null,
                 result.status(),
                 violationCode,
                 LocalDateTime.now()
