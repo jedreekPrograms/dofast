@@ -20,13 +20,18 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final PublicAuthRateLimitFilter publicAuthRateLimitFilter;
+    private final PublicJobDiscoveryRateLimitFilter publicJobDiscoveryRateLimitFilter;
 
     public SecurityConfig(
             JwtAuthFilter jwtAuthFilter,
             @Value("${dofast.security.public-auth-rate-limit.max-requests:30}") int maxRequests,
             @Value("${dofast.security.public-auth-rate-limit.window-seconds:60}") long windowSeconds,
             @Value("${dofast.security.public-auth-rate-limit.max-entries:10000}") int maxEntries,
-            @Value("${dofast.security.public-auth-rate-limit.trust-forwarded-for:false}") boolean trustForwardedFor
+            @Value("${dofast.security.public-auth-rate-limit.trust-forwarded-for:false}") boolean trustForwardedFor,
+            @Value("${dofast.security.public-job-discovery-rate-limit.max-requests:120}") int discoveryMaxRequests,
+            @Value("${dofast.security.public-job-discovery-rate-limit.window-seconds:60}") long discoveryWindowSeconds,
+            @Value("${dofast.security.public-job-discovery-rate-limit.max-entries:10000}") int discoveryMaxEntries,
+            @Value("${dofast.security.public-job-discovery-rate-limit.trust-forwarded-for:false}") boolean discoveryTrustForwardedFor
     ) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.publicAuthRateLimitFilter = new PublicAuthRateLimitFilter(
@@ -34,6 +39,12 @@ public class SecurityConfig {
                 windowSeconds,
                 maxEntries,
                 trustForwardedFor
+        );
+        this.publicJobDiscoveryRateLimitFilter = new PublicJobDiscoveryRateLimitFilter(
+                discoveryMaxRequests,
+                discoveryWindowSeconds,
+                discoveryMaxEntries,
+                discoveryTrustForwardedFor
         );
     }
 
@@ -72,6 +83,7 @@ public class SecurityConfig {
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(publicJobDiscoveryRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(publicAuthRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
