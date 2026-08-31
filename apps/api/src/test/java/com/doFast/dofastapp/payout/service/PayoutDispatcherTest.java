@@ -9,14 +9,40 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.Optional;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doThrow;
 
 class PayoutDispatcherTest {
+
+    @Test
+    void staleRecoveryFailureDoesNotStarveNewPayoutDispatches() {
+        PayoutProviderRegistry registry = mock(PayoutProviderRegistry.class);
+        PayoutDispatchQueue queue = mock(PayoutDispatchQueue.class);
+        PayoutProvider provider = mock(PayoutProvider.class);
+        PayoutDispatcher dispatcher = new PayoutDispatcher(registry, queue);
+
+        PayoutDispatchCommand healthy = command(51L);
+        PayoutDispatchResult result = PayoutDispatchResult.submitted("po_51");
+
+        doThrow(new IllegalStateException("simulated stale recovery failure"))
+                .when(queue).recoverOneStaleProcessing();
+        when(registry.isConfiguredProviderAvailable()).thenReturn(true);
+        when(registry.configuredProviderCode()).thenReturn("stripe-connect");
+        when(registry.requireProvider("stripe-connect")).thenReturn(provider);
+        when(queue.claimNext("stripe-connect"))
+                .thenReturn(Optional.of(healthy), Optional.empty());
+        when(provider.dispatch(healthy)).thenReturn(result);
+
+        dispatcher.dispatch();
+
+        verify(queue).recoverOneStaleProcessing();
+        verify(provider).dispatch(healthy);
+        verify(queue).complete(51L, result);
+    }
 
     @Test
     void localCompletionFailureAfterProviderSuccessDoesNotStarveLaterPayoutsOrInventCompensation() {

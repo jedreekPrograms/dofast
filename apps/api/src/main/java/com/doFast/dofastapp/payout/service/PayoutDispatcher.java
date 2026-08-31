@@ -25,7 +25,15 @@ public class PayoutDispatcher {
 
     @Scheduled(fixedDelayString = "${dofast.payouts.dispatch-interval-ms:2000}")
     public void dispatch() {
-        queue.recoverOneStaleProcessing();
+        try {
+            queue.recoverOneStaleProcessing();
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "Payout stale-processing recovery failed; leaving durable states unchanged and continuing with new dispatches",
+                    ex
+            );
+        }
+
         if (!providerRegistry.isConfiguredProviderAvailable()) return;
 
         String providerCode = providerRegistry.configuredProviderCode();

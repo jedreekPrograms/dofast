@@ -24,7 +24,15 @@ public class StripeRefundScheduler {
 
     @Scheduled(fixedDelayString = "${stripe.refunds.dispatch-delay-ms:5000}")
     public void dispatchPendingRefunds() {
-        requestService.requeueStaleDispatches();
+        try {
+            requestService.requeueStaleDispatches();
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "Refund stale-dispatch recovery failed; leaving durable states unchanged and continuing with the current dispatchable batch",
+                    ex
+            );
+        }
+
         for (Long id : requestService.findDispatchableIds(BATCH_SIZE)) {
             try {
                 dispatchService.dispatch(id);
