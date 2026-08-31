@@ -2,6 +2,7 @@ package com.doFast.dofastapp.payout.service;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.payout.entity.PayoutRequest;
+import com.doFast.dofastapp.payout.enums.PayoutStatus;
 import com.doFast.dofastapp.payout.provider.PayoutProviderRegistry;
 import com.doFast.dofastapp.payout.repository.PayoutEventRepository;
 import com.doFast.dofastapp.payout.repository.PayoutRequestRepository;
@@ -19,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -45,7 +47,7 @@ class AdminPayoutServiceSafetyTest {
 
     @Test
     void adminCannotRetryStripeDispatchAfterSafeIdempotencyWindowExpired() {
-        PayoutRequest payout = expiredAmbiguousPayout();
+        PayoutRequest payout = attemptedReview(PayoutProviderSafetyPolicy.STRIPE_CONNECT_IDEMPOTENCY_WINDOW_EXPIRED);
         when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
 
         assertThrows(ConflictException.class, () -> service.retry(41L, admin));
@@ -56,7 +58,7 @@ class AdminPayoutServiceSafetyTest {
 
     @Test
     void adminCannotRestoreWalletWhileExpiredStripeDispatchMayHaveMovedMoney() {
-        PayoutRequest payout = expiredAmbiguousPayout();
+        PayoutRequest payout = attemptedReview(PayoutProviderSafetyPolicy.STRIPE_CONNECT_IDEMPOTENCY_WINDOW_EXPIRED);
         when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
 
         assertThrows(ConflictException.class, () -> service.failAndRestore(41L, "operator cannot prove provider failure", admin));
@@ -65,20 +67,54 @@ class AdminPayoutServiceSafetyTest {
         verifyNoInteractions(walletService, eventRepository, providerRegistry);
     }
 
-    private PayoutRequest expiredAmbiguousPayout() {
+    @Test
+    void anyStripeReviewAfterProviderAttemptRequiresExternalReconciliation() {
+        PayoutRequest payout = attemptedReview("TIMEOUT");
+        when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
+
+        assertThrows(ConflictException.class, () -> service.retry(41L, admin));
+        assertThrows(ConflictException.class,
+                () -> service.failAndRestore(41L, "provider outcome remains ambiguous", admin));
+
+        assertEquals(PayoutStatus.REVIEW_REQUIRED, payout.getStatus());
+        verify(payoutRepository, never()).save(payout);
+        verifyNoInteractions(providerRegistry, walletService, eventRepository);
+    }
+
+    @Test
+    void preProviderEligibilityReviewCanStillBeRetriedAfterOperatorFix() {
         User worker = user(7L);
+        PayoutRequest payout = newPayout(worker, "pre-provider");
+        payout.requireReview("IDENTITY_NOT_VERIFIED", LocalDateTime.now());
+        when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
+        when(providerRegistry.isProviderAvailable(StripeConnectOnboardingService.PROVIDER_CODE)).thenReturn(true);
+
+        service.retry(41L, admin);
+
+        assertEquals(PayoutStatus.REQUESTED, payout.getStatus());
+        verify(payoutRepository).save(payout);
+        verifyNoInteractions(walletService);
+    }
+
+    private PayoutRequest attemptedReview(String failureCode) {
+        User worker = user(7L);
+        PayoutRequest payout = newPayout(worker, "attempted");
+        payout.startProcessing(LocalDateTime.now().minusMinutes(5));
+        payout.requireReview(failureCode, LocalDateTime.now());
+        return payout;
+    }
+
+    private PayoutRequest newPayout(User worker, String suffix) {
         PayoutRequest payout = new PayoutRequest();
         payout.initialize(
                 worker,
-                "payout:7:client:expired",
+                "payout:7:client:" + suffix,
                 new BigDecimal("25.00"),
                 "PLN",
                 StripeConnectOnboardingService.PROVIDER_CODE,
-                LocalDateTime.now().minusHours(26)
+                LocalDateTime.now().minusMinutes(10)
         );
         ReflectionTestUtils.setField(payout, "id", 41L);
-        payout.startProcessing(LocalDateTime.now().minusHours(25));
-        payout.requireReview(PayoutProviderSafetyPolicy.STRIPE_CONNECT_IDEMPOTENCY_WINDOW_EXPIRED, LocalDateTime.now());
         return payout;
     }
 
