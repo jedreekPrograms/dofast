@@ -9,6 +9,7 @@ on:
       - ".github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh"
       - ".github/scripts/stripe-chargeback-smoke.sh"
       - ".github/scripts/stripe-refund-smoke.sh"
+      - ".github/scripts/stripe-refund-idempotency-expiry-smoke.sh"
       - ".github/scripts/seed-wallet-funding.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
@@ -28,6 +29,7 @@ on:
       - ".github/scripts/stripe-wallet-purpose-reconciliation-smoke.sh"
       - ".github/scripts/stripe-chargeback-smoke.sh"
       - ".github/scripts/stripe-refund-smoke.sh"
+      - ".github/scripts/stripe-refund-idempotency-expiry-smoke.sh"
       - ".github/scripts/seed-wallet-funding.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/wallet/**"
@@ -106,6 +108,9 @@ jobs:
 
       - name: Verify signed Stripe original-method refund settlement
         run: bash .github/scripts/stripe-refund-smoke.sh
+
+      - name: Verify expired ambiguous Stripe refund is quarantined
+        run: bash .github/scripts/stripe-refund-idempotency-expiry-smoke.sh
 
       - name: Diagnostics
         if: failure()

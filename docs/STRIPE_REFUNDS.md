@@ -31,7 +31,20 @@ There is still an unavoidable network race between the final local check and Str
 
 Refund creation uses Stripe's Refund API with the original `payment_intent`, optional partial `amount`, `requested_by_customer`, doFast metadata, and idempotency key `dofast:refund:{localRefundId}`.
 
-Provider timeouts are treated as ambiguous. doFast does not restore the wallet reservation merely because a network call failed. The same provider request is retried with the same Stripe idempotency key. Stale `DISPATCHING` rows are safely requeued; repeated ambiguous failures eventually become `REVIEW_REQUIRED` rather than creating money twice.
+Provider timeouts are treated as ambiguous. doFast does not restore the wallet reservation merely because a network call failed. The same provider request is retried with the same Stripe idempotency key.
+
+Stripe API v1 can prune idempotency keys once they are at least 24 hours old. Reusing a pruned key can execute a new request instead of replaying the original result. That matters for partial refunds: an old ambiguous retry must never depend on the provider remembering a key forever.
+
+For this reason stale `DISPATCHING` rows are recovered under a bounded safety window:
+
+- an ambiguous dispatch younger than 23 hours may be requeued with exactly the same provider idempotency key;
+- an ambiguous dispatch at least 23 hours old is moved to `REVIEW_REQUIRED` with `provider_idempotency_window_expired`;
+- the local `STRIPE_REFUND_RESERVE` remains held in review and is not restored automatically;
+- the scheduler never issues another provider `POST` for that expired ambiguous operation.
+
+The one-hour margin is intentional. It keeps automatic retries inside the documented Stripe v1 24-hour idempotency guarantee rather than attempting a request at the provider boundary. Stale recovery selects rows with `FOR UPDATE SKIP LOCKED`, so multiple API instances cannot simultaneously recover the same ambiguous refund.
+
+Repeated ordinary provider failures still reach `REVIEW_REQUIRED` after the configured local attempt limit rather than creating money twice.
 
 ## Signed settlement
 
@@ -53,4 +66,4 @@ Unmanaged Stripe refunds are ignored by this settlement path. Operators must not
 
 ## Operational validation
 
-Changes to this flow must keep Maven/API verification, web verify, full container/runtime smoke, payment-ledger smoke, publication payment smoke, platform-fee smoke and payout smoke green. The payment-ledger workflow includes a signed-webhook PostgreSQL scenario for successful refund settlement, failed-refund restoration and webhook replay idempotency.
+Changes to this flow must keep Maven/API verification, web verify, full container/runtime smoke, payment-ledger smoke, publication payment smoke, platform-fee smoke and payout smoke green. The payment-ledger workflow includes signed-webhook PostgreSQL scenarios for successful refund settlement, failed-refund restoration and webhook replay idempotency, plus a real stale-dispatch recovery scenario proving that an ambiguity older than the safe provider idempotency window goes to review without another provider attempt or wallet restore.
