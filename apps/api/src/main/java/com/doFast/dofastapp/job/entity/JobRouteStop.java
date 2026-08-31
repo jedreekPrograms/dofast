@@ -29,7 +29,7 @@ public class JobRouteStop {
     private int sequenceNo;
 
     @JdbcTypeCode(SqlTypes.GEOGRAPHY)
-    @Column(name = "location", nullable = false, columnDefinition = "geography(Point,4326)")
+    @Column(name = "location", columnDefinition = "geography(Point,4326)")
     private Point location;
 
     @Column(name = "public_label", nullable = false, length = 120)

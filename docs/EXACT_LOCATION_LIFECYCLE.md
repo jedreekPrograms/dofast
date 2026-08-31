@@ -1,10 +1,10 @@
-# Exact location lifecycle access
+# Exact location lifecycle and retention
 
 ## Purpose
 
 Exact execution location is sensitive job data. Public discovery exposes only coarse labels; exact coordinates, private address labels and route geometry exist only to prepare and execute a job.
 
-This boundary is independent from live courier tracking. Live tracking already clears the current worker position when tracking stops. This policy defines when authenticated marketplace participants may read the exact persisted job origin/route through the job API.
+This boundary is independent from live courier tracking. Live tracking already clears the current worker position when tracking stops. This policy defines both when authenticated marketplace participants may read exact persisted job location and when the platform removes that exact execution data from persistence.
 
 ## Access policy
 
@@ -29,23 +29,70 @@ A completed or cancelled task no longer requires exact coordinates for execution
 
 Disputed jobs deliberately retain participant access while the dispute is active because location can be relevant evidence. A dispute resolution that completes or cancels the job closes participant exact-location access together with the terminal lifecycle state.
 
-## Persistence and retention boundary
+## Durable retention policy
 
-This slice changes API authorization only. Existing exact job execution fields remain persisted after a terminal state so financial, legal and support retention can be designed deliberately rather than deleted opportunistically inside a money-sensitive lifecycle transaction.
+Terminal API denial is not the final privacy boundary. Flyway `V55__exact_location_retention.sql` adds an auditable `jobs.exact_location_purged_at` marker and permits intermediate-stop geometry to become null after retention cleanup.
 
-A separate retention policy must define when persisted exact origin/destination coordinates, private address labels, route-stop execution data, place identifiers and encoded route geometry are anonymized or purged after the applicable support/legal retention period. That future purge must preserve public/coarse labels and accounting/job history that do not require exact location.
+The asynchronous retention worker processes only terminal jobs whose terminal timestamp is older than the configured retention period:
 
-Until that retention policy is implemented, exact terminal data is server-side only and unavailable through normal participant APIs.
+- `DONE` uses `completed_at`;
+- `CANCELLED` uses `cancelled_at`.
+
+The cleanup deliberately runs outside the money-sensitive completion/cancellation transaction. It selects bounded batches with PostgreSQL `FOR UPDATE SKIP LOCKED`, so multiple API instances can run the scheduler without processing the same terminal job concurrently.
+
+For each due job it removes:
+
+- exact origin geometry;
+- origin private address label;
+- exact destination geometry;
+- destination private address label;
+- encoded route polyline;
+- intermediate-stop exact geometry;
+- intermediate-stop private labels;
+- intermediate-stop provider place IDs;
+- the consumed route-quote relationship and the now-unreferenced consumed quote, including its exact A/B/stops.
+
+It deliberately preserves:
+
+- job id and lifecycle timestamps;
+- requester/worker relationships required by durable marketplace history;
+- title/description subject to the separate account/data-retention policy;
+- agreed price, expense and escrow/payment accounting records;
+- category and assignment history;
+- coarse/public origin, destination and stop labels;
+- route distance/duration/provider metadata that does not contain exact route geometry.
+
+The cleanup also deletes expired route quotes that are no longer referenced by a job. An abandoned quote is short-lived execution-preparation data and has no reason to retain exact coordinates after it has expired.
+
+## Production configuration
+
+Local development and CI use a 30-day default. Production must make an explicit policy decision through:
+
+- `JOB_EXACT_LOCATION_RETENTION_DAYS` — required by `compose.prod.yaml`, accepted range 1–3650 days;
+- `JOB_EXACT_LOCATION_CLEANUP_INTERVAL_MS` — scheduler cadence, default one hour;
+- `JOB_EXACT_LOCATION_CLEANUP_BATCH_SIZE` — maximum jobs/quotes processed per transaction, default 100 and accepted range 1–1000.
+
+There is intentionally no hidden production default for the retention period. The correct period depends on the final legal/support/chargeback evidence policy and must be chosen deliberately before deployment.
+
+Changing the retention period affects only when not-yet-purged terminal jobs become eligible. Purged geometry is not reconstructable from public labels and is never resurrected when configuration changes later.
+
+## Financial and dispute boundary
+
+The purge never changes wallet, escrow, payout, refund, platform-revenue or Stripe ledger state. It does not run while a job is `DISPUTED`; exact execution data therefore remains available during the live participant dispute. After a dispute is resolved into `DONE` or `CANCELLED`, the normal terminal retention clock applies.
+
+If future legal or payment-dispute requirements demand another evidence period, deployment configuration must be adjusted before the data becomes due. The application must not copy exact coordinates into financial tables merely to extend retention.
 
 ## Verification
 
-Focused service tests verify that:
+Focused service tests verify retention cutoff/batch handling and fail-fast configuration validation.
 
-- the requester can inspect their own exact location before assignment;
-- requester access remains available during an active dispute;
-- requester access is denied after `DONE`;
-- requester access is denied after `CANCELLED`;
-- assigned-worker access is denied after `CANCELLED`;
-- the existing worker-after-completion denial remains covered by the broader job service tests.
+The real PostgreSQL/PostGIS container smoke additionally completes a multi-stop job, backdates only the CI fixture beyond the one-day CI retention window and verifies that the scheduler:
 
-The normal Maven verification, frontend lint/build and container/runtime smoke suite remain required merge gates for changes to this boundary.
+- writes `exact_location_purged_at`;
+- removes exact A/B geometry, private labels and encoded route geometry;
+- removes intermediate-stop geometry/private labels/place IDs while retaining public stop labels;
+- deletes the consumed route quote and its exact stop records;
+- preserves terminal status, price, public labels and route distance;
+- leaves terminal participant route access closed.
+
+Production Compose contract validation also fails when the explicit production retention period is omitted.
