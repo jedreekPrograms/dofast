@@ -77,6 +77,11 @@ dofast:
     quote-ttl-minutes: ${ROUTING_QUOTE_TTL_MINUTES:15}
     google:
       api-key: ${GOOGLE_MAPS_ROUTES_API_KEY}
+  privacy:
+    exact-location:
+      retention-days: ${JOB_EXACT_LOCATION_RETENTION_DAYS}
+      cleanup-interval-ms: ${JOB_EXACT_LOCATION_CLEANUP_INTERVAL_MS:3600000}
+      cleanup-batch-size: ${JOB_EXACT_LOCATION_CLEANUP_BATCH_SIZE:100}
   attachments:
     storage-root: ${ATTACHMENT_STORAGE_ROOT}
     encryption-key-base64: ${ATTACHMENT_ENCRYPTION_KEY_BASE64}
