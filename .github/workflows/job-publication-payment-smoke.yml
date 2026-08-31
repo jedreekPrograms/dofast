@@ -8,6 +8,7 @@ on:
       - ".github/scripts/job-publication-payment-smoke.sh"
       - ".github/scripts/job-publication-minimum-funding-smoke.sh"
       - ".github/scripts/job-publication-payment-intent-create-recovery-schema-smoke.sh"
+      - ".github/scripts/job-publication-settlement-crash-smoke.sh"
       - ".github/scripts/seed-wallet-funding.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/publication/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
@@ -26,6 +27,7 @@ on:
       - ".github/scripts/job-publication-payment-smoke.sh"
       - ".github/scripts/job-publication-minimum-funding-smoke.sh"
       - ".github/scripts/job-publication-payment-intent-create-recovery-schema-smoke.sh"
+      - ".github/scripts/job-publication-settlement-crash-smoke.sh"
       - ".github/scripts/seed-wallet-funding.sh"
       - "apps/api/src/main/java/com/doFast/dofastapp/job/publication/**"
       - "apps/api/src/main/java/com/doFast/dofastapp/payment/**"
@@ -94,6 +96,9 @@ jobs:
 
       - name: Verify exact funding at Stripe minimum boundary
         run: bash .github/scripts/job-publication-minimum-funding-smoke.sh
+
+      - name: Verify publication settlement transaction rollback and retry
+        run: bash .github/scripts/job-publication-settlement-crash-smoke.sh
 
       - name: Diagnostics
         if: failure()
