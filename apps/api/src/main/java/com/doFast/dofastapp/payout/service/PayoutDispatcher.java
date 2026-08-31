@@ -4,6 +4,7 @@ import com.doFast.dofastapp.payout.provider.PayoutDispatchCommand;
 import com.doFast.dofastapp.payout.provider.PayoutDispatchResult;
 import com.doFast.dofastapp.payout.provider.PayoutProvider;
 import com.doFast.dofastapp.payout.provider.PayoutProviderRegistry;
+import com.doFast.dofastapp.payout.provider.StripeConnectPayoutResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -45,6 +46,27 @@ public class PayoutDispatcher {
             PayoutDispatchResult result;
             try {
                 result = provider.dispatch(command);
+            } catch (StripeConnectPayoutResponseException ex) {
+                log.error(
+                        "Stripe Connect returned an anomalous response after payout provider activity for payout {}; automatic retry is blocked with code {}",
+                        command.payoutId(),
+                        ex.failureCode()
+                );
+                try {
+                    queue.quarantineProviderResponse(
+                            command.payoutId(),
+                            ex.trustedTransferReference(),
+                            ex.trustedPayoutReference(),
+                            ex.failureCode()
+                    );
+                } catch (RuntimeException persistenceFailure) {
+                    log.error(
+                            "Failed to persist Stripe Connect response quarantine for payout {}; leaving PROCESSING for bounded stale recovery",
+                            command.payoutId(),
+                            persistenceFailure
+                    );
+                }
+                continue;
             } catch (RuntimeException ex) {
                 log.warn("Payout provider call failed for payout {}", command.payoutId(), ex);
                 result = PayoutDispatchResult.retryableFailure("PROVIDER_EXCEPTION");
