@@ -170,7 +170,12 @@ public class StripeWebhookController {
         }
 
         try {
-            PayoutProviderSettlementResult result = payoutSettlementService.process(payout, event.getId(), event.getAccount());
+            PayoutProviderSettlementResult result = payoutSettlementService.process(
+                    payout,
+                    event.getId(),
+                    event.getAccount(),
+                    event.getCreated()
+            );
             if (result == null) {
                 return ResponseEntity.ok("ignored");
             }
