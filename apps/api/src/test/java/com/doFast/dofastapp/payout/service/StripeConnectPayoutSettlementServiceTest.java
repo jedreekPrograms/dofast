@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -135,15 +136,33 @@ class StripeConnectPayoutSettlementServiceTest {
     }
 
     @Test
-    void paidPayoutDoesNotMoveMoneyAgain() {
+    void paidPayoutChecksTransferStateBeforeLocalPaidSettlement() {
         when(settlementService.settle(any(PayoutProviderSettlementCommand.class))).thenReturn(PayoutProviderSettlementResult.APPLIED);
 
         PayoutProviderSettlementResult result = service.process(stripePayout("paid"), "evt_paid_1", "acct_123");
 
         assertEquals(PayoutProviderSettlementResult.APPLIED, result);
+        InOrder order = inOrder(moneyGateway, settlementService);
+        order.verify(moneyGateway).requireTransferUnreversed("tr_123", 12500L, "PLN", "acct_123", 41L, 7L);
+        order.verify(settlementService).settle(any(PayoutProviderSettlementCommand.class));
         verify(moneyGateway, never()).reverseTransfer(
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void paidWebhookAfterReversalCrashFailsClosedBeforeLocalPaidSettlement() {
+        payout.recordProviderStateEventCreatedAt(200L);
+        doThrow(new IllegalStateException("transfer already reversed"))
+                .when(moneyGateway)
+                .requireTransferUnreversed("tr_123", 12500L, "PLN", "acct_123", 41L, 7L);
+
+        assertThrows(IllegalStateException.class,
+                () -> service.process(stripePayout("paid"), "evt_paid_after_reversal_crash", "acct_123", 201L));
+
+        assertEquals(PayoutStatus.SUBMITTED, payout.getStatus());
+        assertEquals(200L, payout.getProviderStateEventCreatedAt());
+        verify(settlementService, never()).settle(any());
     }
 
     @Test
@@ -168,6 +187,7 @@ class StripeConnectPayoutSettlementServiceTest {
         assertNull(ambiguous.getFailureCode());
         assertEquals(201L, ambiguous.getProviderStateEventCreatedAt());
         verify(payoutRepository).saveAndFlush(ambiguous);
+        verify(moneyGateway).requireTransferUnreversed("tr_123", 12500L, "PLN", "acct_123", 41L, 7L);
     }
 
     @Test
