@@ -37,13 +37,15 @@ REQUESTED -> PROCESSING -> PAID          (synchronous provider only)
     |
     +-> CANCELLED (user cancellation before processing + restore)
 
-REVIEW_REQUIRED -> REQUESTED (audited admin retry, only when provider outcome is safely retryable)
-REVIEW_REQUIRED -> FAILED    (audited admin rejection + restore, only when money location is unambiguous)
+REVIEW_REQUIRED -> REQUESTED (audited admin retry only when the provider boundary was never entered)
+REVIEW_REQUIRED -> FAILED    (audited admin rejection + restore only when money location is unambiguous)
 ```
 
 `SUBMITTED` means the provider accepted the external operation and returned a durable payout reference. It is intentionally non-terminal. A submitted payout is never returned to the normal dispatch queue merely because settlement is slow.
 
-A special `REVIEW_REQUIRED` with failure code `STRIPE_IDEMPOTENCY_WINDOW_EXPIRED` is also intentionally non-retryable through ordinary admin actions. Neither admin retry nor wallet restoration is allowed until the previous Stripe Transfer/Payout is externally reconciled. This prevents both duplicate external money movement and creation of spendable wallet value while money may already have left the platform.
+For Stripe Connect, any `REVIEW_REQUIRED` request that has already entered provider dispatch (`attempt_count > 0`) and still has no durable Stripe Payout reference is treated as externally ambiguous. Neither admin retry nor wallet restoration is allowed until the previous Stripe Transfer/Payout is reconciled. This applies even before the 23-hour cutoff: a timeout after the provider boundary can mean money already moved, so returning the wallet reserve would be unsafe. Pre-provider review states such as an eligibility/KYC rejection before the first dispatch (`attempt_count = 0`) remain locally resolvable.
+
+`STRIPE_IDEMPOTENCY_WINDOW_EXPIRED` is the stronger long-downtime subtype of that ambiguity. It records that even an otherwise idempotent retry can no longer rely on Stripe retaining the original key.
 
 ## Provider boundary and idempotency
 
@@ -79,7 +81,7 @@ A created Stripe Payout always maps to doFast `SUBMITTED`; synchronous API statu
 
 ### Crash after Transfer creation
 
-If Stripe accepted the Transfer but the process died before `provider_transfer_reference` committed, doFast has no durable external Transfer id. Automatic retry is allowed only inside the 23-hour safety window. After that window, the payout is quarantined and ordinary admin retry/restore is blocked until an operator reconciles the provider state externally.
+If Stripe accepted the Transfer but the process died before `provider_transfer_reference` committed, doFast has no durable external Transfer id. Automatic retry is allowed only inside the 23-hour safety window. After that window, the payout is quarantined. Any Stripe Connect review that already crossed the provider boundary is also blocked from ordinary admin retry/restore until the provider state is reconciled, so an operator cannot bypass the automatic safety rule.
 
 ### Crash after Payout creation
 
@@ -120,11 +122,11 @@ External transfer reversal is preflighted against local state before the provide
 
 ## Administration
 
-`/admin/payouts/**` is admin-gated. The admin DTO/UI exposes private provider payout and Transfer references for operator reconciliation; ordinary user DTOs do not.
+`/admin/payouts/**` is admin-gated. The admin DTO/UI exposes private provider payout and Transfer references plus a backend-derived `providerOutcomeAmbiguous` flag for operator reconciliation; ordinary user DTOs do not.
 
-For ordinary `REVIEW_REQUIRED` cases the admin can use audited retry or audited final rejection according to backend rules. For `STRIPE_IDEMPOTENCY_WINDOW_EXPIRED`, both actions are hidden in the UI and rejected by the backend. The operator must inspect Stripe first because either a Transfer or a Payout may already exist.
+A `REVIEW_REQUIRED` Stripe Connect request with `attempt_count > 0` and no durable provider payout reference is display/reconciliation-only: both retry and fail+restore are hidden in the UI and rejected by the backend. The operator must inspect Stripe because a Transfer or Payout may already exist. `STRIPE_IDEMPOTENCY_WINDOW_EXPIRED` additionally signals that the provider key retention boundary itself has been crossed.
 
-A submitted payout with reconciliation errors is likewise an in-flight provider operation, not a candidate for force-retry through the dispatch queue.
+Pre-provider review cases with `attempt_count = 0` can still use audited retry/final rejection after the underlying eligibility problem is fixed or confirmed. A submitted payout with reconciliation errors is likewise an in-flight provider operation, not a candidate for force-retry through the dispatch queue.
 
 ## Wallet accounting
 
@@ -146,7 +148,7 @@ Provider account ids, Transfer ids, Payout ids, payout amounts and provider fail
 
 ## Database and CI
 
-Flyway migrations own payout persistence and provider references. This crash-window hardening requires **no new migration**: it uses the existing `processing_started_at`, `failure_code`, `provider_transfer_reference` and `provider_reference` fields.
+Flyway migrations own payout persistence and provider references. This crash-window hardening requires **no new migration**: it uses the existing `processing_started_at`, `attempt_count`, `failure_code`, `provider_transfer_reference` and `provider_reference` fields.
 
 `Worker payout smoke` runs against PostgreSQL and covers sandbox reservation/idempotency/cancellation/settlement plus a scheduler scenario that inserts an old Stripe Connect `PROCESSING` row. The smoke requires it to become exactly `REVIEW_REQUIRED|STRIPE_IDEMPOTENCY_WINDOW_EXPIRED`, with the original attempt count unchanged, no provider references invented and no `PAYOUT_RESTORE` created.
 
@@ -154,7 +156,8 @@ Unit tests additionally cover:
 
 - recent stale Stripe Connect dispatch remains safely retryable;
 - dispatch older than the safety window is quarantined;
-- admin cannot bypass quarantine with retry or wallet restoration;
+- every Stripe Connect review after a provider attempt blocks local admin retry and wallet restoration;
+- a pre-provider review remains locally resolvable;
 - a signed terminal Stripe event can recover a provider payout reference lost after provider acceptance;
 - wrong signed-event identity metadata cannot attach an external payout;
 - stale/contradictory payout events cannot regress financial state;
