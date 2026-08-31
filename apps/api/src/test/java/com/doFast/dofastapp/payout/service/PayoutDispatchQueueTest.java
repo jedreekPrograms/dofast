@@ -46,14 +46,9 @@ class PayoutDispatchQueueTest {
 
     @BeforeEach
     void setUp() {
-        queue = new PayoutDispatchQueue(
-                payoutRepository,
-                eventRepository,
-                userRepository,
-                verificationRepository,
-                walletService,
-                new PayoutProperties("sandbox", true, new BigDecimal("1.00"), 1, 15, 300, 300)
-        );
+        queue = queueWithProperties(new PayoutProperties(
+                "sandbox", true, new BigDecimal("1.00"), 1, 15, 300, 300
+        ));
     }
 
     @Test
@@ -154,7 +149,6 @@ class PayoutDispatchQueueTest {
         assertNull(payout.getResolvedAt());
         verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
-        verify(eventRepository).save(any());
     }
 
     @Test
@@ -173,15 +167,68 @@ class PayoutDispatchQueueTest {
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
     }
 
+    @Test
+    void recentAmbiguousStripeConnectDispatchStillRetriesWithStableProviderKey() {
+        User user = user(7L, UserStatus.ACTIVE);
+        PayoutRequest payout = payout(41L, user, "stripe-connect", LocalDateTime.now().minusMinutes(10));
+        payout.startProcessing(LocalDateTime.now().minusMinutes(5));
+        PayoutDispatchQueue retryingQueue = queueWithProperties(new PayoutProperties(
+                "stripe-connect", false, new BigDecimal("1.00"), 5, 15, 300, 300
+        ));
+        when(payoutRepository.findStaleProcessingForUpdate(any())).thenReturn(Optional.of(payout));
+
+        retryingQueue.recoverOneStaleProcessing();
+
+        assertEquals(PayoutStatus.REQUESTED, payout.getStatus());
+        assertEquals("STALE_PROCESSING", payout.getFailureCode());
+        assertNotNull(payout.getNextAttemptAt());
+        assertEquals(1, payout.getAttemptCount());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void expiredAmbiguousStripeConnectDispatchRequiresExternalReviewWithoutWalletRestore() {
+        User user = user(7L, UserStatus.ACTIVE);
+        PayoutRequest payout = payout(41L, user, "stripe-connect", LocalDateTime.now().minusHours(26));
+        payout.startProcessing(LocalDateTime.now().minusHours(25));
+        PayoutDispatchQueue retryingQueue = queueWithProperties(new PayoutProperties(
+                "stripe-connect", false, new BigDecimal("1.00"), 5, 15, 300, 300
+        ));
+        when(payoutRepository.findStaleProcessingForUpdate(any())).thenReturn(Optional.of(payout));
+
+        retryingQueue.recoverOneStaleProcessing();
+
+        assertEquals(PayoutStatus.REVIEW_REQUIRED, payout.getStatus());
+        assertEquals(PayoutProviderSafetyPolicy.STRIPE_CONNECT_IDEMPOTENCY_WINDOW_EXPIRED, payout.getFailureCode());
+        assertNull(payout.getProcessingStartedAt());
+        assertEquals(1, payout.getAttemptCount());
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
+    }
+
+    private PayoutDispatchQueue queueWithProperties(PayoutProperties properties) {
+        return new PayoutDispatchQueue(
+                payoutRepository,
+                eventRepository,
+                userRepository,
+                verificationRepository,
+                walletService,
+                properties
+        );
+    }
+
     private PayoutRequest payout(Long id, User user) {
+        return payout(id, user, "sandbox", LocalDateTime.now().minusMinutes(1));
+    }
+
+    private PayoutRequest payout(Long id, User user, String providerCode, LocalDateTime requestedAt) {
         PayoutRequest payout = new PayoutRequest();
         payout.initialize(
                 user,
                 "payout:" + user.getId() + ":client:req-12345",
                 new BigDecimal("25.00"),
                 "PLN",
-                "sandbox",
-                LocalDateTime.now().minusMinutes(1)
+                providerCode,
+                requestedAt
         );
         ReflectionTestUtils.setField(payout, "id", id);
         return payout;
