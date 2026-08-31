@@ -73,7 +73,11 @@ public class StripeConnectPayoutSettlementService {
             return PayoutProviderSettlementResult.STALE;
         }
 
-        if (payout.getProviderReference() == null) {
+        if (payout.getProviderReference() == null || payout.getStatus() == PayoutStatus.REVIEW_REQUIRED) {
+            // A response-contract anomaly can preserve a trusted payout reference while deliberately
+            // keeping the local request in REVIEW_REQUIRED. A later signed, fully validated terminal
+            // webhook is authoritative and may recover that reviewed request into SUBMITTED before
+            // applying the terminal transition. This also remains race-safe for missing references.
             payout.recoverSubmittedProviderReference(stripePayout.getId(), LocalDateTime.now());
             payoutRepository.saveAndFlush(payout);
         }
