@@ -34,19 +34,22 @@ public class AdminJobReportService {
     private final JobReportAccountEnforcementRepository accountEnforcementRepository;
     private final JobRepository jobRepository;
     private final NotificationService notificationService;
+    private final EmergencyAccountEnforcementService emergencyAccountEnforcementService;
 
     public AdminJobReportService(
             JobReportRepository repository,
             JobReportEnforcementRepository enforcementRepository,
             JobReportAccountEnforcementRepository accountEnforcementRepository,
             JobRepository jobRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            EmergencyAccountEnforcementService emergencyAccountEnforcementService
     ) {
         this.repository = repository;
         this.enforcementRepository = enforcementRepository;
         this.accountEnforcementRepository = accountEnforcementRepository;
         this.jobRepository = jobRepository;
         this.notificationService = notificationService;
+        this.emergencyAccountEnforcementService = emergencyAccountEnforcementService;
     }
 
     @Transactional(readOnly = true)
@@ -126,11 +129,26 @@ public class AdminJobReportService {
         if (accountEnforcementRepository.existsByReport_Id(id)) {
             throw new ConflictException("Dla tego zgłoszenia wykonano już sankcję na koncie");
         }
-        if (request.action() != JobReportAccountEnforcementAction.SUSPEND_JOB_OWNER) {
-            throw new ConflictException("Nieobsługiwana sankcja na koncie");
-        }
 
-        User target = report.getJob().getCreatedBy();
+        User reportedOwner = report.getJob().getCreatedBy();
+        User target = switch (request.action()) {
+            case SUSPEND_JOB_OWNER -> suspendJobOwnerSafely(reportedOwner, moderator);
+            case EMERGENCY_SUSPEND_JOB_OWNER ->
+                    emergencyAccountEnforcementService.suspendJobOwner(reportedOwner.getId(), moderator);
+        };
+
+        JobReportAccountEnforcement enforcement = new JobReportAccountEnforcement(
+                report,
+                target,
+                moderator,
+                request.action(),
+                normalize(request.reason())
+        );
+        accountEnforcementRepository.save(enforcement);
+        return JobReportAccountEnforcementResponse.from(enforcement);
+    }
+
+    private User suspendJobOwnerSafely(User target, User moderator) {
         if (target.getId().equals(moderator.getId())) {
             throw new ConflictException("Moderator nie może zawiesić własnego konta");
         }
@@ -150,16 +168,7 @@ public class AdminJobReportService {
         jobRepository.findAllByStatusAndCreatedBy(JobStatus.OPEN, target)
                 .forEach(job -> job.cancel(now));
         target.setStatus(UserStatus.SUSPENDED);
-
-        JobReportAccountEnforcement enforcement = new JobReportAccountEnforcement(
-                report,
-                target,
-                moderator,
-                request.action(),
-                normalize(request.reason())
-        );
-        accountEnforcementRepository.save(enforcement);
-        return JobReportAccountEnforcementResponse.from(enforcement);
+        return target;
     }
 
     private void notifyReporter(JobReport report) {

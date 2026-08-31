@@ -34,6 +34,19 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             @Param("statuses") Set<JobStatus> statuses
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select j
+            from Job j
+            where j.status in :statuses
+              and (j.createdBy = :user or j.takenBy = :user)
+            order by j.id asc
+            """)
+    List<Job> findAllParticipantJobsWithStatusInForUpdate(
+            @Param("user") User user,
+            @Param("statuses") Set<JobStatus> statuses
+    );
+
     @Query("""
             select j
             from Job j

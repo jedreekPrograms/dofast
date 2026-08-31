@@ -35,6 +35,7 @@ class AdminJobReportServiceTest {
     @Mock private JobReportAccountEnforcementRepository accountEnforcementRepository;
     @Mock private JobRepository jobRepository;
     @Mock private NotificationService notificationService;
+    @Mock private EmergencyAccountEnforcementService emergencyAccountEnforcementService;
 
     private AdminJobReportService service;
     private JobReport report;
@@ -50,7 +51,8 @@ class AdminJobReportServiceTest {
                 enforcementRepository,
                 accountEnforcementRepository,
                 jobRepository,
-                notificationService
+                notificationService,
+                emergencyAccountEnforcementService
         );
         reporter = new User("reporter@example.com", "Reporter");
         owner = new User("owner@example.com", "Owner");
@@ -177,6 +179,28 @@ class AdminJobReportServiceTest {
         assertEquals(JobStatus.CANCELLED, secondOpenJob.getStatus());
         assertEquals(8L, response.targetUserId());
         assertEquals("repeated fraud", response.reason());
+        verify(accountEnforcementRepository).save(any(JobReportAccountEnforcement.class));
+    }
+
+    @Test
+    void delegatesEmergencySuspensionAndPersistsEmergencyAudit() {
+        report.moderate(JobReportStatus.REVIEWED, admin, "confirmed");
+        when(repository.findById(15L)).thenReturn(Optional.of(report));
+        when(accountEnforcementRepository.existsByReport_Id(15L)).thenReturn(false);
+        when(emergencyAccountEnforcementService.suspendJobOwner(8L, admin)).thenReturn(owner);
+
+        JobReportAccountEnforcementResponse response = service.enforceAccount(
+                15L,
+                new EnforceJobReportAccountRequest(
+                        JobReportAccountEnforcementAction.EMERGENCY_SUSPEND_JOB_OWNER,
+                        " immediate safety risk "
+                ),
+                admin
+        );
+
+        assertEquals(JobReportAccountEnforcementAction.EMERGENCY_SUSPEND_JOB_OWNER, response.action());
+        assertEquals("immediate safety risk", response.reason());
+        verify(emergencyAccountEnforcementService).suspendJobOwner(8L, admin);
         verify(accountEnforcementRepository).save(any(JobReportAccountEnforcement.class));
     }
 
