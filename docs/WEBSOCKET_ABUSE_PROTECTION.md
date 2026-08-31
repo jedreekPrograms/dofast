@@ -18,11 +18,21 @@ These controls are intentionally keyed by Nginx `$remote_addr`, not by a client-
 
 The runtime CI smoke opens eight real upgraded WebSocket connections from one source, verifies that the ninth is rejected with `429`, then verifies that a rapid handshake burst also reaches the request-rate limit. This exercises the built image and gateway rather than only checking configuration text.
 
+## STOMP authorization boundary
+
+WebSocket is currently a **server-to-client delivery channel**. Clients may authenticate and subscribe only to explicitly authorized destinations:
+
+- job participants may subscribe to their `/topic/chat/{jobId}` topic;
+- the job owner/assigned worker may subscribe to `/topic/tracking/{jobId}` according to the tracking access policy;
+- an authenticated account may subscribe to its own `/user/queue/notifications` destination.
+
+Authenticated client `SEND` frames are rejected before the simple broker or application destination can process them. This is deliberate: allowing clients to publish directly to `/topic` or `/queue` would bypass REST ownership and business invariants and could inject forged chat/tracking payloads into other users' subscriptions. The same fail-closed rule currently applies to `/dofastapp/**`; if server-side `@MessageMapping` handlers are introduced later, every client-writable destination must be explicitly allow-listed and authorized before `SEND` is enabled.
+
 ## Inbound message limiter
 
 The inbound channel runs interceptors in this order:
 
-1. `WebSocketSecurityInterceptor` authenticates `CONNECT` frames and authorizes protected subscriptions.
+1. `WebSocketSecurityInterceptor` authenticates `CONNECT` frames, authorizes protected subscriptions, and rejects client `SEND` frames.
 2. `WebSocketInboundRateLimitInterceptor` limits subsequent authenticated STOMP frames by trusted principal.
 
 The default production budget is 120 inbound frames per 10 seconds per authenticated account. The limit is shared across that account's concurrent WebSocket sessions on a single API instance, so opening additional sockets does not bypass the application-level budget. `CONNECT` and `DISCONNECT` frames are not charged; authentication and authorization still run normally.
