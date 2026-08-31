@@ -41,6 +41,11 @@ dofast:
       window-seconds: ${PUBLIC_AUTH_RATE_LIMIT_WINDOW_SECONDS:60}
       max-entries: ${PUBLIC_AUTH_RATE_LIMIT_MAX_ENTRIES:10000}
       trust-forwarded-for: ${PUBLIC_AUTH_RATE_LIMIT_TRUST_FORWARDED_FOR:false}
+    public-job-discovery-rate-limit:
+      max-requests: ${PUBLIC_JOB_DISCOVERY_RATE_LIMIT_MAX_REQUESTS:120}
+      window-seconds: ${PUBLIC_JOB_DISCOVERY_RATE_LIMIT_WINDOW_SECONDS:60}
+      max-entries: ${PUBLIC_JOB_DISCOVERY_RATE_LIMIT_MAX_ENTRIES:10000}
+      trust-forwarded-for: ${PUBLIC_JOB_DISCOVERY_RATE_LIMIT_TRUST_FORWARDED_FOR:false}
     websocket-rate-limit:
       max-messages: ${WEBSOCKET_INBOUND_RATE_LIMIT_MAX_MESSAGES:120}
       window-seconds: ${WEBSOCKET_INBOUND_RATE_LIMIT_WINDOW_SECONDS:10}
