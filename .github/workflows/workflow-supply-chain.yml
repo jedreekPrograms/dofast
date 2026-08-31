@@ -1,0 +1,29 @@
+name: Workflow supply-chain contract
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/**"
+      - ".github/scripts/check-third-party-action-pins.py"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/**"
+      - ".github/scripts/check-third-party-action-pins.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  action-pins:
+    name: Third-party action pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Enforce immutable third-party action pins
+        run: python3 .github/scripts/check-third-party-action-pins.py
