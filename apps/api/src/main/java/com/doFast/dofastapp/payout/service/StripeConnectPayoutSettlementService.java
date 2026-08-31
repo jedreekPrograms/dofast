@@ -15,6 +15,7 @@ import com.stripe.model.Payout;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Map;
 
@@ -62,10 +63,7 @@ public class StripeConnectPayoutSettlementService {
             throw new IllegalStateException("Stripe Connect payout does not contain an id");
         }
 
-        PayoutRequest payout = payoutRepository.findByProviderReferenceForUpdate(
-                        StripeConnectOnboardingService.PROVIDER_CODE,
-                        stripePayout.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Wypłata Stripe Connect nie istnieje"));
+        PayoutRequest payout = resolvePayoutForEvent(stripePayout);
         PayoutRecipientAccount recipient = recipientRepository
                 .findByUser_IdAndProviderCode(payout.getUser().getId(), StripeConnectOnboardingService.PROVIDER_CODE)
                 .orElseThrow(() -> new ResourceNotFoundException("Konto odbiorcy Stripe Connect nie istnieje"));
@@ -73,6 +71,11 @@ public class StripeConnectPayoutSettlementService {
         validateProviderEvent(payout, recipient, stripePayout, connectedAccountId);
         if (isStale(payout, eventCreatedAt)) {
             return PayoutProviderSettlementResult.STALE;
+        }
+
+        if (payout.getProviderReference() == null) {
+            payout.recoverSubmittedProviderReference(stripePayout.getId(), LocalDateTime.now());
+            payoutRepository.saveAndFlush(payout);
         }
         preflightTerminalState(payout, outcome);
 
@@ -104,6 +107,49 @@ public class StripeConnectPayoutSettlementService {
             payout.recordProviderStateEventCreatedAt(eventCreatedAt);
         }
         return result;
+    }
+
+    private PayoutRequest resolvePayoutForEvent(Payout stripePayout) {
+        PayoutRequest byReference = payoutRepository.findByProviderReferenceForUpdate(
+                        StripeConnectOnboardingService.PROVIDER_CODE,
+                        stripePayout.getId())
+                .orElse(null);
+        if (byReference != null) {
+            return byReference;
+        }
+
+        Long localPayoutId = payoutIdFromMetadata(stripePayout);
+        PayoutRequest payout = payoutRepository.findByIdForUpdate(localPayoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Wypłata Stripe Connect nie istnieje"));
+        if (!StripeConnectOnboardingService.PROVIDER_CODE.equals(payout.getProviderCode())) {
+            throw new ConflictException("Zdarzenie Stripe Connect wskazuje wypłatę innego providera");
+        }
+        if (payout.getProviderReference() != null && !payout.getProviderReference().equals(stripePayout.getId())) {
+            throw new ConflictException("Wypłata ma już inną referencję Stripe Connect");
+        }
+        if (payout.getProviderReference() == null
+                && payout.getStatus() != PayoutStatus.PROCESSING
+                && payout.getStatus() != PayoutStatus.REVIEW_REQUIRED) {
+            throw new ConflictException("Brakującą referencję Stripe można odzyskać tylko dla niejednoznacznej próby dispatchu");
+        }
+        return payout;
+    }
+
+    private Long payoutIdFromMetadata(Payout stripePayout) {
+        Map<String, String> metadata = stripePayout.getMetadata();
+        String rawPayoutId = metadata == null ? null : metadata.get("dofastPayoutId");
+        if (rawPayoutId == null || rawPayoutId.isBlank()) {
+            throw new ResourceNotFoundException("Wypłata Stripe Connect nie zawiera lokalnej tożsamości");
+        }
+        try {
+            long parsed = Long.parseLong(rawPayoutId);
+            if (parsed <= 0) {
+                throw new NumberFormatException("non-positive payout id");
+            }
+            return parsed;
+        } catch (NumberFormatException ex) {
+            throw new ConflictException("Stripe Connect zawiera nieprawidłowy identyfikator wypłaty");
+        }
     }
 
     private boolean isStale(PayoutRequest payout, Long eventCreatedAt) {
