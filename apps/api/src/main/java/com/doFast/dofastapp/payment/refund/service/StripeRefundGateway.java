@@ -26,29 +26,65 @@ public class StripeRefundGateway {
 
         try {
             Refund refund = Refund.create(params, options);
-            validate(refund, command);
-            return new StripeRefundProviderResult(refund.getId(), refund.getStatus(), refund.getFailureReason());
+            if (refund == null || refund.getId() == null || refund.getId().isBlank()) {
+                // No stable provider identity is available. Keep this in the existing ambiguous
+                // retry path, which is bounded by the Stripe idempotency-key safety window.
+                throw new PaymentProviderException("Stripe returned a refund without an id", null);
+            }
+
+            StripeRefundProviderResult result = new StripeRefundProviderResult(
+                    refund.getId(),
+                    refund.getStatus(),
+                    refund.getFailureReason()
+            );
+            validateKnownProviderResponse(refund, command, result);
+            return result;
         } catch (StripeException ex) {
             throw new PaymentProviderException("Stripe refund request failed", ex);
         }
     }
 
-    private void validate(Refund refund, StripeRefundDispatchCommand command) {
-        if (refund == null || refund.getId() == null || refund.getId().isBlank()) {
-            throw new PaymentProviderException("Stripe returned a refund without an id", null);
-        }
+    void validateKnownProviderResponse(
+            Refund refund,
+            StripeRefundDispatchCommand command,
+            StripeRefundProviderResult result
+    ) {
         if (refund.getPaymentIntent() == null || !command.paymentIntentId().equals(refund.getPaymentIntent())) {
-            throw new PaymentProviderException("Stripe refund does not match the requested PaymentIntent", null);
+            throw responseMismatch(
+                    "Stripe refund does not match the requested PaymentIntent",
+                    result,
+                    "provider_payment_intent_mismatch"
+            );
         }
         if (refund.getAmount() == null
                 || BigDecimal.valueOf(refund.getAmount(), 2).compareTo(command.amount()) != 0) {
-            throw new PaymentProviderException("Stripe refund does not match the requested amount", null);
+            throw responseMismatch(
+                    "Stripe refund does not match the requested amount",
+                    result,
+                    "provider_amount_mismatch"
+            );
         }
         if (refund.getCurrency() == null || !command.currency().equalsIgnoreCase(refund.getCurrency())) {
-            throw new PaymentProviderException("Stripe refund does not match the requested currency", null);
+            throw responseMismatch(
+                    "Stripe refund does not match the requested currency",
+                    result,
+                    "provider_currency_mismatch"
+            );
         }
         if (refund.getStatus() == null || refund.getStatus().isBlank()) {
-            throw new PaymentProviderException("Stripe returned a refund without a status", null);
+            throw responseMismatch(
+                    "Stripe returned a refund without a status",
+                    result,
+                    "provider_status_missing"
+            );
         }
+    }
+
+    private StripeRefundProviderResponseException responseMismatch(
+            String message,
+            StripeRefundProviderResult result,
+            String violationCode
+    ) {
+        return new StripeRefundProviderResponseException(message, result, violationCode);
     }
 }
