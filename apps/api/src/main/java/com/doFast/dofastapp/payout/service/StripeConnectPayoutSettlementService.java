@@ -4,6 +4,7 @@ import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.payout.entity.PayoutRecipientAccount;
 import com.doFast.dofastapp.payout.entity.PayoutRequest;
+import com.doFast.dofastapp.payout.enums.PayoutStatus;
 import com.doFast.dofastapp.payout.provider.PayoutProviderSettlementCommand;
 import com.doFast.dofastapp.payout.provider.PayoutProviderSettlementOutcome;
 import com.doFast.dofastapp.payout.provider.PayoutProviderSettlementResult;
@@ -73,20 +74,23 @@ public class StripeConnectPayoutSettlementService {
         if (isStale(payout, eventCreatedAt)) {
             return PayoutProviderSettlementResult.STALE;
         }
+        preflightTerminalState(payout, outcome);
 
         String failureCode = null;
         if (outcome == PayoutProviderSettlementOutcome.FAILED) {
             failureCode = failureCode(stripePayout);
-            long amountInCents = payout.getAmount().movePointRight(2).longValueExact();
-            moneyGateway.reverseTransfer(
-                    payout.getProviderTransferReference(),
-                    amountInCents,
-                    payout.getCurrency(),
-                    recipient.getProviderAccountId(),
-                    payout.getId(),
-                    payout.getUser().getId(),
-                    "payout:" + payout.getId() + ":provider:transfer-reversal"
-            );
+            if (payout.getStatus() == PayoutStatus.SUBMITTED) {
+                long amountInCents = payout.getAmount().movePointRight(2).longValueExact();
+                moneyGateway.reverseTransfer(
+                        payout.getProviderTransferReference(),
+                        amountInCents,
+                        payout.getCurrency(),
+                        recipient.getProviderAccountId(),
+                        payout.getId(),
+                        payout.getUser().getId(),
+                        "payout:" + payout.getId() + ":provider:transfer-reversal"
+                );
+            }
         }
 
         PayoutProviderSettlementResult result = settlementService.settle(new PayoutProviderSettlementCommand(
@@ -106,6 +110,15 @@ public class StripeConnectPayoutSettlementService {
         return eventCreatedAt != null
                 && payout.getProviderStateEventCreatedAt() != null
                 && eventCreatedAt < payout.getProviderStateEventCreatedAt();
+    }
+
+    private void preflightTerminalState(PayoutRequest payout, PayoutProviderSettlementOutcome outcome) {
+        if (payout.getStatus() == PayoutStatus.SUBMITTED
+                || (payout.getStatus() == PayoutStatus.PAID && outcome == PayoutProviderSettlementOutcome.PAID)
+                || (payout.getStatus() == PayoutStatus.FAILED && outcome == PayoutProviderSettlementOutcome.FAILED)) {
+            return;
+        }
+        throw new ConflictException("Zdarzenie providera jest sprzeczne z aktualnym stanem wypłaty");
     }
 
     private PayoutProviderSettlementOutcome terminalOutcome(Payout stripePayout) {
