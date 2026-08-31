@@ -79,11 +79,22 @@ public class StripeConnectPayoutSettlementService {
         }
         preflightTerminalState(payout, outcome);
 
+        long amountInCents = payout.getAmount().movePointRight(2).longValueExact();
+        if (outcome == PayoutProviderSettlementOutcome.PAID && payout.getStatus() == PayoutStatus.SUBMITTED) {
+            moneyGateway.requireTransferUnreversed(
+                    payout.getProviderTransferReference(),
+                    amountInCents,
+                    payout.getCurrency(),
+                    recipient.getProviderAccountId(),
+                    payout.getId(),
+                    payout.getUser().getId()
+            );
+        }
+
         String failureCode = null;
         if (outcome == PayoutProviderSettlementOutcome.FAILED) {
             failureCode = failureCode(stripePayout);
             if (payout.getStatus() == PayoutStatus.SUBMITTED) {
-                long amountInCents = payout.getAmount().movePointRight(2).longValueExact();
                 moneyGateway.reverseTransfer(
                         payout.getProviderTransferReference(),
                         amountInCents,
