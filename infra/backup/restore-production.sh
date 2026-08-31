@@ -16,6 +16,11 @@ if [[ "$CONFIRM" != "RESTORE_DOFAST_BACKUP" ]]; then
   exit 1
 fi
 
+if [[ ! "$TARGET_DB" =~ ^[A-Za-z0-9_]+$ ]]; then
+  echo "DOFAST_RESTORE_DB must contain only letters, digits and underscores" >&2
+  exit 1
+fi
+
 for file in manifest.txt SHA256SUMS postgres.dump attachments.tar.gz; do
   test -f "$BACKUP_DIR/$file" || { echo "missing backup file: $file" >&2; exit 1; }
 done
@@ -31,10 +36,10 @@ compose=(docker compose -f "$COMPOSE_FILE")
 # Restore is intentionally target-oriented: it never drops or overwrites the source POSTGRES_DB.
 "${compose[@]}" exec -T "$DB_SERVICE" sh -eu -c '
   : "${POSTGRES_USER:?POSTGRES_USER missing in db container}"
+  : "${POSTGRES_DB:?POSTGRES_DB missing in db container}"
   target="$1"
-  if psql --username "$POSTGRES_USER" --dbname postgres --tuples-only --no-align \
-      --command "SELECT 1 FROM pg_database WHERE datname = '\''${target//\'\'/\'\'\'}'\''" | grep -qx 1; then
-    echo "target database already exists: $target" >&2
+  if [ "$target" = "$POSTGRES_DB" ]; then
+    echo "refusing to restore over the active source database" >&2
     exit 1
   fi
   createdb --username "$POSTGRES_USER" "$target"
