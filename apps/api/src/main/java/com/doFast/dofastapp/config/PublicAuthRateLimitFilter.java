@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -42,6 +43,7 @@ public class PublicAuthRateLimitFilter extends OncePerRequestFilter {
     private final int maxEntries;
     private final boolean trustForwardedFor;
 
+    @Autowired
     public PublicAuthRateLimitFilter(
             @Value("${dofast.security.public-auth-rate-limit.max-requests:30}") int maxRequests,
             @Value("${dofast.security.public-auth-rate-limit.window-seconds:60}") long windowSeconds,
