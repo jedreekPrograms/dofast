@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/payout-smoke.yml"
       - ".github/scripts/payout-smoke.sh"
+      - ".github/scripts/payout-idempotency-expiry-smoke.sh"
       - ".github/scripts/seed-wallet-funding.sh"
       - ".env.example"
       - "compose.yaml"
@@ -25,6 +26,7 @@ on:
     paths:
       - ".github/workflows/payout-smoke.yml"
       - ".github/scripts/payout-smoke.sh"
+      - ".github/scripts/payout-idempotency-expiry-smoke.sh"
       - ".github/scripts/seed-wallet-funding.sh"
       - ".env.example"
       - "compose.yaml"
@@ -101,6 +103,9 @@ jobs:
 
       - name: Verify KYC, reservation, cancellation and sandbox payout lifecycle
         run: bash .github/scripts/payout-smoke.sh
+
+      - name: Verify expired ambiguous Stripe Connect dispatch is quarantined
+        run: bash .github/scripts/payout-idempotency-expiry-smoke.sh
 
       - name: Diagnostics
         if: failure()

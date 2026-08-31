@@ -2,31 +2,25 @@
 
 ## Purpose
 
-The payout module turns **withdrawable wallet earnings** into an auditable cash-out request. It is deliberately separate from job escrow settlement: a completed job first credits the worker wallet (after the snapshotted platform fee), and a later payout request reserves part of the wallet value that is explicitly classified as withdrawable.
+The payout module converts **withdrawable worker earnings** into an auditable cash-out request. It is deliberately separate from job settlement: a completed job first credits the worker wallet, then a later payout request reserves only funding lots whose provenance is explicitly withdrawable.
 
-Wallet balance is not anonymous cash. Refunded escrow, Stripe top-ups, legacy balance and platform adjustments retain their original source-of-funds classification. Returning value to a wallet makes it spendable again inside doFast, but does not automatically make it eligible for cash-out. The canonical source policy is documented in `docs/WALLET_SOURCE_OF_FUNDS.md`.
+Stripe/card funding, legacy balance and platform adjustments are not silently converted into cash-outable value. `docs/WALLET_SOURCE_OF_FUNDS.md` is the canonical source-of-funds policy.
 
 ## User flow
 
-`GET /wallet/payouts/eligibility` returns the current user's payout eligibility, balance, minimum amount, provider mode, and connected-recipient readiness. Stripe Connect setup readiness is reported independently of whether live payout dispatch is enabled. Payout eligibility uses the wallet's withdrawable funding balance rather than treating total wallet balance as cash-outable.
+`GET /wallet/payouts/eligibility` returns payout eligibility, withdrawable balance, minimum amount, provider mode and recipient readiness. `POST /wallet/payouts` requires an idempotent client `requestId`.
 
-`GET /wallet/payouts/onboarding/status` reads the last authoritative connected-account state cached by doFast. `POST /wallet/payouts/onboarding/refresh` re-reads provider state. `POST /wallet/payouts/onboarding/link` creates or reuses the user's mapped Express account and returns a single-use Stripe-hosted onboarding link. Provisioning is available only to ACTIVE users whose doFast identity verification is currently `VERIFIED`. Account creation is serialized by a fresh pessimistic user lock so concurrent onboarding requests cannot race past the local one-account-per-provider invariant.
+A successful request:
 
-Stripe `refresh_url` returns to the wallet with `stripe-connect=refresh`; the web app immediately requests a fresh single-use Account Link instead of trying to reuse an expired URL. The normal return path refreshes provider state before presenting readiness.
+1. locks the user and requires an ACTIVE account;
+2. requires current identity status `VERIFIED`;
+3. requires an available payout provider;
+4. for Stripe Connect, refreshes the authoritative connected-account state before reserving money;
+5. requires sufficient `withdrawable=true` funding lots;
+6. persists the payout and audit event;
+7. creates an idempotent `PAYOUT_RESERVE` consuming only eligible funding lots.
 
-`POST /wallet/payouts` requires an idempotent client `requestId`. A successful request:
-
-1. pessimistically locks the user and verifies the account is ACTIVE;
-2. requires current identity-verification status `VERIFIED`;
-3. requires a configured payout provider;
-4. if the configured provider is Stripe Connect, requires Connect onboarding to be available and refreshes the authoritative Stripe account state immediately before any wallet reservation;
-5. verifies that the requested amount is covered by funding lots marked `withdrawable=true`;
-6. persists the payout request and audit event;
-7. debits only eligible funding lots using `PAYOUT_RESERVE`, making double-spending impossible while the transfer is pending.
-
-Repeating the same request id and amount returns the same payout without reserving funds again. Reusing the request id for another amount is rejected.
-
-A user may cancel only a still-queued `REQUESTED` payout. Cancellation writes immutable audit events and restores the reserved amount exactly once with `PAYOUT_RESTORE`. That restoration returns value to the exact funding lots consumed by the reserve and preserves their source type and withdrawability.
+Repeating the same request id and amount returns the same payout without reserving funds again. Reusing the request id for another amount is rejected. A user may cancel only a still-queued `REQUESTED` payout; cancellation restores the exact reserved funding movements with `PAYOUT_RESTORE`.
 
 ## State machine
 
@@ -37,158 +31,141 @@ REQUESTED -> PROCESSING -> PAID          (synchronous provider only)
     |            |       |
     |            |       +-------> FAILED + PAYOUT_RESTORE
     |            |
-    |            +-> REQUESTED       (retryable provider failure before acceptance)
-    |            +-> REVIEW_REQUIRED (ambiguous result / retry exhaustion before acceptance)
-    |            +-> FAILED          (definitive pre-acceptance failure + funds restored)
+    |            +-> REQUESTED       (safe retryable provider failure)
+    |            +-> REVIEW_REQUIRED (ambiguous result / retry exhaustion)
+    |            +-> FAILED          (definitive pre-acceptance failure + restore)
     |
-    +-> CANCELLED (user cancels before processing + funds restored)
+    +-> CANCELLED (user cancellation before processing + restore)
 
-REVIEW_REQUIRED -> REQUESTED (audited admin retry)
-REVIEW_REQUIRED -> FAILED    (audited admin decision + funds restored)
+REVIEW_REQUIRED -> REQUESTED (audited admin retry only when the provider boundary was never entered)
+REVIEW_REQUIRED -> FAILED    (audited admin rejection + restore only when money location is unambiguous)
 ```
 
-`SUBMITTED` is intentionally non-terminal. It means a provider has accepted the payout operation and returned a durable reference, but doFast has not yet received authoritative terminal settlement. A submitted payout is never automatically re-dispatched or restored merely because settlement is slow. This prevents a second transfer or bank payout from being created while the first might still reach the recipient.
+`SUBMITTED` means the provider accepted the external operation and returned a durable payout reference. It is intentionally non-terminal. A submitted payout is never returned to the normal dispatch queue merely because settlement is slow.
 
-Once a Stripe Connect payout becomes `SUBMITTED`, doFast schedules a future settlement check using the existing `next_attempt_at` field. This timestamp is reused only as a reconciliation lease while the row is `SUBMITTED`; dispatch queries still select only `REQUESTED` payouts. Reconciliation therefore does not increment the dispatch `attempt_count`, does not call the provider dispatch boundary, and cannot put the request back into the normal payout-send queue.
+For Stripe Connect, any `REVIEW_REQUIRED` request that has already entered provider dispatch (`attempt_count > 0`) and still has no durable Stripe Payout reference is treated as externally ambiguous. Neither admin retry nor wallet restoration is allowed until the previous Stripe Transfer/Payout is reconciled. This applies even before the 23-hour cutoff: a timeout after the provider boundary can mean money already moved, so returning the wallet reserve would be unsafe. Pre-provider review states such as an eligibility/KYC rejection before the first dispatch (`attempt_count = 0`) remain locally resolvable.
 
-An ambiguous pre-acceptance provider result never restores funds automatically. Returning the money while the provider might still have sent it could create a double payout, so such cases move to `REVIEW_REQUIRED` for audited operator action.
-
-An ambiguous **post-acceptance** reconciliation result is handled differently. A Stripe payout with an unknown status, mismatched amount/metadata, missing connected account, or provider-read failure remains `SUBMITTED`, retains the wallet reservation and records reconciliation failure metadata. It is not moved to the existing `REVIEW_REQUIRED` retry flow because that flow can return a pre-acceptance payout to `REQUESTED`; doing that to an already-created Stripe Payout could create a duplicate external payout.
+`STRIPE_IDEMPOTENCY_WINDOW_EXPIRED` is the stronger long-downtime subtype of that ambiguity. It records that even an otherwise idempotent retry can no longer rely on Stripe retaining the original key.
 
 ## Provider boundary and idempotency
 
-`PayoutProvider` receives a stable provider idempotency key derived from the payout id. Retries reuse the same key. Synchronous providers can return terminal success. Asynchronous providers return a durable reference with `PayoutDispatchResult.submitted(...)`; the request moves to `SUBMITTED` and retains its original wallet reservation until a terminal provider settlement is applied.
+`PayoutProvider` receives a stable idempotency key derived from the local payout id. Stripe Connect derives two independent keys from it:
 
-`PayoutProviderSettlementService` is the provider-neutral settlement boundary. It locks the payout by the unique `(provider_code, provider_reference)` pair and deduplicates provider notifications by `(provider_code, provider_event_id)`. A `PAID` settlement finalizes without another wallet debit. A definitive `FAILED` settlement restores the reserved amount through the existing idempotent `PAYOUT_RESTORE` operation. Replayed events cannot mutate money twice, and a terminal event contradicting an already terminal state is rejected rather than silently rewriting financial history.
+- `payout:{id}:provider:transfer` for the platform `Transfer`;
+- `payout:{id}:provider:payout` for the connected-account `Payout`.
 
-The application defaults to `PAYOUT_PROVIDER=disabled` unless configured. `sandbox` is allowed only when `PAYOUT_SANDBOX_ENABLED=true`; it is for local development and CI and **never sends real money**. The sandbox provider remains synchronous so smoke coverage still ends directly in `PAID`.
+Stripe API v1 can prune idempotency keys after they are at least 24 hours old. Reusing a pruned key can execute a new POST. doFast therefore treats an ambiguous Stripe Connect `PROCESSING` attempt as automatically retryable only while its `processing_started_at` is inside a conservative **23-hour safety window**.
+
+The stale-processing scheduler locks the row with `FOR UPDATE SKIP LOCKED`. Inside the safe window it can return the request to `REQUESTED` with the same provider keys. At or beyond the 23-hour cutoff it instead moves the request to `REVIEW_REQUIRED` with `STRIPE_IDEMPOTENCY_WINDOW_EXPIRED`, keeps the wallet reserve held, does not call Stripe again, and records an immutable review event.
+
+This rule applies regardless of whether the crash occurred after the platform Transfer or after the connected-account Payout. It closes the long-downtime duplicate-money-movement window that ordinary short-lived idempotent retries cannot cover.
 
 ## Stripe Connect live dispatch
 
-Stripe Connect recipient onboarding, live money movement and submitted-payout reconciliation use independent kill switches:
+Stripe Connect onboarding, live dispatch and submitted reconciliation have independent kill switches:
 
-- `PAYOUT_STRIPE_CONNECT_ENABLED=true` permits verified ACTIVE users to provision/refresh their Express recipient account;
-- `PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED=true` registers the live `stripe-connect` payout provider and permits new external money movement;
-- `PAYOUT_STRIPE_CONNECT_RECONCILIATION_ENABLED=true` permits read-only provider reconciliation for already-created Stripe payouts.
+- `PAYOUT_STRIPE_CONNECT_ENABLED=true` permits Express account provisioning/refresh;
+- `PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED=true` permits new external money movement;
+- `PAYOUT_STRIPE_CONNECT_RECONCILIATION_ENABLED=true` permits read-only reconciliation of already-created Stripe payouts.
 
-`PAYOUT_PROVIDER=stripe-connect` is therefore still fail-closed unless the dispatch switch is explicitly enabled. Enabling onboarding or reconciliation alone cannot create a new Transfer or Payout.
+Before every live dispatch, doFast refreshes the connected account and requires submitted details, payouts enabled, an active `transfers` capability and no currently-due/past-due requirements. The connected account payout schedule is forced to `manual` before money movement.
 
-Before every live dispatch, doFast performs a fresh Stripe account-state read and requires submitted account details, payouts enabled, an active `transfers` capability, and no currently-due or past-due requirements. It then explicitly sets the connected account payout schedule to `manual` before moving funds. This prevents Stripe's default automatic payout schedule from racing the payout lifecycle controlled by doFast.
+Live dispatch then performs two distinct operations:
 
-Live Stripe Connect dispatch has two distinct provider operations:
+1. an idempotent Stripe `Transfer` moves the exact reserved amount from the platform to the mapped connected account;
+2. only after the Transfer id is durably stored as `provider_transfer_reference`, an idempotent manual Stripe `Payout` is created on that connected account.
 
-1. an idempotent Stripe `Transfer` moves the exact reserved amount from the platform balance to the user's connected account;
-2. after that transfer id is durably recorded in `payout_requests.provider_transfer_reference`, an idempotent manual Stripe `Payout` is created on the connected account.
+Short crash/retry cycles reuse the same Stripe operation and validate amount, currency, destination/account and doFast metadata. Long ambiguous cycles are quarantined before Stripe's documented idempotency-retention boundary instead of assuming the old key still exists.
 
-The two operations use stable, different provider idempotency keys derived from the doFast payout id. A crash after Stripe accepted the transfer but before a later attempt cannot send the platform transfer twice: the retry resolves the same provider operation, validates amount/currency/destination/metadata, persists the transfer reference, and only then proceeds to the connected-account payout.
+A created Stripe Payout always maps to doFast `SUBMITTED`; synchronous API status is not authoritative for wallet settlement. Signed Stripe events remain the preferred terminal authority.
 
-A created Stripe Payout always maps to doFast `SUBMITTED`, even if the create response appears terminal. Browser responses and synchronous API response status are not used to release or restore wallet funds. Signed Stripe webhooks remain the preferred fast path for terminal settlement.
+### Crash after Transfer creation
 
-### Submitted payout reconciliation
+If Stripe accepted the Transfer but the process died before `provider_transfer_reference` committed, doFast has no durable external Transfer id. Automatic retry is allowed only inside the 23-hour safety window. After that window, the payout is quarantined. Any Stripe Connect review that already crossed the provider boundary is also blocked from ordinary admin retry/restore until the provider state is reconciled, so an operator cannot bypass the automatic safety rule.
 
-Reconciliation is a missed/delayed-webhook safety net. After `PAYOUT_SUBMITTED_RECONCILIATION_SECONDS` has elapsed, a scheduler may claim a due `SUBMITTED` payout using `FOR UPDATE SKIP LOCKED`. The claim immediately advances `next_attempt_at` before any provider network call, creating a crash-safe lease and preventing multiple API nodes from continuously polling the same payout.
+### Crash after Payout creation
 
-The reconciler retrieves the existing Stripe connected-account Payout by the stored `provider_reference`; it never creates a replacement Payout and never calls the dispatch provider. Before trusting the response it validates:
+If the Transfer reference was already committed, Stripe created the connected-account Payout, and the process then died before local `provider_reference` was saved, a later **signed terminal Stripe payout event** can self-heal the missing reference.
 
-- the exact Stripe payout id;
+The settlement path first tries the normal unique `(provider_code, provider_reference)` lookup. If that misses, it may fall back to signed Stripe metadata `dofastPayoutId`, lock that local payout by id and accept the missing reference only when all invariants match:
+
+- provider is exactly `stripe-connect`;
+- local state is an ambiguous `PROCESSING` or `REVIEW_REQUIRED` state;
+- exact doFast payout id;
+- exact doFast user id;
 - exact amount and currency;
-- doFast payout id metadata;
-- doFast user id metadata;
-- the exact stored platform transfer reference;
-- the mapped connected Stripe account used to perform the retrieve operation.
+- exact mapped connected Stripe account;
+- exact previously stored platform Transfer reference.
 
-Provider states are interpreted conservatively:
+Only after those checks does doFast attach the Stripe payout id, transition through `SUBMITTED`, and reuse the normal terminal settlement path. Mismatched or foreign metadata cannot attach an external payout to a local request.
 
-- `pending` or `in_transit` -> remain `SUBMITTED`, clear any transient reconciliation failure, and wait for the next scheduled read;
-- `paid` -> reuse the existing Stripe Connect settlement path and finalize `SUBMITTED -> PAID`;
-- `failed` or `canceled` -> reuse the existing reversal-before-restore settlement path and finalize only after platform funds have been recovered safely;
-- unsupported status, identity mismatch or provider exception -> remain `SUBMITTED`, keep funds reserved, record reconciliation failure metadata and retry only the future **read**, never the payout dispatch.
+## Submitted payout reconciliation
 
-The reconciliation-generated provider event id is deterministic per payout and terminal status, so a later replay cannot settle the same terminal observation twice. Races with a signed webhook are also safe: the provider-neutral settlement service treats a matching already-terminal outcome as already settled and rejects contradictory financial history.
+Once `SUBMITTED`, `next_attempt_at` is reused as a read-only reconciliation lease. A scheduler claims due rows with `FOR UPDATE SKIP LOCKED`, advances the lease, then retrieves the **existing** Stripe payout by its stored provider reference. Reconciliation never creates a replacement Payout and never calls the normal dispatch provider.
 
-`PAYOUT_STRIPE_CONNECT_RECONCILIATION_INTERVAL_MS` controls the scheduler cadence. `PAYOUT_SUBMITTED_RECONCILIATION_SECONDS` controls the initial grace period and subsequent provider-read lease/backoff. Reconciliation can stay enabled while `PAYOUT_STRIPE_CONNECT_DISPATCH_ENABLED=false`, allowing operators to stop new money movement without stranding payouts already accepted by Stripe.
+The response must match payout id, amount, currency, user metadata, Transfer reference and connected account. Provider states are handled conservatively:
 
-The Stripe webhook endpoint accepts connected-account payout events in addition to PaymentIntent events. `payout.paid` and terminal `payout.updated` confirm success. `payout.failed`, a canceled terminal payout, or the corresponding terminal update confirm failure. Every terminal event is validated against:
+- `pending` / `in_transit` -> remain `SUBMITTED`;
+- `paid` -> terminal paid settlement;
+- `failed` / `canceled` -> terminal failure settlement after safe provider-fund recovery;
+- unknown state, identity mismatch or provider-read failure -> remain `SUBMITTED`, retain the reserve and retry only the future read.
 
-- the stored doFast payout id and user id metadata;
-- the stored Stripe payout reference;
-- the persisted platform transfer reference;
-- exact amount and currency;
-- the mapped connected Stripe account from the event context.
+## Signed payout settlement and transfer reversal
 
-On successful bank settlement, `SUBMITTED -> PAID` creates no wallet entry because `PAYOUT_RESERVE` already removed the amount from spendable balance.
+The signed `/webhooks/stripe` endpoint handles connected-account payout events. `event.created` ordering prevents stale terminal events from regressing newer provider state, and contradictory terminal transitions fail closed.
 
-On failed/canceled bank settlement, Stripe has returned the failed payout funds to the connected Stripe balance, not to the doFast platform wallet. Therefore doFast first retrieves and validates the original platform transfer and creates an idempotent transfer reversal back to the platform. Only after that reversal succeeds does the existing settlement service apply `SUBMITTED -> FAILED` and the idempotent `PAYOUT_RESTORE`. If transfer recovery is unavailable or ambiguous, webhook or reconciliation processing fails and the wallet reservation stays in place; doFast does not create spendable money while provider money may still be outside the platform.
+For `PAID`, no second wallet debit is created because `PAYOUT_RESERVE` already removed the money from spendable balance.
 
-Disabling the dispatch switch stops new provider dispatch. Signed settlement handling remains available for already-submitted payouts, and read-only reconciliation remains available when its independent switch is enabled, so an operational dispatch kill switch cannot strand in-flight financial state.
+For `FAILED` or `CANCELED`, failed payout funds return to the connected Stripe balance rather than automatically to the doFast platform. doFast therefore validates and reverses the original platform Transfer first. Only after that provider recovery succeeds may local settlement move to `FAILED` and execute the idempotent `PAYOUT_RESTORE`.
 
-Production Stripe webhook configuration must deliver connected-account payout events to the same signed `/webhooks/stripe` endpoint. Provider account ids, transfer ids, payout ids and provider failure details remain private financial/operator data and are never exposed in public profiles.
-
-## KYC and account safety
-
-A payout request requires a currently `VERIFIED` identity. The dispatcher rechecks payout eligibility before sending reserved money so a later account suspension or verification revocation cannot silently bypass the safety boundary.
-
-Connected-account creation is also gated on ACTIVE + VERIFIED so an authenticated but unverified account cannot cause doFast to provision external provider resources. The account-link return and refresh URLs are fixed server configuration and validated to HTTPS outside localhost; callers cannot supply an arbitrary redirect target. Docker Compose explicitly forwards these server-side onboarding, dispatch and reconciliation settings instead of relying on host `.env` variables that never reach the API container.
-
-The public profile remains unchanged: it only exposes the existing boolean trust badge. Payout status, payout amounts, provider account IDs, provider references, transfer references and audit events are private financial data.
-
-## Wallet accounting
-
-The wallet ledger and source-of-funds ledger jointly define the payout boundary:
-
-- `PAYOUT_RESERVE` is a negative wallet ledger entry created when the payout request is accepted;
-- the reserve may consume only funding lots with `withdrawable=true`;
-- current worker earnings (`EARNED_JOB`) are withdrawable;
-- Stripe/card funding (`STRIPE_PAYMENT`), migrated historical balance (`LEGACY_UNVERIFIED`) and platform adjustments (`PLATFORM_ADJUSTMENT`) are not withdrawable;
-- `PAYOUT_RESTORE` is a positive entry created only when a queued payout is cancelled, a pre-provider dispatch is definitively rejected, or an asynchronous provider failure has first been safely compensated;
-- `PAYOUT_RESTORE` restores the exact negative funding movements of the original reserve and therefore cannot change a funding source's withdrawal classification;
-- `SUBMITTED` creates no wallet entry because the reservation already removed those funds from spendable balance;
-- reconciliation of a non-terminal Stripe payout creates no wallet entry;
-- a successful `PAID` settlement creates no second debit because the money was already removed from available balance at reservation time.
-
-For every wallet, `wallet.balance` must equal the sum of remaining funding lots. A mismatch is a financial-accounting error and fails closed. The application must never infer withdrawability heuristically from transaction history or repair a mismatch by directly changing `wallets.balance`.
-
-This model prevents a Stripe top-up from being converted into cash while still allowing card-funded value to pay for doFast jobs. Ordinary internal spending uses non-withdrawable value before earnings whenever possible, preserving legitimate earned value for later payout.
-
-See `docs/WALLET_SOURCE_OF_FUNDS.md` for the canonical source matrix, restoration rules, legacy migration behavior and operator runbook.
+External transfer reversal is preflighted against local state before the provider call. Repeated already-failed events do not reverse money again. If transfer recovery is unavailable or ambiguous, processing fails and the wallet reservation remains held.
 
 ## Administration
 
-`/admin/payouts/**` is protected by the existing admin security boundary. Admins can inspect payout state/events and act only on requests requiring review. A forced failure requires a reason and restores reserved funds through the same idempotent wallet path.
+`/admin/payouts/**` is admin-gated. The admin DTO/UI exposes private provider payout and Transfer references plus a backend-derived `providerOutcomeAmbiguous` flag for operator reconciliation; ordinary user DTOs do not.
 
-The web operator console at `/admin/payouts` mirrors those backend constraints instead of inventing finance rules in the browser. It supports status filtering, including `SUBMITTED`, paginated payout inspection, provider/failure metadata, immutable event history, audited retry, and audited final rejection with fund restoration. Retry/failure controls are rendered only for `REVIEW_REQUIRED`; a submitted provider operation is display-only because manually retrying it could cause a duplicate payout.
+A `REVIEW_REQUIRED` Stripe Connect request with `attempt_count > 0` and no durable provider payout reference is display/reconciliation-only: both retry and fail+restore are hidden in the UI and rejected by the backend. The operator must inspect Stripe because a Transfer or Payout may already exist. `STRIPE_IDEMPOTENCY_WINDOW_EXPIRED` additionally signals that the provider key retention boundary itself has been crossed.
 
-A submitted payout with reconciliation failure metadata must be investigated as an in-flight provider operation, not force-retried through the normal admin retry action. Operators should first inspect the corresponding Stripe connected account, payout reference and transfer reference. Until provider state and money location are unambiguous, the local wallet reservation must remain in place.
+Pre-provider review cases with `attempt_count = 0` can still use audited retry/final rejection after the underlying eligibility problem is fixed or confirmed. A submitted payout with reconciliation errors is likewise an in-flight provider operation, not a candidate for force-retry through the dispatch queue.
 
-Provider references and internal failure information are not returned by the normal user payout DTO. They are visible only through the admin endpoint and admin-gated UI.
+## Wallet accounting
+
+- `PAYOUT_RESERVE` is a negative wallet entry and consumes only withdrawable funding lots.
+- Worker `EARNED_JOB` funding is withdrawable.
+- `STRIPE_PAYMENT`, `LEGACY_UNVERIFIED` and `PLATFORM_ADJUSTMENT` are not withdrawable.
+- `PAYOUT_RESTORE` restores the exact funding movements consumed by the original reserve.
+- `SUBMITTED` creates no additional wallet debit.
+- terminal `PAID` creates no additional wallet debit.
+- terminal failure restores wallet value only after external provider money is safely recovered or provider rejection is definitive before acceptance.
+
+For every wallet, `wallet.balance` must equal the sum of remaining funding lots. A provenance mismatch is a financial-accounting error and fails closed.
+
+## KYC and account safety
+
+Payout creation and dispatch require a currently ACTIVE user and `VERIFIED` identity. The dispatcher rechecks eligibility immediately before external money movement. Stripe Express account creation is also gated by the same account/verification boundary.
+
+Provider account ids, Transfer ids, Payout ids, payout amounts and provider failure details are private finance/operator data and never appear in public profiles.
 
 ## Database and CI
 
-Flyway `V39__worker_payout_requests.sql` owns payout request/event persistence and wallet payout reservation/restoration. Flyway `V44__stripe_connect_payout_recipients.sql` owns the private user-to-provider account mapping and cached readiness state. Flyway `V45__asynchronous_payout_settlement.sql` adds the `SUBMITTED` state, provider submission timestamp and deduplicated `payout_provider_events` audit table. Flyway `V46__stripe_connect_payout_dispatch.sql` adds the nullable, uniquely indexed provider transfer reference needed for crash-safe Stripe Connect dispatch and failure compensation. Flyway `V49__wallet_source_of_funds.sql` adds funding lots/movements and backfills positive pre-provenance balances as non-withdrawable `LEGACY_UNVERIFIED` value.
+Flyway migrations own payout persistence and provider references. This crash-window hardening requires **no new migration**: it uses the existing `processing_started_at`, `attempt_count`, `failure_code`, `provider_transfer_reference` and `provider_reference` fields.
 
-Submitted reconciliation reuses the existing payout persistence. No new migration is required: `next_attempt_at` is status-scoped for the reconciliation lease while the payout is `SUBMITTED`, and the existing provider/status/next-attempt index supports due-row selection.
+`Worker payout smoke` runs against PostgreSQL and covers sandbox reservation/idempotency/cancellation/settlement plus a scheduler scenario that inserts an old Stripe Connect `PROCESSING` row. The smoke requires it to become exactly `REVIEW_REQUIRED|STRIPE_IDEMPOTENCY_WINDOW_EXPIRED`, with the original attempt count unchanged, no provider references invented and no `PAYOUT_RESTORE` created.
 
-`Worker payout smoke` verifies against PostgreSQL and the explicit sandbox provider:
+Unit tests additionally cover:
 
-- V44 recipient persistence, V45 async-settlement state, V46 transfer-reference persistence and V49 funding provenance are migrated;
-- Connect onboarding, live dispatch and reconciliation remain disabled in the sandbox smoke and do not affect sandbox cash-out;
-- KYC rejection before verification;
-- verified payout eligibility;
-- the fixture starts from `EARNED_JOB` rather than a synthetic card top-up;
-- payout reservation consumes only withdrawable funding;
-- idempotent client retry;
-- queued cancellation and exact source restoration;
-- synchronous sandbox dispatch to `PAID` with immutable audit events and no fake provider submission/transfer references;
-- paid balance remains fully covered by the remaining withdrawable earnings lot.
+- recent stale Stripe Connect dispatch remains safely retryable;
+- dispatch older than the safety window is quarantined;
+- every Stripe Connect review after a provider attempt blocks local admin retry and wallet restoration;
+- a pre-provider review remains locally resolvable;
+- a signed terminal Stripe event can recover a provider payout reference lost after provider acceptance;
+- wrong signed-event identity metadata cannot attach an external payout;
+- stale/contradictory payout events cannot regress financial state;
+- failed payouts reverse the Transfer before wallet restoration;
+- submitted reconciliation remains read-only.
 
-The ordinary sandbox smoke intentionally does not fabricate a Stripe connected-account Payout. Real Stripe Connect test-mode end-to-end validation with an Express account remains a separate launch gate because only that can prove provider account creation, platform Transfer, connected Payout, webhook delivery and provider retrieval against Stripe's actual test environment.
+Real Stripe Connect test-mode end-to-end validation with an Express account remains a separate launch gate. Only that can prove actual provider account creation, Transfer, connected-account Payout, webhook delivery and retrieval against Stripe's test environment.
 
-Unit tests additionally enforce funding-source allocation/restoration policy, coverage fail-closed behavior, exact-PaymentIntent refund allocation, `PROCESSING -> SUBMITTED` without wallet mutation, reconciliation scheduling without increasing the dispatch attempt count, crash-safe `SUBMITTED` claim leasing, read-only pending reconciliation, strict Stripe payout identity validation, terminal reconciliation delegation, provider-exception fail-closed behavior, `SUBMITTED -> PAID` without a second debit, `SUBMITTED -> FAILED` with exactly one restore, provider-event replay idempotency, rejection of contradictory terminal events, fresh Stripe Connect readiness before money movement, durable transfer-before-payout ordering, transfer reuse across retries, connected-account event identity validation, and reversal-before-wallet-restore ordering for failed Stripe payouts. Frontend CI continues to run dependency audit, tests, lint and production build.
+## Related publication-payment flow
 
-## Related publish-payment flow
-
-Job publication no longer requires the wallet to cover the full budget. Publication reserves the available wallet amount, requests Stripe payment only for the missing amount, and publishes only after authoritative server-side payment confirmation. The funded amount includes the service reward plus any optional expense budget; expense reimbursement remains separate from the platform fee calculation.
-
-Stripe redirects return to the exact publication id, redirect query secrets are removed from the browser URL immediately, and the frontend treats the backend publication state—not `redirect_status`—as authoritative. Pending publication reservations expire and are released through the idempotent wallet path; attached unfinished PaymentIntents are canceled best-effort only after local cancellation/expiry has committed.
-
-These rules compose with source-of-funds accounting: a cancelled job or publication restores the same lots that funded the original reservation. The user may reuse the returned value inside doFast. Cash-out is available only to the portion whose restored source remains withdrawable, normally worker `EARNED_JOB` value; returning card-funded or legacy value does not make it withdrawable.
+Job publication may combine wallet value and Stripe funding. Publication reservations, redirects and settlement remain independent of worker cash-out. Cancellation restores the same source lots that funded the original reservation, and returned card-funded value remains non-withdrawable.

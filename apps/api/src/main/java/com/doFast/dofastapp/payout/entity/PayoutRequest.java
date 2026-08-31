@@ -193,6 +193,23 @@ public class PayoutRequest {
         failureCode = null;
     }
 
+    public void recoverSubmittedProviderReference(String providerReference, LocalDateTime now) {
+        if (status != PayoutStatus.PROCESSING && status != PayoutStatus.REVIEW_REQUIRED) {
+            throw new IllegalStateException("Only ambiguous provider dispatch can recover a submitted payout reference");
+        }
+        requireProviderReference(providerReference);
+        String normalized = providerReference.trim();
+        if (this.providerReference != null && !this.providerReference.equals(normalized)) {
+            throw new IllegalStateException("Payout already has a different provider reference");
+        }
+        status = PayoutStatus.SUBMITTED;
+        this.providerReference = normalized;
+        processingStartedAt = null;
+        providerSubmittedAt = now;
+        failureCode = null;
+        lastErrorAt = null;
+    }
+
     public void scheduleSubmittedReconciliation(LocalDateTime nextReconciliationAt) {
         requireStatus(PayoutStatus.SUBMITTED);
         if (nextReconciliationAt == null) {

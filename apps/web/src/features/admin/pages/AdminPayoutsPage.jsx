@@ -29,6 +29,8 @@ const EVENT_LABELS = {
   FUNDS_RESTORED: 'Środki przywrócono do portfela',
 }
 
+const STRIPE_IDEMPOTENCY_WINDOW_EXPIRED = 'STRIPE_IDEMPOTENCY_WINDOW_EXPIRED'
+
 function money(value, currency = 'PLN') {
   return Number(value || 0).toLocaleString('pl-PL', { style: 'currency', currency })
 }
@@ -165,6 +167,8 @@ function AdminPayoutsPage() {
         <section className="payout-review-list">
           {data.content.map((item) => {
             const reviewRequired = item.status === 'REVIEW_REQUIRED'
+            const providerOutcomeAmbiguous = item.providerOutcomeAmbiguous === true
+            const idempotencyWindowExpired = item.failureCode === STRIPE_IDEMPOTENCY_WINDOW_EXPIRED
             const reason = reasonById[item.id] || ''
             return (
               <article className="panel payout-review" key={item.id}>
@@ -182,13 +186,25 @@ function AdminPayoutsPage() {
                 </div>
 
                 <div className="payout-review__facts">
-                  <div><span>Referencja providera</span><strong>{item.providerReference || '—'}</strong></div>
+                  <div><span>Referencja payoutu</span><strong>{item.providerReference || '—'}</strong></div>
+                  <div><span>Referencja transferu</span><strong>{item.providerTransferReference || '—'}</strong></div>
                   <div><span>Kod błędu</span><strong>{item.failureCode || '—'}</strong></div>
                   <div><span>Start przetwarzania</span><strong>{dateTime(item.processingStartedAt)}</strong></div>
                   <div><span>Rozstrzygnięta</span><strong>{dateTime(item.resolvedAt)}</strong></div>
                 </div>
 
-                {reviewRequired && (
+                {reviewRequired && providerOutcomeAmbiguous && (
+                  <div className="payout-review__decision">
+                    <div className="payout-review__warning">
+                      {idempotencyWindowExpired
+                        ? 'Ta próba Stripe Connect przekroczyła bezpieczne okno idempotencji. Transfer lub Payout mógł już zostać utworzony mimo braku lokalnej referencji.'
+                        : 'Ta wypłata weszła już w zewnętrzny boundary Stripe Connect i jej wynik nie jest lokalnie jednoznaczny.'}
+                      {' '}Nie wolno ponawiać wypłaty ani przywracać środków do walletu, dopóki stan Transfer/Payout nie zostanie potwierdzony po stronie Stripe. Backend blokuje obie operacje fail-closed.
+                    </div>
+                  </div>
+                )}
+
+                {reviewRequired && !providerOutcomeAmbiguous && (
                   <div className="payout-review__decision">
                     <div className="payout-review__warning">
                       Ta decyzja wpływa na środki użytkownika. Retry jest dozwolony tylko wtedy, gdy provider jest dostępny. Odrzucenie jest końcowe i backend przywraca środki do walletu idempotentną operacją ledgerową.
