@@ -149,7 +149,7 @@ public class AdminPayoutService {
     private void requireLocallyResolvableReview(PayoutRequest payout) {
         if (PayoutProviderSafetyPolicy.requiresExternalProviderReconciliation(payout)) {
             throw new ConflictException(
-                    "Nie można ponowić ani zwrócić środków: poprzedni Stripe Transfer/Payout może już istnieć, a bezpieczne okno idempotencji wygasło. Najpierw potwierdź stan operacji po stronie Stripe."
+                    "Nie można ponowić ani zwrócić środków: poprzedni Stripe Transfer/Payout może już istnieć. Najpierw potwierdź stan operacji po stronie Stripe."
             );
         }
     }
@@ -170,6 +170,7 @@ public class AdminPayoutService {
                 payout.getProviderCode(),
                 payout.getProviderReference(),
                 payout.getProviderTransferReference(),
+                PayoutProviderSafetyPolicy.requiresExternalProviderReconciliation(payout),
                 payout.getAttemptCount(),
                 payout.getFailureCode(),
                 payout.getRequestedAt(),
