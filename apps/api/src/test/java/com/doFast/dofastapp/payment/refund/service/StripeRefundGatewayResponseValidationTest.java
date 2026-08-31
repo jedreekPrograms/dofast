@@ -6,8 +6,10 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StripeRefundGatewayResponseValidationTest {
 
@@ -28,6 +30,24 @@ class StripeRefundGatewayResponseValidationTest {
         assertSame(result, exception.providerResult());
         assertEquals("re_41", exception.providerResult().refundId());
         assertEquals("provider_amount_mismatch", exception.violationCode());
+        assertTrue(exception.providerIdentityMatchesRequest());
+    }
+
+    @Test
+    void paymentIntentMismatchMarksProviderIdentityAsUntrusted() {
+        StripeRefundDispatchCommand command = command();
+        Refund refund = validRefund();
+        refund.setPaymentIntent("pi_other");
+        StripeRefundProviderResult result = result(refund);
+
+        StripeRefundProviderResponseException exception = assertThrows(
+                StripeRefundProviderResponseException.class,
+                () -> gateway.validateKnownProviderResponse(refund, command, result)
+        );
+
+        assertSame(result, exception.providerResult());
+        assertEquals("provider_payment_intent_mismatch", exception.violationCode());
+        assertFalse(exception.providerIdentityMatchesRequest());
     }
 
     @Test
@@ -44,6 +64,7 @@ class StripeRefundGatewayResponseValidationTest {
 
         assertEquals("re_41", exception.providerResult().refundId());
         assertEquals("provider_status_missing", exception.violationCode());
+        assertTrue(exception.providerIdentityMatchesRequest());
     }
 
     private StripeRefundDispatchCommand command() {
