@@ -112,6 +112,8 @@ jobs:
         run: bash .github/scripts/job-discovery-smoke.sh
       - name: Verify accounts, routing, chat, disputes and escrow
         run: bash .github/scripts/runtime-smoke.sh
+      - name: Verify Stripe webhook transaction rollback and retry
+        run: bash .github/scripts/stripe-webhook-transaction-crash-smoke.sh
       - name: Verify multi-stop routing, tracking and terminal location retention
         run: bash .github/scripts/multi-stop-routing-smoke.sh
       - name: Verify on-site jobs and exact-location privacy
