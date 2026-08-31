@@ -41,7 +41,15 @@ public class PayoutDispatcher {
                 log.warn("Payout provider call failed for payout {}", command.payoutId(), ex);
                 result = PayoutDispatchResult.retryableFailure("PROVIDER_EXCEPTION");
             }
-            queue.complete(command.payoutId(), result);
+            try {
+                queue.complete(command.payoutId(), result);
+            } catch (RuntimeException ex) {
+                log.warn(
+                        "Failed to persist payout provider result for payout {}; leaving PROCESSING state for durable stale recovery and continuing the batch",
+                        command.payoutId(),
+                        ex
+                );
+            }
         }
     }
 }
