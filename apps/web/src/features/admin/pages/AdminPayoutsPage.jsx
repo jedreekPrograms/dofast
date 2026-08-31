@@ -167,7 +167,8 @@ function AdminPayoutsPage() {
         <section className="payout-review-list">
           {data.content.map((item) => {
             const reviewRequired = item.status === 'REVIEW_REQUIRED'
-            const providerOutcomeAmbiguous = item.failureCode === STRIPE_IDEMPOTENCY_WINDOW_EXPIRED
+            const providerOutcomeAmbiguous = item.providerOutcomeAmbiguous === true
+            const idempotencyWindowExpired = item.failureCode === STRIPE_IDEMPOTENCY_WINDOW_EXPIRED
             const reason = reasonById[item.id] || ''
             return (
               <article className="panel payout-review" key={item.id}>
@@ -195,7 +196,10 @@ function AdminPayoutsPage() {
                 {reviewRequired && providerOutcomeAmbiguous && (
                   <div className="payout-review__decision">
                     <div className="payout-review__warning">
-                      Ta próba Stripe Connect jest starsza niż bezpieczne okno idempotencji. Transfer lub Payout mógł już zostać utworzony, mimo że lokalna referencja nie została zapisana. Nie wolno ponawiać wypłaty ani przywracać środków do walletu, dopóki stan operacji nie zostanie potwierdzony po stronie Stripe. Backend blokuje obie operacje fail-closed.
+                      {idempotencyWindowExpired
+                        ? 'Ta próba Stripe Connect przekroczyła bezpieczne okno idempotencji. Transfer lub Payout mógł już zostać utworzony mimo braku lokalnej referencji.'
+                        : 'Ta wypłata weszła już w zewnętrzny boundary Stripe Connect i jej wynik nie jest lokalnie jednoznaczny.'}
+                      {' '}Nie wolno ponawiać wypłaty ani przywracać środków do walletu, dopóki stan Transfer/Payout nie zostanie potwierdzony po stronie Stripe. Backend blokuje obie operacje fail-closed.
                     </div>
                   </div>
                 )}
