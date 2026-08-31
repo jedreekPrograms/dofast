@@ -87,6 +87,7 @@ public class AdminPayoutService {
         if (payout.getStatus() != PayoutStatus.REVIEW_REQUIRED) {
             throw new ConflictException("Ponowić można tylko wypłatę wymagającą ręcznej weryfikacji");
         }
+        requireLocallyResolvableReview(payout);
         if (!providerRegistry.isProviderAvailable(payout.getProviderCode())) {
             throw new ConflictException("Provider tej wypłaty nie jest obecnie dostępny; zakończ ręczną weryfikację zamiast ponawiać");
         }
@@ -111,6 +112,7 @@ public class AdminPayoutService {
         if (payout.getStatus() != PayoutStatus.REVIEW_REQUIRED) {
             throw new ConflictException("Definitywnie odrzucić można tylko wypłatę wymagającą ręcznej weryfikacji");
         }
+        requireLocallyResolvableReview(payout);
         LocalDateTime now = LocalDateTime.now();
         payout.markFailed("ADMIN_DECLINED", now);
         payoutRepository.save(payout);
@@ -144,6 +146,14 @@ public class AdminPayoutService {
         return toAdminResponse(payout);
     }
 
+    private void requireLocallyResolvableReview(PayoutRequest payout) {
+        if (PayoutProviderSafetyPolicy.requiresExternalProviderReconciliation(payout)) {
+            throw new ConflictException(
+                    "Nie można ponowić ani zwrócić środków: poprzedni Stripe Transfer/Payout może już istnieć, a bezpieczne okno idempotencji wygasło. Najpierw potwierdź stan operacji po stronie Stripe."
+            );
+        }
+    }
+
     private PayoutRequest getForUpdate(Long payoutId) {
         return payoutRepository.findByIdForUpdate(payoutId)
                 .orElseThrow(() -> new ResourceNotFoundException("Wypłata nie istnieje"));
@@ -159,6 +169,7 @@ public class AdminPayoutService {
                 payout.getStatus(),
                 payout.getProviderCode(),
                 payout.getProviderReference(),
+                payout.getProviderTransferReference(),
                 payout.getAttemptCount(),
                 payout.getFailureCode(),
                 payout.getRequestedAt(),
