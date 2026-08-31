@@ -26,7 +26,7 @@ public class JobPublicationExpiryScheduler {
             if (expiredPublicationId == null) {
                 return;
             }
-            paymentIntentCleanupService.cancelAttachedIntentBestEffort(expiredPublicationId);
+            paymentIntentCleanupService.process(expiredPublicationId);
         }
     }
 }
