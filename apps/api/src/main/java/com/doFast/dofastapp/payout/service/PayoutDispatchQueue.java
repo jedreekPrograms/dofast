@@ -96,6 +96,13 @@ public class PayoutDispatchQueue {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime cutoff = now.minus(properties.staleProcessingTimeout());
         payoutRepository.findStaleProcessingForUpdate(cutoff).ifPresent(payout -> {
+            if (PayoutProviderSafetyPolicy.stripeConnectRetryWindowExpired(payout, now)) {
+                payout.requireReview(PayoutProviderSafetyPolicy.STRIPE_CONNECT_IDEMPOTENCY_WINDOW_EXPIRED, now);
+                payoutRepository.save(payout);
+                record(payout, PayoutEventType.REVIEW_REQUIRED, PayoutEventSource.SYSTEM,
+                        "Poprzednia próba Stripe Connect przekroczyła bezpieczne okno idempotencji. Automatyczny retry jest zablokowany, a środki pozostają zarezerwowane do zewnętrznego potwierdzenia Transfer/Payout.", now);
+                return;
+            }
             if (payout.getAttemptCount() >= properties.maxAttempts()) {
                 payout.requireReview("STALE_PROCESSING", now);
                 payoutRepository.save(payout);
