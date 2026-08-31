@@ -66,6 +66,15 @@ public class PasswordRecoveryService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        if (tokenRepository.existsByUserIdAndCreatedAtAfter(
+                user.getId(),
+                now.minus(properties.requestCooldown())
+        )) {
+            // Keep the public endpoint indistinguishable from a normal accepted request while
+            // suppressing repeated SMTP delivery and token churn for the same account.
+            return;
+        }
+
         tokenRepository.invalidateActiveForUser(user.getId(), now);
 
         String rawToken = secrets.generate();
