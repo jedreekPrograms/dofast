@@ -3,7 +3,8 @@ set -euo pipefail
 trap 'echo "Stripe webhook transaction crash smoke failed at line $LINENO"' ERR
 
 api='http://localhost:8080'
-webhook_secret='whsec_replace_me'
+webhook_secret=$(sed -n 's/^STRIPE_WEBHOOK_SECRET=//p' .env | tail -n 1)
+test -n "$webhook_secret"
 payment_intent_id='pi_webhook_tx_crash'
 event_id='evt_webhook_tx_crash'
 operation_key="stripe:intent:${payment_intent_id}"
