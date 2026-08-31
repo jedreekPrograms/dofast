@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.payment.webhook;
 
+import com.doFast.dofastapp.config.StripeApiVersionContract;
 import com.doFast.dofastapp.job.publication.JobPublicationPaymentIntentService;
 import com.doFast.dofastapp.job.publication.JobPublicationStripeSettlementService;
 import com.doFast.dofastapp.payment.refund.service.StripeRefundSettlementResult;
@@ -69,6 +70,19 @@ public class StripeWebhookController {
             return ResponseEntity.badRequest().body("invalid signature");
         }
 
+        if (isFinancialEvent(event.getType())
+                && !StripeApiVersionContract.matchesReviewedVersion(event.getApiVersion())) {
+            log.error(
+                    "Rejected Stripe financial webhook {} of type {} because event API version {} does not match reviewed version {}",
+                    event.getId(),
+                    event.getType(),
+                    event.getApiVersion(),
+                    StripeApiVersionContract.REVIEWED_API_VERSION
+            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("unsupported stripe api version");
+        }
+
         if ("payment_intent.succeeded".equals(event.getType())) {
             return handleSuccessfulPayment(event);
         }
@@ -78,9 +92,7 @@ public class StripeWebhookController {
         if (isPaymentDisputeEvent(event.getType())) {
             return handlePaymentDisputeEvent(event);
         }
-        if ("payout.paid".equals(event.getType())
-                || "payout.failed".equals(event.getType())
-                || "payout.updated".equals(event.getType())) {
+        if (isPayoutEvent(event.getType())) {
             return handlePayoutEvent(event);
         }
         return ResponseEntity.ok("ignored");
@@ -187,6 +199,13 @@ public class StripeWebhookController {
         }
     }
 
+    private boolean isFinancialEvent(String eventType) {
+        return "payment_intent.succeeded".equals(eventType)
+                || isRefundEvent(eventType)
+                || isPaymentDisputeEvent(eventType)
+                || isPayoutEvent(eventType);
+    }
+
     private boolean isRefundEvent(String eventType) {
         return StripeRefundSettlementService.CREATED.equals(eventType)
                 || StripeRefundSettlementService.UPDATED.equals(eventType)
@@ -199,6 +218,12 @@ public class StripeWebhookController {
                 || StripePaymentDisputeService.CLOSED.equals(eventType)
                 || StripePaymentDisputeService.FUNDS_WITHDRAWN.equals(eventType)
                 || StripePaymentDisputeService.FUNDS_REINSTATED.equals(eventType);
+    }
+
+    private boolean isPayoutEvent(String eventType) {
+        return "payout.paid".equals(eventType)
+                || "payout.failed".equals(eventType)
+                || "payout.updated".equals(eventType);
     }
 
     private boolean isJobPublication(PaymentIntent paymentIntent) {
