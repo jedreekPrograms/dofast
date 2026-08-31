@@ -12,6 +12,7 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -62,6 +63,15 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
         Principal principal = accessor.getUser();
         if (principal == null) {
             throw new BadCredentialsException("WebSocket session is not authenticated");
+        }
+
+        // doFast currently exposes WebSocket only as a server-to-client delivery channel.
+        // Allowing authenticated clients to SEND directly to /topic or /queue would let them
+        // bypass REST ownership/business invariants and inject forged chat/tracking payloads
+        // into the simple broker. If application message mappings are introduced later, they
+        // must be explicitly allow-listed and authorized here before enabling client SEND.
+        if (accessor.getCommand() == StompCommand.SEND) {
+            throw new AccessDeniedException("Client WebSocket publishing is not allowed");
         }
 
         if (accessor.getCommand() == StompCommand.SUBSCRIBE) {
