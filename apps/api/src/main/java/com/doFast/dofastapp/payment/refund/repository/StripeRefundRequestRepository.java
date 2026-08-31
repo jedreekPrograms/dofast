@@ -4,7 +4,6 @@ import com.doFast.dofastapp.payment.refund.entity.StripeRefundRequest;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -41,14 +40,17 @@ public interface StripeRefundRequestRepository extends JpaRepository<StripeRefun
             """, nativeQuery = true)
     List<Long> findDispatchableIds(@Param("now") LocalDateTime now, @Param("limit") int limit);
 
-    @Modifying
     @Query(value = """
-            UPDATE stripe_refund_requests
-            SET status = 'REQUESTED',
-                next_attempt_at = :now,
-                updated_at = :now
+            SELECT *
+            FROM stripe_refund_requests
             WHERE status = 'DISPATCHING'
               AND updated_at < :staleBefore
+            ORDER BY updated_at, id
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    int requeueStaleDispatches(@Param("staleBefore") LocalDateTime staleBefore, @Param("now") LocalDateTime now);
+    List<StripeRefundRequest> findStaleDispatchesForUpdate(
+            @Param("staleBefore") LocalDateTime staleBefore,
+            @Param("limit") int limit
+    );
 }
