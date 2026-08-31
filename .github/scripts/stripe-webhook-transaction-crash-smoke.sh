@@ -44,6 +44,7 @@ created = int(sys.argv[2])
 event = {
     "id": "evt_webhook_tx_crash",
     "object": "event",
+    "api_version": "2026-07-29.dahlia",
     "created": created,
     "data": {
         "object": {
