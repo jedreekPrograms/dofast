@@ -1,0 +1,90 @@
+name: Emergency account enforcement smoke
+
+on:
+  push:
+    branches: [master, "feat/emergency-account-enforcement"]
+    paths:
+      - ".github/workflows/emergency-account-enforcement-smoke.yml"
+      - ".github/scripts/emergency-account-enforcement-smoke.sh"
+      - "apps/api/src/main/java/com/doFast/dofastapp/job/report/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/job/repository/JobRepository.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/dispute/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/location/tracking/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/auth/session/**"
+      - "apps/web/src/features/admin/**"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/emergency-account-enforcement-smoke.yml"
+      - ".github/scripts/emergency-account-enforcement-smoke.sh"
+      - "apps/api/src/main/java/com/doFast/dofastapp/job/report/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/job/repository/JobRepository.java"
+      - "apps/api/src/main/java/com/doFast/dofastapp/dispute/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/location/tracking/**"
+      - "apps/api/src/main/java/com/doFast/dofastapp/user/auth/session/**"
+      - "apps/web/src/features/admin/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emergency-account-enforcement-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emergency-enforcement-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare local configuration
+        shell: bash
+        run: |
+          cp .env.example .env
+          sed -i 's/^ADMIN_BOOTSTRAP_EMAIL=.*/ADMIN_BOOTSTRAP_EMAIL=emergency-admin@example.com/' .env
+          sed -i 's/^ADMIN_BOOTSTRAP_PASSWORD=.*/ADMIN_BOOTSTRAP_PASSWORD=EmergencyAdmin123!/' .env
+          sed -i 's/^ADMIN_BOOTSTRAP_NICKNAME=.*/ADMIN_BOOTSTRAP_NICKNAME=Emergency Admin/' .env
+
+      - name: Build API with transient registry retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if docker compose build api; then
+              exit 0
+            fi
+            if test "$attempt" = "3"; then
+              echo "API image build failed after $attempt attempts"
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
+
+      - name: Start PostgreSQL and API
+        run: docker compose up -d --no-build db api
+
+      - name: Wait for API
+        shell: bash
+        run: |
+          for attempt in {1..45}; do
+            if curl --fail --silent http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs db api
+          exit 1
+
+      - name: Verify emergency containment of active work
+        run: bash .github/scripts/emergency-account-enforcement-smoke.sh
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --tail=300 db api || true
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
