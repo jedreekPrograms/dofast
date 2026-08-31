@@ -91,6 +91,37 @@ class StripeConnectPayoutSettlementServiceTest {
     }
 
     @Test
+    void conflictingFailureAfterPaidIsRejectedBeforeExternalTransferReversal() {
+        payout.recordProviderStateEventCreatedAt(200L);
+        payout.markSubmittedPaid(LocalDateTime.now());
+
+        assertThrows(ConflictException.class,
+                () -> service.process(stripePayout("failed"), "evt_failed_conflict", "acct_123", 200L));
+
+        assertEquals(200L, payout.getProviderStateEventCreatedAt());
+        verify(moneyGateway, never()).reverseTransfer(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+        verify(settlementService, never()).settle(any());
+    }
+
+    @Test
+    void repeatedFailureForAlreadyFailedPayoutDoesNotReverseTransferAgain() {
+        payout.markFailed("STRIPE_ACCOUNT_CLOSED", LocalDateTime.now());
+        payout.recordProviderStateEventCreatedAt(200L);
+        when(settlementService.settle(any(PayoutProviderSettlementCommand.class))).thenReturn(PayoutProviderSettlementResult.ALREADY_SETTLED);
+
+        PayoutProviderSettlementResult result = service.process(stripePayout("failed"), "evt_failed_repeat", "acct_123", 201L);
+
+        assertEquals(PayoutProviderSettlementResult.ALREADY_SETTLED, result);
+        assertEquals(201L, payout.getProviderStateEventCreatedAt());
+        verify(moneyGateway, never()).reverseTransfer(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+        verify(settlementService).settle(any(PayoutProviderSettlementCommand.class));
+    }
+
+    @Test
     void newerWebhookAdvancesDurableProviderOrderingWatermark() {
         payout.recordProviderStateEventCreatedAt(200L);
         when(settlementService.settle(any(PayoutProviderSettlementCommand.class))).thenReturn(PayoutProviderSettlementResult.APPLIED);
