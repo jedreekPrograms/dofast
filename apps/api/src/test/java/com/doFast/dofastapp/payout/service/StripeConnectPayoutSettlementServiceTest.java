@@ -3,6 +3,7 @@ package com.doFast.dofastapp.payout.service;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.payout.entity.PayoutRecipientAccount;
 import com.doFast.dofastapp.payout.entity.PayoutRequest;
+import com.doFast.dofastapp.payout.enums.PayoutStatus;
 import com.doFast.dofastapp.payout.provider.PayoutProviderSettlementCommand;
 import com.doFast.dofastapp.payout.provider.PayoutProviderSettlementResult;
 import com.doFast.dofastapp.payout.provider.StripeConnectMoneyMovementGateway;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
@@ -41,17 +43,14 @@ class StripeConnectPayoutSettlementServiceTest {
 
     private StripeConnectPayoutSettlementService service;
     private PayoutRequest payout;
+    private User user;
 
     @BeforeEach
     void setUp() {
         service = new StripeConnectPayoutSettlementService(payoutRepository, recipientRepository, moneyGateway, settlementService);
-        User user = new User();
+        user = new User();
         ReflectionTestUtils.setField(user, "id", 7L);
-        payout = new PayoutRequest();
-        payout.initialize(user, "payout:7:client:test", new BigDecimal("125.00"), "PLN", "stripe-connect", LocalDateTime.now());
-        ReflectionTestUtils.setField(payout, "id", 41L);
-        payout.startProcessing(LocalDateTime.now());
-        payout.recordProviderTransferReference("tr_123");
+        payout = processingPayout();
         payout.markSubmitted("po_123", LocalDateTime.now());
 
         PayoutRecipientAccount recipient = new PayoutRecipientAccount();
@@ -151,6 +150,54 @@ class StripeConnectPayoutSettlementServiceTest {
     void eventFromDifferentConnectedAccountIsRejectedBeforeSettlement() {
         assertThrows(ConflictException.class, () -> service.process(stripePayout("paid"), "evt_wrong_account", "acct_other"));
         verify(settlementService, never()).settle(any());
+    }
+
+    @Test
+    void signedTerminalEventRecoversPayoutReferenceLostAfterProviderAcceptedCreate() {
+        PayoutRequest ambiguous = processingPayout();
+        ambiguous.requireReview(PayoutProviderSafetyPolicy.STRIPE_CONNECT_IDEMPOTENCY_WINDOW_EXPIRED, LocalDateTime.now());
+        when(payoutRepository.findByProviderReferenceForUpdate("stripe-connect", "po_123")).thenReturn(Optional.empty());
+        when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(ambiguous));
+        when(settlementService.settle(any(PayoutProviderSettlementCommand.class))).thenReturn(PayoutProviderSettlementResult.APPLIED);
+
+        PayoutProviderSettlementResult result = service.process(stripePayout("paid"), "evt_paid_recover", "acct_123", 201L);
+
+        assertEquals(PayoutProviderSettlementResult.APPLIED, result);
+        assertEquals("po_123", ambiguous.getProviderReference());
+        assertEquals(PayoutStatus.SUBMITTED, ambiguous.getStatus());
+        assertNull(ambiguous.getFailureCode());
+        assertEquals(201L, ambiguous.getProviderStateEventCreatedAt());
+        verify(payoutRepository).saveAndFlush(ambiguous);
+    }
+
+    @Test
+    void fallbackIdentityMismatchCannotAttachUnknownProviderPayout() {
+        PayoutRequest ambiguous = processingPayout();
+        when(payoutRepository.findByProviderReferenceForUpdate("stripe-connect", "po_123")).thenReturn(Optional.empty());
+        when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(ambiguous));
+        Payout mismatched = stripePayout("paid");
+        mismatched.setMetadata(Map.of(
+                "dofastPayoutId", "41",
+                "dofastUserId", "999",
+                "dofastTransferId", "tr_123"
+        ));
+
+        assertThrows(ConflictException.class,
+                () -> service.process(mismatched, "evt_paid_wrong_identity", "acct_123", 201L));
+
+        assertNull(ambiguous.getProviderReference());
+        assertEquals(PayoutStatus.PROCESSING, ambiguous.getStatus());
+        verify(payoutRepository, never()).saveAndFlush(any());
+        verify(settlementService, never()).settle(any());
+    }
+
+    private PayoutRequest processingPayout() {
+        PayoutRequest result = new PayoutRequest();
+        result.initialize(user, "payout:7:client:test", new BigDecimal("125.00"), "PLN", "stripe-connect", LocalDateTime.now());
+        ReflectionTestUtils.setField(result, "id", 41L);
+        result.startProcessing(LocalDateTime.now());
+        result.recordProviderTransferReference("tr_123");
+        return result;
     }
 
     private Payout stripePayout(String status) {
