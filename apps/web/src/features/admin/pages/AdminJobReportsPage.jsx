@@ -24,6 +24,11 @@ const REASON_LABELS = {
   OTHER: 'Inny powód',
 }
 
+const ACCOUNT_ENFORCEMENT_LABELS = {
+  SUSPEND_JOB_OWNER: 'Zawieszenie właściciela zlecenia',
+  EMERGENCY_SUSPEND_JOB_OWNER: 'Awaryjne zawieszenie z zabezpieczeniem aktywnych transakcji',
+}
+
 function AdminJobReportsPage() {
   const [pageData, setPageData] = useState(null)
   const [status, setStatus] = useState('SUBMITTED')
@@ -132,15 +137,16 @@ function AdminJobReportsPage() {
     event.preventDefault()
     if (!selected || selected.status !== 'REVIEWED' || accountEnforcement) return
 
+    const action = event.nativeEvent.submitter?.value || 'SUSPEND_JOB_OWNER'
     setBusy(true)
     setError('')
     try {
-      const audit = await enforceAdminJobReportAccount(selected.id, accountEnforcementReason)
+      const audit = await enforceAdminJobReportAccount(selected.id, accountEnforcementReason, action)
       setAccountEnforcement(audit)
       setAccountEnforcementReason('')
       await loadQueue()
     } catch (requestError) {
-      setError(requestError.message || 'Nie udało się zawiesić konta właściciela zlecenia.')
+      setError(requestError.message || 'Nie udało się wykonać sankcji wobec konta właściciela zlecenia.')
     } finally {
       setBusy(false)
     }
@@ -324,9 +330,10 @@ function AdminJobReportsPage() {
                         <span className="eyebrow">Egzekucja wobec konta</span>
                         <h3>Zawieś właściciela zlecenia</h3>
                         <p>
-                          Konto zostanie zawieszone natychmiast, a jego pozostałe otwarte oferty anulowane.
-                          Backend odrzuci sankcję dla administratora oraz użytkownika uczestniczącego w aktywnym,
-                          finalizowanym lub spornym zleceniu.
+                          Zwykłe zawieszenie anuluje otwarte oferty, ale zostaje odrzucone, jeśli użytkownik ma aktywne,
+                          finalizowane lub sporne zlecenie. Tryb awaryjny jest przeznaczony wyłącznie dla pilnego ryzyka:
+                          zabezpiecza aktywne prace jako spory moderacyjne, pozostawia escrow zamrożone, wyłącza live tracking,
+                          unieważnia sesje i dopiero potem zawiesza konto.
                         </p>
                       </div>
                       <label>
@@ -339,14 +346,30 @@ function AdminJobReportsPage() {
                           placeholder="Opcjonalny wewnętrzny powód zapisany w audycie konta."
                         />
                       </label>
-                      <button className="button button--danger" type="submit" disabled={busy}>
-                        {busy ? 'Wykonywanie…' : 'Zawieś konto właściciela'}
+                      <button
+                        className="button button--danger"
+                        type="submit"
+                        value="SUSPEND_JOB_OWNER"
+                        disabled={busy}
+                      >
+                        {busy ? 'Wykonywanie…' : 'Zawieś konto bez aktywnych transakcji'}
+                      </button>
+                      <button
+                        className="button button--danger"
+                        type="submit"
+                        value="EMERGENCY_SUSPEND_JOB_OWNER"
+                        disabled={busy}
+                      >
+                        {busy ? 'Wykonywanie…' : 'Awaryjnie zabezpiecz transakcje i zawieś'}
                       </button>
                     </form>
                   ) : (
                     <div className="admin-report-account-enforcement-audit">
                       <h3>Audit zawieszenia konta</h3>
-                      <div><span>Akcja</span><strong>Zawieszenie właściciela zlecenia</strong></div>
+                      <div>
+                        <span>Akcja</span>
+                        <strong>{ACCOUNT_ENFORCEMENT_LABELS[accountEnforcement.action] || accountEnforcement.action}</strong>
+                      </div>
                       <div><span>Użytkownik</span><strong>#{accountEnforcement.targetUserId}</strong></div>
                       <div><span>Wykonano</span><strong>{new Date(accountEnforcement.createdAt).toLocaleString('pl-PL')}</strong></div>
                       <div><span>Moderator</span><strong>#{accountEnforcement.moderatorId}</strong></div>
