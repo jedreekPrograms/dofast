@@ -138,7 +138,7 @@ public class StripeRefundRequest {
     }
 
     public boolean recordProviderResponseForReview(
-            String refundId,
+            String trustedRefundId,
             String providerStatus,
             String failureReason,
             LocalDateTime now
@@ -148,7 +148,9 @@ public class StripeRefundRequest {
         if (status != StripeRefundStatus.DISPATCHING) {
             return false;
         }
-        attachRefundId(refundId);
+        if (trustedRefundId != null && !trustedRefundId.isBlank()) {
+            attachRefundId(trustedRefundId);
+        }
         stripeStatus = normalize(providerStatus);
         if (submittedAt == null) {
             submittedAt = now;
