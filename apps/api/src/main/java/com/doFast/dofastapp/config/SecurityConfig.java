@@ -18,9 +18,11 @@ import java.io.IOException;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final PublicAuthRateLimitFilter publicAuthRateLimitFilter;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, PublicAuthRateLimitFilter publicAuthRateLimitFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.publicAuthRateLimitFilter = publicAuthRateLimitFilter;
     }
 
     @Bean
@@ -58,6 +60,7 @@ public class SecurityConfig {
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(publicAuthRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
