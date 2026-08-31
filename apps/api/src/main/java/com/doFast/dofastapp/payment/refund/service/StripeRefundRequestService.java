@@ -163,6 +163,24 @@ public class StripeRefundRequestService {
     }
 
     @Transactional
+    public void recordProviderResponseForReview(
+            Long requestId,
+            StripeRefundProviderResult result,
+            String violationCode
+    ) {
+        StripeRefundRequest request = refundRepository.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zwrot nie istnieje"));
+        request.recordProviderResponseForReview(
+                result.refundId(),
+                result.status(),
+                violationCode,
+                LocalDateTime.now()
+        );
+        // A response-contract anomaly is not evidence that Stripe rejected the refund. Keep the
+        // reserved funds untouched until a verified webhook or operator review resolves it.
+    }
+
+    @Transactional
     public void recordDispatchFailure(Long requestId) {
         StripeRefundRequest request = refundRepository.findByIdForUpdate(requestId).orElse(null);
         if (request == null || request.getStatus() != StripeRefundStatus.DISPATCHING) {
