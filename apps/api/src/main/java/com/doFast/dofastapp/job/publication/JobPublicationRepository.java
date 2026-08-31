@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.publication;
 
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -35,5 +36,22 @@ public interface JobPublicationRepository extends JpaRepository<JobPublication, 
             Long userId,
             JobPublicationStatus status,
             LocalDateTime expiresAt
+    );
+
+    @Query("""
+            select publication.id
+            from JobPublication publication
+            where publication.status = :status
+              and publication.stripePaymentIntentId is not null
+              and publication.stripePaymentIntentCleanupCompletedAt is null
+              and publication.stripePaymentIntentCleanupReviewRequired = false
+              and publication.stripePaymentIntentCleanupNextAttemptAt is not null
+              and publication.stripePaymentIntentCleanupNextAttemptAt <= :now
+            order by publication.stripePaymentIntentCleanupNextAttemptAt asc, publication.id asc
+            """)
+    List<Long> findDueStripePaymentIntentCleanupIds(
+            @Param("status") JobPublicationStatus status,
+            @Param("now") LocalDateTime now,
+            Pageable pageable
     );
 }
