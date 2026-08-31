@@ -40,6 +40,7 @@ dofast:
       delivery: smtp
       token-ttl-minutes: ${PASSWORD_RESET_TTL_MINUTES:30}
       retention-days: ${PASSWORD_RESET_RETENTION_DAYS:7}
+      request-cooldown-seconds: ${PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS:60}
       cleanup-interval-ms: ${PASSWORD_RESET_CLEANUP_INTERVAL_MS:3600000}
       reset-base-url: ${PASSWORD_RESET_BASE_URL}
       from-address: ${PASSWORD_RECOVERY_FROM_ADDRESS}
