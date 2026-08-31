@@ -28,14 +28,15 @@ public class StripeRefundDispatchService {
             requestService.recordProviderResult(requestId, result);
         } catch (StripeRefundProviderResponseException ex) {
             log.error(
-                    "Stripe refund response contract violation for request {} attempt {}; provider refund id is preserved for review",
+                    "Stripe refund response contract violation for request {} attempt {}; automatic retry is stopped for review",
                     requestId,
                     command.attempt()
             );
             requestService.recordProviderResponseForReview(
                     requestId,
                     ex.providerResult(),
-                    ex.violationCode()
+                    ex.violationCode(),
+                    ex.providerIdentityMatchesRequest()
             );
         } catch (PaymentProviderException ex) {
             log.warn("Stripe refund dispatch failed for request {} attempt {}", requestId, command.attempt());
