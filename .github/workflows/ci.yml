@@ -139,6 +139,8 @@ jobs:
           test "$(docker inspect --format='{{.State.Health.Status}}' dofast-web-1)" = "healthy"
           curl --fail --silent http://localhost:5173/health | grep -qx 'ok'
           curl --fail --silent http://localhost:5173/api/actuator/health | grep -q '"status":"UP"'
+      - name: Verify WebSocket ingress abuse controls
+        run: python3 .github/scripts/websocket-ingress-smoke.py
       - name: Print service diagnostics on failure
         if: failure()
         run: |
