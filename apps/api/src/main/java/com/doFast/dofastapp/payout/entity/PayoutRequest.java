@@ -153,6 +153,33 @@ public class PayoutRequest {
         lastErrorAt = now;
     }
 
+    public boolean recordProviderResponseForReview(
+            String trustedTransferReference,
+            String trustedPayoutReference,
+            String code,
+            LocalDateTime now
+    ) {
+        if (status != PayoutStatus.PROCESSING) {
+            return false;
+        }
+        if (trustedTransferReference != null && !trustedTransferReference.isBlank()) {
+            String normalized = trustedTransferReference.trim();
+            if (normalized.length() <= 255
+                    && (providerTransferReference == null || providerTransferReference.equals(normalized))) {
+                providerTransferReference = normalized;
+            }
+        }
+        if (trustedPayoutReference != null && !trustedPayoutReference.isBlank()) {
+            String normalized = trustedPayoutReference.trim();
+            if (normalized.length() <= 255
+                    && (providerReference == null || providerReference.equals(normalized))) {
+                providerReference = normalized;
+            }
+        }
+        requireReview(code, now);
+        return true;
+    }
+
     public void retryByAdmin(LocalDateTime now) {
         requireStatus(PayoutStatus.REVIEW_REQUIRED);
         status = PayoutStatus.REQUESTED;
