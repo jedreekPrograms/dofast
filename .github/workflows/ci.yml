@@ -84,6 +84,10 @@ jobs:
           # The smoke sends two valid GPS samples 100ms apart; keep it focused on the full tracking lifecycle.
           # Production keeps the 1000ms default and the throttle contract is covered by focused backend tests.
           sed -i 's/^TRACKING_MIN_UPDATE_INTERVAL_MILLIS=.*/TRACKING_MIN_UPDATE_INTERVAL_MILLIS=50/' .env
+          # Retention remains one day, but cleanup runs quickly so terminal fixtures can be safely backdated
+          # and the runtime suite can prove the real PostgreSQL purge without waiting for the production cadence.
+          sed -i 's/^JOB_EXACT_LOCATION_RETENTION_DAYS=.*/JOB_EXACT_LOCATION_RETENTION_DAYS=1/' .env
+          sed -i 's/^JOB_EXACT_LOCATION_CLEANUP_INTERVAL_MS=.*/JOB_EXACT_LOCATION_CLEANUP_INTERVAL_MS=500/' .env
       - name: Build containers
         run: docker compose build api web
       - name: Start PostgreSQL and API
@@ -108,7 +112,7 @@ jobs:
         run: bash .github/scripts/job-discovery-smoke.sh
       - name: Verify accounts, routing, chat, disputes and escrow
         run: bash .github/scripts/runtime-smoke.sh
-      - name: Verify multi-stop routing and tracking
+      - name: Verify multi-stop routing, tracking and terminal location retention
         run: bash .github/scripts/multi-stop-routing-smoke.sh
       - name: Verify on-site jobs and exact-location privacy
         run: bash .github/scripts/on-site-job-smoke.sh
