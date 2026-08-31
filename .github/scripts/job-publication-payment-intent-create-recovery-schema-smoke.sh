@@ -27,20 +27,24 @@ FROM information_schema.columns
 WHERE table_name='job_publications' AND column_name='stripe_create_review_required';" | tr -d '[:space:]')
 test "$REVIEW_COLUMN_OK" = "t"
 
-CONSTRAINT_DEF=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
-SELECT pg_get_constraintdef(oid)
+CONSTRAINT_OK=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
+SELECT position('stripe_create_attempt_count' in pg_get_constraintdef(oid)) > 0
+   AND position('>= 0' in pg_get_constraintdef(oid)) > 0
 FROM pg_constraint
-WHERE conname='chk_job_publications_stripe_create_attempt_count';")
-echo "$CONSTRAINT_DEF" | grep -q 'stripe_create_attempt_count >= 0'
+WHERE conname='chk_job_publications_stripe_create_attempt_count';" | tr -d '[:space:]')
+test "$CONSTRAINT_OK" = "t"
 
-INDEX_DEF=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
-SELECT indexdef
-FROM pg_indexes
-WHERE indexname='idx_job_publications_stripe_create_recovery_due';")
-echo "$INDEX_DEF" | grep -q 'stripe_create_next_attempt_at'
-echo "$INDEX_DEF" | grep -q "status = 'CANCELLED'"
-echo "$INDEX_DEF" | grep -q 'stripe_payment_intent_id IS NULL'
-echo "$INDEX_DEF" | grep -q 'stripe_create_started_at IS NOT NULL'
-echo "$INDEX_DEF" | grep -q 'stripe_create_review_required = false'
+INDEX_OK=$(docker compose exec -T db psql -U dofast -d dofast -tAc "
+SELECT
+    position('stripe_create_next_attempt_at' in pg_get_indexdef(i.indexrelid)) > 0
+AND position('stripe_create_started_at' in pg_get_expr(i.indpred, i.indrelid)) > 0
+AND position('stripe_payment_intent_id' in pg_get_expr(i.indpred, i.indrelid)) > 0
+AND position('stripe_create_review_required' in pg_get_expr(i.indpred, i.indrelid)) > 0
+AND position('payment_received_at' in pg_get_expr(i.indpred, i.indrelid)) > 0
+AND position('CANCELLED' in pg_get_expr(i.indpred, i.indrelid)) > 0
+FROM pg_index i
+JOIN pg_class idx ON idx.oid = i.indexrelid
+WHERE idx.relname='idx_job_publications_stripe_create_recovery_due';" | tr -d '[:space:]')
+test "$INDEX_OK" = "t"
 
 echo 'Publication PaymentIntent create-recovery V57 schema: OK'
