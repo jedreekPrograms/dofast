@@ -89,6 +89,21 @@ public class StripeConnectMoneyMovementGateway {
         }
     }
 
+    public void requireTransferUnreversed(
+            String transferId,
+            long amountInCents,
+            String currency,
+            String connectedAccountId,
+            Long payoutId,
+            Long userId
+    ) {
+        Transfer transfer = retrieveTransfer(transferId);
+        requireMatchingTransfer(transfer, amountInCents, currency, connectedAccountId, payoutId, userId);
+        if (Boolean.TRUE.equals(transfer.getReversed()) || reversedAmount(transfer) > 0L) {
+            throw new IllegalStateException("Stripe Connect transfer was already reversed; payout cannot be marked paid");
+        }
+    }
+
     public void reverseTransfer(
             String transferId,
             long amountInCents,
@@ -100,7 +115,7 @@ public class StripeConnectMoneyMovementGateway {
     ) {
         Transfer transfer = retrieveTransfer(transferId);
         requireMatchingTransfer(transfer, amountInCents, currency, connectedAccountId, payoutId, userId);
-        long alreadyReversed = transfer.getAmountReversed() == null ? 0L : transfer.getAmountReversed();
+        long alreadyReversed = reversedAmount(transfer);
         if (Boolean.TRUE.equals(transfer.getReversed()) || alreadyReversed >= amountInCents) {
             return;
         }
@@ -121,6 +136,10 @@ public class StripeConnectMoneyMovementGateway {
         } catch (StripeException ex) {
             throw new PaymentProviderException("Nie udało się odzyskać środków z nieudanej wypłaty Stripe Connect", ex);
         }
+    }
+
+    private long reversedAmount(Transfer transfer) {
+        return transfer.getAmountReversed() == null ? 0L : transfer.getAmountReversed();
     }
 
     private void requireMatchingTransfer(
