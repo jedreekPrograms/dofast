@@ -4,6 +4,7 @@ import com.doFast.dofastapp.payout.provider.PayoutDispatchCommand;
 import com.doFast.dofastapp.payout.provider.PayoutDispatchResult;
 import com.doFast.dofastapp.payout.provider.PayoutProvider;
 import com.doFast.dofastapp.payout.provider.PayoutProviderRegistry;
+import com.doFast.dofastapp.payout.provider.StripeConnectPayoutResponseException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -74,6 +75,37 @@ class PayoutDispatcherTest {
         providerOrder.verify(provider).dispatch(second);
         verify(queue).complete(41L, firstResult);
         verify(queue).complete(42L, secondResult);
+        verify(queue, never()).complete(41L, PayoutDispatchResult.retryableFailure("PROVIDER_EXCEPTION"));
+    }
+
+    @Test
+    void knownConnectResponseAnomalyIsQuarantinedInsteadOfRetried() {
+        PayoutProviderRegistry registry = mock(PayoutProviderRegistry.class);
+        PayoutDispatchQueue queue = mock(PayoutDispatchQueue.class);
+        PayoutProvider provider = mock(PayoutProvider.class);
+        PayoutDispatcher dispatcher = new PayoutDispatcher(registry, queue);
+        PayoutDispatchCommand command = command(41L);
+        StripeConnectPayoutResponseException anomaly = new StripeConnectPayoutResponseException(
+                "amount mismatch",
+                "STRIPE_PAYOUT_AMOUNT_MISMATCH",
+                "tr_41",
+                "po_41"
+        );
+
+        when(registry.isConfiguredProviderAvailable()).thenReturn(true);
+        when(registry.configuredProviderCode()).thenReturn("stripe-connect");
+        when(registry.requireProvider("stripe-connect")).thenReturn(provider);
+        when(queue.claimNext("stripe-connect")).thenReturn(Optional.of(command), Optional.empty());
+        when(provider.dispatch(command)).thenThrow(anomaly);
+
+        dispatcher.dispatch();
+
+        verify(queue).quarantineProviderResponse(
+                41L,
+                "tr_41",
+                "po_41",
+                "STRIPE_PAYOUT_AMOUNT_MISMATCH"
+        );
         verify(queue, never()).complete(41L, PayoutDispatchResult.retryableFailure("PROVIDER_EXCEPTION"));
     }
 
