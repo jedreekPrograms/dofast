@@ -22,7 +22,7 @@ function AuthProvider({ children }) {
     restoreUserSession()
       .then((response) => {
         if (!active || !response) return
-        setAccessToken(response.accessToken)
+        setAccessToken(response.accessToken, response.expiresInMs)
         setUser(response.user)
       })
       .catch(() => {
@@ -39,7 +39,7 @@ function AuthProvider({ children }) {
   }, [])
 
   function applyAuthResponse(response) {
-    setAccessToken(response.accessToken)
+    setAccessToken(response.accessToken, response.expiresInMs)
     setUser(response.user)
     setReady(true)
     return response.user

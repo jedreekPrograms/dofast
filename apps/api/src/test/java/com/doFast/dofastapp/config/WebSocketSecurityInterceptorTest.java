@@ -14,6 +14,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 
 import java.security.Principal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,9 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class WebSocketSecurityInterceptorTest {
+
+    private static final Instant FUTURE_EXPIRY = Instant.parse("2099-01-01T00:00:00Z");
 
     @Test
     void acceptsConnectWhenAccessTokenAuthVersionMatchesUserAndBindsSession() {
@@ -33,7 +40,8 @@ class WebSocketSecurityInterceptorTest {
         User user = new User("user@example.com", "user");
         user.incrementAuthVersion();
         when(jwtUtil.parseAccessToken("current-token"))
-                .thenReturn(new JwtUtil.AccessTokenIdentity(user.getEmail(), user.getAuthVersion()));
+                .thenReturn(new JwtUtil.AccessTokenIdentity(
+                        user.getEmail(), user.getAuthVersion(), FUTURE_EXPIRY));
         when(userRepository.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
         WebSocketSecurityInterceptor interceptor = new WebSocketSecurityInterceptor(
                 jwtUtil, userRepository, null, null, sessionRegistry);
@@ -47,6 +55,7 @@ class WebSocketSecurityInterceptorTest {
         var identity = sessionRegistry.find("session-1").orElseThrow();
         assertEquals(user.getEmail(), identity.email());
         assertEquals(user.getAuthVersion(), identity.authVersion());
+        assertEquals(FUTURE_EXPIRY, identity.expiresAt());
     }
 
     @Test
@@ -57,7 +66,8 @@ class WebSocketSecurityInterceptorTest {
         User user = new User("user@example.com", "user");
         user.incrementAuthVersion();
         when(jwtUtil.parseAccessToken("stale-token"))
-                .thenReturn(new JwtUtil.AccessTokenIdentity(user.getEmail(), user.getAuthVersion() - 1));
+                .thenReturn(new JwtUtil.AccessTokenIdentity(
+                        user.getEmail(), user.getAuthVersion() - 1, FUTURE_EXPIRY));
         when(userRepository.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
         WebSocketSecurityInterceptor interceptor = new WebSocketSecurityInterceptor(
                 jwtUtil, userRepository, null, null, sessionRegistry);
@@ -74,7 +84,7 @@ class WebSocketSecurityInterceptorTest {
         UserRepository userRepository = mock(UserRepository.class);
         WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
         User user = new User("user@example.com", "user");
-        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion());
+        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion(), FUTURE_EXPIRY);
         user.incrementAuthVersion();
         when(userRepository.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
         WebSocketSecurityInterceptor interceptor = new WebSocketSecurityInterceptor(
@@ -95,7 +105,7 @@ class WebSocketSecurityInterceptorTest {
         UserRepository userRepository = mock(UserRepository.class);
         WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
         User user = new User("user@example.com", "user");
-        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion());
+        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion(), FUTURE_EXPIRY);
         user.setStatus(UserStatus.SUSPENDED);
         when(userRepository.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
         WebSocketSecurityInterceptor interceptor = new WebSocketSecurityInterceptor(
@@ -111,11 +121,31 @@ class WebSocketSecurityInterceptorTest {
     }
 
     @Test
+    void rejectsEstablishedSessionAfterBoundAccessTokenExpiresWithoutUserLookup() {
+        Instant now = Instant.parse("2026-09-01T20:00:00Z");
+        UserRepository userRepository = mock(UserRepository.class);
+        WebSocketSessionRegistry sessionRegistry =
+                new WebSocketSessionRegistry(Clock.fixed(now, ZoneOffset.UTC));
+        sessionRegistry.register("session-1", "user@example.com", 0L, now);
+        WebSocketSecurityInterceptor interceptor = new WebSocketSecurityInterceptor(
+                null, userRepository, null, null, sessionRegistry);
+
+        assertThrows(
+                BadCredentialsException.class,
+                () -> interceptor.preSend(
+                        message(StompCommand.SUBSCRIBE, "user@example.com", "/user/queue/notifications", "session-1"),
+                        null
+                )
+        );
+        verify(userRepository, never()).findByEmailIgnoreCase(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
     void rejectsAuthenticatedClientSendBeforeBrokerDelivery() {
         UserRepository userRepository = mock(UserRepository.class);
         WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
         User user = new User("user@example.com", "user");
-        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion());
+        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion(), FUTURE_EXPIRY);
         when(userRepository.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
         WebSocketSecurityInterceptor interceptor = new WebSocketSecurityInterceptor(
                 null, userRepository, null, null, sessionRegistry);

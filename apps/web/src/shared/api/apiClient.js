@@ -3,7 +3,9 @@ const CSRF_COOKIE = 'dofast_csrf'
 const CSRF_HEADER = 'X-CSRF-Token'
 
 let accessToken = null
+let accessTokenExpiresAt = null
 let refreshPromise = null
+const accessTokenListeners = new Set()
 
 export class ApiError extends Error {
   constructor(message, status, payload) {
@@ -18,12 +20,29 @@ export function getAccessToken() {
   return accessToken
 }
 
-export function setAccessToken(token) {
-  accessToken = typeof token === 'string' && token.trim() ? token : null
+export function setAccessToken(token, expiresInMs = null) {
+  const normalizedToken = typeof token === 'string' && token.trim() ? token : null
+  const ttl = Number(expiresInMs)
+  const expiresAt = normalizedToken && Number.isFinite(ttl) && ttl > 0
+    ? Date.now() + ttl
+    : null
+
+  if (normalizedToken === accessToken && expiresAt === accessTokenExpiresAt) return
+  accessToken = normalizedToken
+  accessTokenExpiresAt = expiresAt
+  for (const listener of accessTokenListeners) {
+    listener(accessToken, accessTokenExpiresAt)
+  }
 }
 
 export function clearAccessToken() {
-  accessToken = null
+  setAccessToken(null)
+}
+
+export function subscribeAccessToken(listener) {
+  accessTokenListeners.add(listener)
+  listener(accessToken, accessTokenExpiresAt)
+  return () => accessTokenListeners.delete(listener)
 }
 
 export function hasRefreshSessionHint() {
@@ -135,7 +154,7 @@ async function performRefresh() {
     throw new ApiError('Serwer nie zwrócił poprawnego tokenu dostępu', 500, payload)
   }
 
-  setAccessToken(payload.accessToken)
+  setAccessToken(payload.accessToken, payload.expiresInMs)
   return payload
 }
 

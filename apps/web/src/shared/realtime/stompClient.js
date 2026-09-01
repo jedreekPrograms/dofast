@@ -19,6 +19,7 @@ export class StompClient {
     this.shouldReconnect = false
     this.reconnectAttempt = 0
     this.reconnectTimer = null
+    this.reconnectImmediately = false
     this.buffer = ''
     this.subscriptionSequence = 0
     this.subscriptions = new Map()
@@ -30,8 +31,33 @@ export class StompClient {
     this.openSocket()
   }
 
+  updateToken(token) {
+    const normalizedToken = typeof token === 'string' && token.trim() ? token : null
+    if (normalizedToken === this.token) return
+
+    this.token = normalizedToken
+    if (!this.token) {
+      this.disconnect()
+      return
+    }
+    if (!this.shouldReconnect) return
+
+    window.clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = null
+    this.reconnectAttempt = 0
+    if (!this.socket) {
+      this.openSocket()
+      return
+    }
+
+    this.reconnectImmediately = true
+    this.connected = false
+    this.socket.close()
+  }
+
   disconnect() {
     this.shouldReconnect = false
+    this.reconnectImmediately = false
     window.clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
     this.connected = false
@@ -92,10 +118,17 @@ export class StompClient {
     }
 
     socket.onclose = () => {
+      const reconnectImmediately = this.reconnectImmediately
+      this.reconnectImmediately = false
       this.connected = false
       this.socket = null
       this.onStatus('disconnected')
-      if (this.shouldReconnect) this.scheduleReconnect()
+      if (!this.shouldReconnect) return
+      if (reconnectImmediately) {
+        this.openSocket()
+      } else {
+        this.scheduleReconnect()
+      }
     }
   }
 
