@@ -1,7 +1,6 @@
 package com.doFast.dofastapp.location.routing.service;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
-import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.location.routing.dto.RouteModeComparisonResponse;
 import com.doFast.dofastapp.location.routing.dto.RouteModeEstimateResponse;
@@ -124,9 +123,9 @@ public class RouteQuoteService {
 
     @Transactional
     public RouteQuote consume(UUID quoteId, User user) {
-        RouteQuote quote = routeQuoteRepository.findByIdForUpdate(quoteId)
+        Long ownerId = ownerIdOrNotFound(user);
+        RouteQuote quote = routeQuoteRepository.findOwnedByIdForUpdate(quoteId, ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Wycena trasy nie istnieje"));
-        assertOwner(quote, user);
 
         LocalDateTime now = LocalDateTime.now();
         if (quote.getConsumedAt() != null) {
@@ -155,16 +154,16 @@ public class RouteQuoteService {
     }
 
     private RouteQuote findOwnedQuote(UUID quoteId, User user) {
-        RouteQuote quote = routeQuoteRepository.findById(quoteId)
+        Long ownerId = ownerIdOrNotFound(user);
+        return routeQuoteRepository.findByIdAndUser_Id(quoteId, ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Wycena trasy nie istnieje"));
-        assertOwner(quote, user);
-        return quote;
     }
 
-    private void assertOwner(RouteQuote quote, User user) {
-        if (user == null || user.getId() == null || !user.getId().equals(quote.getUser().getId())) {
-            throw new ForbiddenOperationException("Ta wycena trasy należy do innego użytkownika");
+    private Long ownerIdOrNotFound(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ResourceNotFoundException("Wycena trasy nie istnieje");
         }
+        return user.getId();
     }
 
     private void validateRouteSequence(
