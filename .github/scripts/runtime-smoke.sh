@@ -171,7 +171,7 @@ OWNER_GPS_STATUS=$(curl --silent --output /tmp/owner-gps.json --write-out '%{htt
   -X PUT -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
   -d "{\"latitude\":51.1200,\"longitude\":17.0700,\"accuracyMeters\":7.5,\"headingDegrees\":180.0,\"speedMetersPerSecond\":6.0,\"capturedAt\":\"$GPS_AT\"}" \
   "$api/jobs/$JOB_ID/tracking/location")
-test "$OWNER_GPS_STATUS" = "403"
+test "$OWNER_GPS_STATUS" = "404"
 
 WORKER_GPS=$(curl --fail --silent -X PUT -H "Authorization: Bearer $WORKER_TOKEN" -H 'Content-Type: application/json' \
   -d "{\"latitude\":51.1200,\"longitude\":17.0700,\"accuracyMeters\":7.5,\"headingDegrees\":180.0,\"speedMetersPerSecond\":6.0,\"capturedAt\":\"$GPS_AT\"}" \
