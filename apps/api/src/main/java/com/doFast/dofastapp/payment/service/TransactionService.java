@@ -116,16 +116,19 @@ public class TransactionService {
 
         if (comparison > 0) {
             BigDecimal delta = newAmount.subtract(transaction.getAmount());
-            walletService.debit(
+            boolean debited = walletService.debit(
                     transaction.getPayer().getId(),
                     delta,
                     WalletTransactionType.ESCROW_ADJUSTMENT_LOCK,
                     job.getId(),
                     proposalAdjustmentOperationKey(job, proposalId, "lock")
             );
+            if (!debited) {
+                throw new ConflictException("Wykryto niespójny stan dopłaty escrow");
+            }
         } else {
             BigDecimal delta = transaction.getAmount().subtract(newAmount);
-            walletService.creditRestoringJobDebits(
+            boolean refunded = walletService.creditRestoringJobDebits(
                     transaction.getPayer().getId(),
                     delta,
                     WalletTransactionType.ESCROW_ADJUSTMENT_REFUND,
@@ -133,6 +136,9 @@ public class TransactionService {
                     proposalAdjustmentOperationKey(job, proposalId, "refund"),
                     ESCROW_SOURCE_DEBITS
             );
+            if (!refunded) {
+                throw new ConflictException("Wykryto niespójny stan zwrotu escrow");
+            }
         }
 
         transaction.adjustHeldAmount(newAmount);
