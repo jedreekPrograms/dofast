@@ -1,7 +1,6 @@
 package com.doFast.dofastapp.job.publication;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
-import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.user.entity.User;
 import org.springframework.data.domain.PageRequest;
@@ -28,9 +27,11 @@ public class JobPublicationPaymentIntentCreateStateService {
 
     @Transactional
     public JobPublicationPaymentIntentCreateCommand prepareForOwner(Long publicationId, User currentUser) {
-        JobPublication publication = publicationRepository.findByIdForUpdate(publicationId)
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ResourceNotFoundException("Publikacja nie istnieje");
+        }
+        JobPublication publication = publicationRepository.findOwnedByIdForUpdate(publicationId, currentUser.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Publikacja nie istnieje"));
-        assertOwner(publication, currentUser);
 
         LocalDateTime now = LocalDateTime.now();
         if (publication.getStatus() != JobPublicationStatus.PAYMENT_REQUIRED) {
@@ -203,13 +204,6 @@ public class JobPublicationPaymentIntentCreateStateService {
                 existingIntentId,
                 publication.getStripePaymentIntentCreateAttemptCount()
         );
-    }
-
-    private void assertOwner(JobPublication publication, User currentUser) {
-        if (currentUser == null || currentUser.getId() == null
-                || !currentUser.getId().equals(publication.getUser().getId())) {
-            throw new ForbiddenOperationException("Ta publikacja należy do innego użytkownika");
-        }
     }
 
     private boolean hasText(String value) {

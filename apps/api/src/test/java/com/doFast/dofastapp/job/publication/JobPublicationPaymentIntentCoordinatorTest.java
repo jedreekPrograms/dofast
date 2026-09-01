@@ -76,7 +76,7 @@ class JobPublicationPaymentIntentCoordinatorTest {
         );
         ReflectionTestUtils.setField(publication, "id", 10L);
 
-        when(publicationRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(publication));
+        when(publicationRepository.findOwnedByIdForUpdate(10L, 7L)).thenReturn(Optional.of(publication));
         when(walletService.creditRestoringOperation(
                 7L,
                 new BigDecimal("25.00"),
