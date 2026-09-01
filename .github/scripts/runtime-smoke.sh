@@ -214,7 +214,7 @@ test "$(json_value /tmp/chat-retry.json id)" = "$CHAT_ID"
 
 OUTSIDER_CHAT_STATUS=$(curl --silent --output /tmp/outsider-chat.json --write-out '%{http_code}' \
   -H "Authorization: Bearer $OUTSIDER_TOKEN" "$api/chat/jobs/$JOB_ID/messages?limit=20")
-test "$OUTSIDER_CHAT_STATUS" = "403"
+test "$OUTSIDER_CHAT_STATUS" = "404"
 
 DISPUTE=$(curl --fail --silent -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
   -d "{\"jobId\":$JOB_ID,\"reason\":\"NOT_COMPLETED\",\"description\":\"Smoke dispute for route job\"}" \
