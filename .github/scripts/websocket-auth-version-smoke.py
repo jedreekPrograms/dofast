@@ -11,6 +11,7 @@ PORT = int(os.environ.get("DOFAST_WS_PORT", "8080"))
 PATH = os.environ.get("DOFAST_WS_PATH", "/ws")
 ORIGIN = os.environ.get("DOFAST_WS_ORIGIN", "http://localhost:5173")
 TIMEOUT = float(os.environ.get("DOFAST_WS_TIMEOUT", "3"))
+SIGNAL_TIMEOUT = float(os.environ.get("DOFAST_WS_SIGNAL_TIMEOUT", "15"))
 
 
 def recv_exact(sock, size):
@@ -89,56 +90,126 @@ def receive_frame(sock):
     return opcode, payload
 
 
-def stomp_connect(token):
+def receive_stomp_outcome(sock, success_command):
+    deadline = time.monotonic() + TIMEOUT
+    while time.monotonic() < deadline:
+        try:
+            opcode, payload = receive_frame(sock)
+        except (ConnectionError, OSError):
+            return "rejected"
+        except socket.timeout:
+            return "timeout"
+
+        if opcode == 0x8:
+            return "rejected"
+        if opcode == 0x9:
+            send_frame(sock, 0xA, payload)
+            continue
+        if opcode != 0x1:
+            continue
+
+        text = payload.decode("utf-8", errors="replace").lstrip("\n\r")
+        if text.startswith(success_command):
+            return "connected"
+        if text.startswith("ERROR"):
+            return "rejected"
+    return "timeout"
+
+
+def open_stomp(token):
     sock = handshake()
+    frame = (
+        "CONNECT\n"
+        "accept-version:1.2\n"
+        "host:localhost\n"
+        f"Authorization:Bearer {token}\n"
+        "heart-beat:0,0\n"
+        "\n\x00"
+    )
+    send_frame(sock, 0x1, frame)
+    outcome = receive_stomp_outcome(sock, "CONNECTED")
+    return sock, outcome
+
+
+def stomp_connect(token):
+    sock = None
     try:
-        frame = (
-            "CONNECT\n"
-            "accept-version:1.2\n"
-            "host:localhost\n"
-            f"Authorization:Bearer {token}\n"
-            "heart-beat:0,0\n"
+        sock, outcome = open_stomp(token)
+        return outcome
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+
+def wait_for_file(path):
+    deadline = time.monotonic() + SIGNAL_TIMEOUT
+    while time.monotonic() < deadline:
+        if os.path.exists(path):
+            return
+        time.sleep(0.05)
+    raise RuntimeError(f"timed out waiting for signal file {path}")
+
+
+def established_session_rejected_after_signal(token, ready_file, continue_file):
+    sock = None
+    try:
+        sock, outcome = open_stomp(token)
+        if outcome != "connected":
+            raise RuntimeError(f"expected initial STOMP CONNECT success, got {outcome}")
+
+        with open(ready_file, "w", encoding="utf-8") as ready:
+            ready.write("connected\n")
+        wait_for_file(continue_file)
+
+        subscribe = (
+            "SUBSCRIBE\n"
+            "id:credential-revalidation-smoke\n"
+            "destination:/user/queue/notifications\n"
+            "ack:auto\n"
             "\n\x00"
         )
-        send_frame(sock, 0x1, frame)
-        deadline = time.monotonic() + TIMEOUT
-        while time.monotonic() < deadline:
-            try:
-                opcode, payload = receive_frame(sock)
-            except (ConnectionError, OSError):
-                return "rejected"
-            except socket.timeout:
-                return "timeout"
+        send_frame(sock, 0x1, subscribe)
 
-            if opcode == 0x8:
-                return "rejected"
-            if opcode == 0x9:
-                send_frame(sock, 0xA, payload)
-                continue
-            if opcode != 0x1:
-                continue
-
-            text = payload.decode("utf-8", errors="replace").lstrip("\n\r")
-            if text.startswith("CONNECTED"):
-                return "connected"
-            if text.startswith("ERROR"):
-                return "rejected"
-        return "timeout"
+        # A valid SUBSCRIBE has no acknowledgement, so the secure outcome we can prove here is
+        # that the server rejects/closes the already-established session after its DB credential
+        # version changed. A timeout would mean the stale session was still accepted.
+        outcome = receive_stomp_outcome(sock, "__never_success__")
+        if outcome != "rejected":
+            raise RuntimeError(f"expected established stale session rejection, got {outcome}")
+        print("Established STOMP session rejected after credential invalidation")
     finally:
-        try:
-            sock.close()
-        except OSError:
-            pass
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+        for path in (ready_file, continue_file):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
 
 
 def main():
-    if len(sys.argv) != 3 or sys.argv[2] not in {"connected", "rejected"}:
-        raise SystemExit("usage: websocket-auth-version-smoke.py <access-token> <connected|rejected>")
-    actual = stomp_connect(sys.argv[1])
-    expected = sys.argv[2]
-    if actual != expected:
-        raise RuntimeError(f"expected STOMP CONNECT outcome {expected}, got {actual}")
-    print(f"STOMP CONNECT outcome: {actual}")
+    if len(sys.argv) == 3 and sys.argv[2] in {"connected", "rejected"}:
+        actual = stomp_connect(sys.argv[1])
+        expected = sys.argv[2]
+        if actual != expected:
+            raise RuntimeError(f"expected STOMP CONNECT outcome {expected}, got {actual}")
+        print(f"STOMP CONNECT outcome: {actual}")
+        return
+
+    if len(sys.argv) == 5 and sys.argv[2] == "established-rejected-after-signal":
+        established_session_rejected_after_signal(sys.argv[1], sys.argv[3], sys.argv[4])
+        return
+
+    raise SystemExit(
+        "usage: websocket-auth-version-smoke.py <access-token> <connected|rejected>\n"
+        "   or: websocket-auth-version-smoke.py <access-token> established-rejected-after-signal <ready-file> <continue-file>"
+    )
 
 
 if __name__ == "__main__":

@@ -31,17 +31,20 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
     private final UserRepository userRepository;
     private final ChatAccessService chatAccessService;
     private final LiveTrackingAccessService liveTrackingAccessService;
+    private final WebSocketSessionRegistry sessionRegistry;
 
     public WebSocketSecurityInterceptor(
             JwtUtil jwtUtil,
             UserRepository userRepository,
             ChatAccessService chatAccessService,
-            LiveTrackingAccessService liveTrackingAccessService
+            LiveTrackingAccessService liveTrackingAccessService,
+            WebSocketSessionRegistry sessionRegistry
     ) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.chatAccessService = chatAccessService;
         this.liveTrackingAccessService = liveTrackingAccessService;
+        this.sessionRegistry = sessionRegistry;
     }
 
     @Override
@@ -57,6 +60,7 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
         }
 
         if (accessor.getCommand() == StompCommand.DISCONNECT) {
+            sessionRegistry.remove(accessor.getSessionId());
             return message;
         }
 
@@ -64,6 +68,8 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
         if (principal == null) {
             throw new BadCredentialsException("WebSocket session is not authenticated");
         }
+
+        User user = requireCurrentSession(accessor, principal);
 
         // doFast currently exposes WebSocket only as a server-to-client delivery channel.
         // Allowing authenticated clients to SEND directly to /topic or /queue would let them
@@ -75,7 +81,7 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
         }
 
         if (accessor.getCommand() == StompCommand.SUBSCRIBE) {
-            authorizeSubscription(accessor, principal.getName());
+            authorizeSubscription(accessor, user);
         }
 
         return message;
@@ -98,17 +104,36 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
         if (user.getAuthVersion() != identity.authVersion()) {
             throw new BadCredentialsException("WebSocket access token is no longer valid");
         }
+
+        String sessionId = requireSessionId(accessor);
         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
         accessor.setUser(new UsernamePasswordAuthenticationToken(user.getEmail(), null, List.of(authority)));
+        sessionRegistry.register(sessionId, user.getEmail(), identity.authVersion());
     }
 
-    private void authorizeSubscription(StompHeaderAccessor accessor, String email) {
+    private User requireCurrentSession(StompHeaderAccessor accessor, Principal principal) {
+        String sessionId = requireSessionId(accessor);
+        WebSocketSessionRegistry.SessionIdentity identity = sessionRegistry.find(sessionId)
+                .orElseThrow(() -> new BadCredentialsException("WebSocket session identity is missing"));
+        if (!identity.email().equalsIgnoreCase(principal.getName())) {
+            sessionRegistry.remove(sessionId);
+            throw new BadCredentialsException("WebSocket session identity does not match principal");
+        }
+
+        User user = activeUser(identity.email());
+        if (user.getAuthVersion() != identity.authVersion()) {
+            sessionRegistry.remove(sessionId);
+            throw new BadCredentialsException("WebSocket session credentials are no longer valid");
+        }
+        return user;
+    }
+
+    private void authorizeSubscription(StompHeaderAccessor accessor, User user) {
         String destination = accessor.getDestination();
         if (destination == null) {
             throw new BadCredentialsException("Missing websocket destination");
         }
 
-        User user = activeUser(email);
         if (destination.startsWith(CHAT_TOPIC_PREFIX)) {
             Long jobId = parseJobId(destination.substring(CHAT_TOPIC_PREFIX.length()), "chat");
             chatAccessService.requireParticipant(jobId, user);
@@ -135,6 +160,14 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
             throw new BadCredentialsException("WebSocket user is not active");
         }
         return user;
+    }
+
+    private String requireSessionId(StompHeaderAccessor accessor) {
+        String sessionId = accessor.getSessionId();
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new BadCredentialsException("WebSocket session id is missing");
+        }
+        return sessionId;
     }
 
     private Long parseJobId(String value, String destinationType) {

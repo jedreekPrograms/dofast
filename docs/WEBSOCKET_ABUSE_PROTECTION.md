@@ -28,12 +28,24 @@ WebSocket is currently a **server-to-client delivery channel**. Clients may auth
 
 Authenticated client `SEND` frames are rejected before the simple broker or application destination can process them. This is deliberate: allowing clients to publish directly to `/topic` or `/queue` would bypass REST ownership and business invariants and could inject forged chat/tracking payloads into other users' subscriptions. The same fail-closed rule currently applies to `/dofastapp/**`; if server-side `@MessageMapping` handlers are introduced later, every client-writable destination must be explicitly allow-listed and authorized before `SEND` is enabled.
 
+### Credential-bound WebSocket sessions
+
+A successful STOMP `CONNECT` is bound to the exact current account credential version. The API records only the WebSocket session id, normalized account email and `auth_version`; it does not retain the raw access JWT. A stale JWT cannot establish a new session.
+
+That check is not limited to the initial handshake. Every later inbound STOMP frame must still belong to the registered session/principal pair and the account must still be `ACTIVE` with the same `auth_version`. Password change/reset or account suspension therefore rejects further activity from an already-established session. Disconnect events remove the in-memory binding.
+
+Existing subscriptions are protected independently on the client outbound channel. Immediately before a broker `MESSAGE` is delivered to a WebSocket session, `WebSocketOutboundSecurityInterceptor` reloads the account and requires the session's stored credential version to remain current and the account to remain `ACTIVE`. Missing, suspended or stale session identities are dropped fail-closed before chat, notification or live-tracking data reaches the client, and their registry entry is removed. This does not claim to forcibly tear down the underlying TCP/WebSocket connection at the exact instant of a credential change; it prevents further protected realtime delivery and rejects subsequent inbound frames.
+
+The session registry is process-local and bounded by live WebSocket sessions rather than arbitrary caller keys. It is cleaned on normal/disconnected session events and when a stale outbound or inbound session is detected. In a future multi-instance deployment, each WebSocket connection remains owned and validated by the API instance serving that connection; account state itself is reloaded from the shared database for each protected delivery.
+
 ## Inbound message limiter
 
 The inbound channel runs interceptors in this order:
 
-1. `WebSocketSecurityInterceptor` authenticates `CONNECT` frames, authorizes protected subscriptions, and rejects client `SEND` frames.
+1. `WebSocketSecurityInterceptor` authenticates and credential-binds `CONNECT` frames, revalidates established sessions, authorizes protected subscriptions, and rejects client `SEND` frames.
 2. `WebSocketInboundRateLimitInterceptor` limits subsequent authenticated STOMP frames by trusted principal.
+
+The client outbound channel independently runs `WebSocketOutboundSecurityInterceptor` before client `MESSAGE` delivery so an existing subscription cannot outlive account suspension or credential invalidation.
 
 The default production budget is 120 inbound frames per 10 seconds per authenticated account. The limit is shared across that account's concurrent WebSocket sessions on a single API instance, so opening additional sockets does not bypass the application-level budget. `CONNECT` and `DISCONNECT` frames are not charged; authentication and authorization still run normally.
 
