@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.job.service;
 
+import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
@@ -21,14 +22,21 @@ public class JobVisibilityService {
     }
 
     public void assertCanViewPublicDetail(Long jobId, User currentUser) {
-        if (currentUser == null) {
-            return;
-        }
-
         Job job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
 
         if (sameUser(job.getCreatedBy(), currentUser) || sameUser(job.getTakenBy(), currentUser)) {
+            return;
+        }
+
+        // Only OPEN jobs belong to the public marketplace. Keeping lifecycle states behind
+        // participant access prevents direct-ID enumeration from exposing accepted, completed
+        // or cancelled jobs after they have disappeared from discovery.
+        if (job.getStatus() != JobStatus.OPEN) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+
+        if (currentUser == null) {
             return;
         }
 
