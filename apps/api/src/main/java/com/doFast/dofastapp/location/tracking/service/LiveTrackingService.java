@@ -37,6 +37,7 @@ public class LiveTrackingService {
 
     private static final Logger log = LoggerFactory.getLogger(LiveTrackingService.class);
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
+    private static final String JOB_NOT_FOUND = "Zlecenie nie istnieje";
 
     private final JobRepository jobRepository;
     private final JobLiveTrackingRepository trackingRepository;
@@ -118,7 +119,7 @@ public class LiveTrackingService {
         Instant now = Instant.now();
         PersistedPosition persisted = transactionTemplate.execute(status -> {
             Job job = jobRepository.findByIdForUpdate(jobId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+                    .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
             assertWorkerAndActive(job, currentUser);
             JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(jobId)
                     .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało uruchomione"));
@@ -160,9 +161,12 @@ public class LiveTrackingService {
             User currentUser,
             Instant now
     ) {
-        Job job = jobRepository.findByIdForUpdate(jobId)
-                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
-        assertWorkerAndActive(job, currentUser);
+        Long workerId = requireActorId(currentUser);
+        Job job = jobRepository.findAssignedWorkerByIdForUpdate(jobId, workerId)
+                .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
+        if (!LiveTrackingAccessService.isTrackingActive(job)) {
+            throw new ConflictException("Śledzenie lokalizacji nie jest aktywne dla tego zlecenia");
+        }
 
         JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(jobId)
                 .orElseGet(() -> JobLiveTracking.start(jobId, job.getTakenBy(), now));
@@ -195,6 +199,13 @@ public class LiveTrackingService {
         return context(job, tracking, refreshEstimate, now);
     }
 
+    private Long requireActorId(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ResourceNotFoundException(JOB_NOT_FOUND);
+        }
+        return currentUser.getId();
+    }
+
     private LiveTrackingResponse refreshEstimate(PersistedPosition persisted) {
         RouteProviderResult estimate;
         try {
@@ -206,7 +217,7 @@ public class LiveTrackingService {
 
         LiveTrackingResponse applied = transactionTemplate.execute(status -> {
             Job job = jobRepository.findByIdForUpdate(persisted.jobId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+                    .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
             JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(persisted.jobId())
                     .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało uruchomione"));
 
