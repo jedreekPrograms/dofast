@@ -89,6 +89,29 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     @Query("select j from Job j where j.id = :id")
     Optional<Job> findByIdForUpdate(@Param("id") Long id);
 
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
+              and (j.createdBy.id = :userId or j.takenBy.id = :userId)
+            """)
+    Optional<Job> findParticipantById(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
+              and j.takenBy.id = :userId
+            """)
+    Optional<Job> findAssignedWorkerByIdForUpdate(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
     @Query(value = """
             WITH origin AS (
                 SELECT CAST(ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326) AS geography) AS point

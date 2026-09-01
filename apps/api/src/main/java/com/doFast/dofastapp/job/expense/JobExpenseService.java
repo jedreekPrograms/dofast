@@ -82,13 +82,14 @@ public class JobExpenseService {
 
     @Transactional
     public JobExpenseClaimResponse createClaim(Long jobId, CreateJobExpenseClaimRequest request, User currentUser) {
-        Job job = jobRepository.findByIdForUpdate(jobId)
+        Long workerId = currentUser == null ? null : currentUser.getId();
+        if (workerId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        Job job = jobRepository.findAssignedWorkerByIdForUpdate(jobId, workerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
         if (job.getStatus() != JobStatus.IN_PROGRESS || job.getTakenBy() == null) {
             throw new ConflictException("Wydatek można zgłosić tylko podczas aktywnej realizacji zlecenia");
-        }
-        if (!sameUser(job.getTakenBy(), currentUser)) {
-            throw new ForbiddenOperationException("Tylko przypisany wykonawca może zgłosić wydatek");
         }
 
         JobExpenseEscrow escrow = escrowRepository.findByJobIdForUpdate(jobId)
@@ -124,9 +125,12 @@ public class JobExpenseService {
     }
 
     public JobExpenseSummaryResponse getSummary(Long jobId, User currentUser) {
-        Job job = jobRepository.findById(jobId)
+        Long participantId = currentUser == null ? null : currentUser.getId();
+        if (participantId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        jobRepository.findParticipantById(jobId, participantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
-        assertParticipant(job, currentUser);
         return buildSummary(jobId);
     }
 
@@ -291,12 +295,6 @@ public class JobExpenseService {
             return amount.setScale(2, RoundingMode.UNNECESSARY);
         } catch (ArithmeticException ex) {
             throw new BusinessException("Zatwierdzona kwota wydatków może mieć maksymalnie dwa miejsca po przecinku");
-        }
-    }
-
-    private void assertParticipant(Job job, User user) {
-        if (!sameUser(job.getCreatedBy(), user) && !sameUser(job.getTakenBy(), user)) {
-            throw new ForbiddenOperationException("Tylko strony zlecenia mogą przeglądać rozliczenie wydatków");
         }
     }
 
