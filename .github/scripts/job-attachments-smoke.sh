@@ -149,8 +149,9 @@ curl --fail --silent --show-error -H "Authorization: Bearer $OWNER_TOKEN" \
   --output /tmp/worker-participant-owner-download.png "$api/jobs/$JOB_ID/attachments/$WORKER_PARTICIPANT_ID/content"
 cmp /tmp/attachment-worker-participant.png /tmp/worker-participant-owner-download.png
 
-OUTSIDER_LIST_AFTER=$(curl --fail --silent --show-error -H "Authorization: Bearer $OUTSIDER_TOKEN" "$api/jobs/$JOB_ID/attachments")
-python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d)==0' <<< "$OUTSIDER_LIST_AFTER"
+OUTSIDER_LIST_AFTER_STATUS=$(curl --silent --output /tmp/outsider-list-after.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $OUTSIDER_TOKEN" "$api/jobs/$JOB_ID/attachments")
+test "$OUTSIDER_LIST_AFTER_STATUS" = "404"
 
 curl --fail --silent --show-error --output /tmp/attachment-completion.json -X POST \
   -H "Authorization: Bearer $WORKER_TOKEN" "$api/jobs/$JOB_ID/completion"
