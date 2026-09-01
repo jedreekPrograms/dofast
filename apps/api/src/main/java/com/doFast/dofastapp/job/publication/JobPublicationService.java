@@ -225,8 +225,12 @@ public class JobPublicationService {
         try { return objectMapper.writeValueAsString(request); }
         catch (RuntimeException ex) { throw new IllegalStateException("Nie udało się zapisać danych publikacji", ex); }
     }
+    JobRequest deserialize(String payload) {
+        try { return objectMapper.readValue(payload, JobRequest.class); }
+        catch (RuntimeException ex) { throw new IllegalStateException("Nie udało się odczytać danych publikacji", ex); }
+    }
     private String sha256(String value) {
-        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); }
+        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (NoSuchAlgorithmException ex) { throw new IllegalStateException("SHA-256 is unavailable", ex); }
     }
     private String requestKey(Long userId, String clientRequestId) { return "job-publication:" + userId + ":" + clientRequestId.trim(); }
