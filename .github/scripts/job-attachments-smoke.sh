@@ -93,7 +93,9 @@ WORKER_UPLOAD_BEFORE=$(curl --silent --output /tmp/worker-upload-before.json --w
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -F 'visibility=PARTICIPANTS' -F 'file=@/tmp/attachment-worker-participant.png;type=image/png' \
   "$api/jobs/$JOB_ID/attachments")
-test "$WORKER_UPLOAD_BEFORE" = "403"
+# Before assignment the worker is not a participant. Mutation endpoints intentionally use a neutral 404
+# so a foreign caller cannot use upload/delete semantics as a private job-existence oracle.
+test "$WORKER_UPLOAD_BEFORE" = "404"
 
 curl --fail --silent --show-error -H "Authorization: Bearer $OUTSIDER_TOKEN" \
   --output /tmp/public-download.png "$api/jobs/$JOB_ID/attachments/$PUBLIC_ID/content"
