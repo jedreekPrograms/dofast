@@ -13,15 +13,18 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final WebSocketSecurityInterceptor securityInterceptor;
     private final WebSocketInboundRateLimitInterceptor rateLimitInterceptor;
+    private final WebSocketOutboundSecurityInterceptor outboundSecurityInterceptor;
     private final WebSocketOriginPolicy originPolicy;
 
     public WebSocketConfig(
             WebSocketSecurityInterceptor securityInterceptor,
             WebSocketInboundRateLimitInterceptor rateLimitInterceptor,
+            WebSocketOutboundSecurityInterceptor outboundSecurityInterceptor,
             WebSocketOriginPolicy originPolicy
     ) {
         this.securityInterceptor = securityInterceptor;
         this.rateLimitInterceptor = rateLimitInterceptor;
+        this.outboundSecurityInterceptor = outboundSecurityInterceptor;
         this.originPolicy = originPolicy;
     }
 
@@ -36,6 +39,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureClientInboundChannel(ChannelRegistration registration) {
         // Authentication/authorization must run first so rate limiting can use the trusted principal.
         registration.interceptors(securityInterceptor, rateLimitInterceptor);
+    }
+
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        // Revalidate the credential-bound session immediately before any client MESSAGE leaves the broker.
+        registration.interceptors(outboundSecurityInterceptor);
     }
 
     @Override

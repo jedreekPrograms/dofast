@@ -8,8 +8,11 @@ old_password='RecoveryOldPass123!'
 new_password='RecoveryNewPass456!'
 raw_reset_token='runtime-known-password-reset-token-2026'
 cookie_jar='/tmp/dofast-password-recovery.cookies'
+ws_ready='/tmp/dofast-password-recovery-ws.ready'
+ws_continue='/tmp/dofast-password-recovery-ws.continue'
+ws_log='/tmp/dofast-password-recovery-ws.log'
 
-rm -f "$cookie_jar" /tmp/dofast-password-recovery-*.json
+rm -f "$cookie_jar" /tmp/dofast-password-recovery-*.json "$ws_ready" "$ws_continue" "$ws_log"
 
 json_value() {
   local file="$1"
@@ -53,6 +56,20 @@ test -n "$OLD_ACCESS"
 test -n "$OLD_CSRF"
 
 python3 .github/scripts/websocket-auth-version-smoke.py "$OLD_ACCESS" connected
+python3 .github/scripts/websocket-auth-version-smoke.py \
+  "$OLD_ACCESS" established-rejected-after-signal "$ws_ready" "$ws_continue" >"$ws_log" 2>&1 &
+WS_REVALIDATION_PID=$!
+for attempt in {1..100}; do
+  if test -f "$ws_ready"; then
+    break
+  fi
+  if ! kill -0 "$WS_REVALIDATION_PID" 2>/dev/null; then
+    cat "$ws_log"
+    wait "$WS_REVALIDATION_PID"
+  fi
+  sleep 0.05
+done
+test -f "$ws_ready"
 
 EXISTING_FORGOT_STATUS=$(curl --silent --output /tmp/dofast-password-recovery-forgot-existing.json --write-out '%{http_code}' \
   -H 'Content-Type: application/json' \
@@ -92,6 +109,10 @@ AUTH_VERSION=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT auth_version FROM users WHERE id=$USER_ID;")
 test "${AUTH_VERSION//[[:space:]]/}" = "1"
 
+touch "$ws_continue"
+wait "$WS_REVALIDATION_PID"
+grep -q 'Established STOMP session rejected after credential invalidation' "$ws_log"
+
 OLD_ACCESS_STATUS=$(curl --silent --output /tmp/dofast-password-recovery-old-access.json --write-out '%{http_code}' \
   -H "Authorization: Bearer $OLD_ACCESS" \
   "$api/users/me")
@@ -109,7 +130,7 @@ ACTIVE_REFRESH=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT COUNT(*) FROM auth_refresh_sessions WHERE user_id=$USER_ID AND revoked_at IS NULL;")
 test "${ACTIVE_REFRESH//[[:space:]]/}" = "0"
 
-echo 'Password reset immediately invalidates access and refresh sessions: OK'
+echo 'Password reset immediately invalidates access, refresh and established websocket sessions: OK'
 
 OLD_LOGIN_STATUS=$(curl --silent --output /tmp/dofast-password-recovery-old-login.json --write-out '%{http_code}' \
   -H 'Content-Type: application/json' \

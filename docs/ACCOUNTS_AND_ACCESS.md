@@ -78,7 +78,7 @@ Browser build configuration:
 
 ```text
 VITE_APPLE_AUTH_CLIENT_ID=<same Services ID>
-VITE_APPLE_AUTH_REDIRECT_URI=<same registered return URL>
+VITE_APPLE_AUTH_REDIRECT_URI=<same registered HTTPS return URL>
 ```
 
 The private `.p8` key is a deployment secret and must never be committed or exposed as a Vite variable.
@@ -119,6 +119,8 @@ Changing the local password atomically updates the password hash, increments `au
 
 Suspended accounts cannot refresh. Separately, the JWT filter reloads the user on every Bearer-authenticated request and requires both `ACTIVE` status and an exact `auth_version` match, so account suspension and credential changes take effect immediately.
 
+WebSocket/STOMP sessions follow the same credential lifecycle instead of becoming a separate long-lived authentication island. A successful STOMP `CONNECT` binds the WebSocket session id to the account email and exact `auth_version` without retaining the raw JWT. Subsequent inbound frames revalidate that binding against the current database account. Immediately before each outbound broker `MESSAGE`, the API also requires the bound account to remain `ACTIVE` with the same `auth_version`; stale, suspended or unknown sessions are dropped before realtime chat, notifications or tracking data reaches the client. The underlying socket is not guaranteed to be physically closed at the instant credentials change, but it can no longer receive protected realtime messages and subsequent inbound frames are rejected. Session bindings are removed on disconnect and when stale state is detected.
+
 Default browser-session configuration:
 
 ```text
@@ -142,13 +144,13 @@ For eligible local-password accounts, the backend creates a random opaque one-ti
 
 Outbound delivery is deliberately separated from the request transaction. The raw token is carried only in an in-memory application event. An asynchronous `AFTER_COMMIT` listener sends the SMTP email after the reset row is durable, so the public request is not blocked on SMTP latency and the raw token never needs to be stored in an outbox or database column. Delivery errors log only the internal user id.
 
-`POST /users/password/reset` pessimistically locks the matching token hash. A successful reset updates the password hash, increments `auth_version`, marks the link used, invalidates other active reset links and revokes all active refresh sessions with `PASSWORD_RESET`. The used link cannot be replayed, and access JWTs issued before the reset immediately fail their credential-version check.
+`POST /users/password/reset` pessimistically locks the matching token hash. A successful reset updates the password hash, increments `auth_version`, marks the link used, invalidates other active reset links and revokes all active refresh sessions with `PASSWORD_RESET`. The used link cannot be replayed, and access JWTs issued before the reset immediately fail their credential-version check. Existing WebSocket sessions are credential-bound too: further inbound frames are rejected and protected outbound realtime messages are suppressed as soon as the database credential version no longer matches.
 
 The web exposes `/forgot-password` and `/reset-password?token=...`. Local/CI delivery is disabled by default; production hard-wires SMTP delivery and requires an HTTPS reset URL and verified sender configuration. Full details and the runtime contract are documented in `docs/PASSWORD_RECOVERY.md`.
 
 ## Authorization
 
-The JWT filter reloads the account on every authenticated request. Role/status and credential-version changes therefore take effect immediately even when a cryptographically valid older token still exists.
+The JWT filter reloads the account on every authenticated request. Role/status and credential-version changes therefore take effect immediately even when a cryptographically valid older token still exists. WebSocket session revalidation applies the equivalent database-backed `ACTIVE`/`auth_version` boundary to established realtime sessions and to each protected outbound client message.
 
 Spring Security grants `ROLE_USER` or `ROLE_ADMIN`; `/admin/**` requires `ROLE_ADMIN`. Public endpoints are intentionally limited to registration/login (including provider login/challenges), refresh/logout, forgot/reset password, marketplace discovery, public profile summaries, health and the Stripe webhook endpoint. Refresh/logout are public only at the Spring routing layer: their own opaque-cookie/CSRF validation is the authentication boundary. Reset-password endpoints are public by necessity and protect themselves with generic responses, opaque high-entropy one-time credentials and strict validation.
 
