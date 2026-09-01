@@ -8,6 +8,7 @@ import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
+import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,6 +42,7 @@ class AdminJobReportServiceTest {
     @Mock private NotificationService notificationService;
     @Mock private TransactionService transactionService;
     @Mock private JobExpenseService expenseService;
+    @Mock private AuthRefreshSessionRepository refreshSessionRepository;
 
     private AdminJobReportService service;
     private JobReport report;
@@ -57,7 +60,8 @@ class AdminJobReportServiceTest {
                 jobRepository,
                 notificationService,
                 transactionService,
-                expenseService
+                expenseService,
+                refreshSessionRepository
         );
         reporter = new User("reporter@example.com", "Reporter");
         owner = new User("owner@example.com", "Owner");
@@ -183,6 +187,7 @@ class AdminJobReportServiceTest {
         );
 
         assertEquals(UserStatus.SUSPENDED, owner.getStatus());
+        assertEquals(1L, owner.getAuthVersion());
         assertEquals(JobStatus.CANCELLED, job.getStatus());
         assertEquals(JobStatus.CANCELLED, secondOpenJob.getStatus());
         assertEquals(8L, response.targetUserId());
@@ -191,6 +196,11 @@ class AdminJobReportServiceTest {
         verify(transactionService).refundMoney(secondOpenJob);
         verify(expenseService).refundAll(job);
         verify(expenseService).refundAll(secondOpenJob);
+        verify(refreshSessionRepository).revokeAllActiveForUser(
+                eq(8L),
+                eq("ACCOUNT_SUSPENDED"),
+                any(LocalDateTime.class)
+        );
         verify(accountEnforcementRepository).save(any(JobReportAccountEnforcement.class));
     }
 
@@ -213,8 +223,10 @@ class AdminJobReportServiceTest {
                 )
         );
         assertEquals(UserStatus.ACTIVE, owner.getStatus());
+        assertEquals(0L, owner.getAuthVersion());
         verify(transactionService, never()).refundMoney(any());
         verify(expenseService, never()).refundAll(any());
+        verify(refreshSessionRepository, never()).revokeAllActiveForUser(any(), any(), any());
     }
 
     @Test
