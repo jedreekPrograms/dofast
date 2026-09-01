@@ -48,12 +48,40 @@ class JobExpenseServiceTest {
         when(job.getExpenseBudget()).thenReturn(new BigDecimal("120.00"));
         when(requester.getId()).thenReturn(11L);
         when(escrowRepository.findByJob_Id(71L)).thenReturn(Optional.empty());
+        when(walletService.debit(
+                11L,
+                new BigDecimal("120.00"),
+                WalletTransactionType.EXPENSE_BUDGET_LOCK,
+                71L,
+                "job:71:expense:lock"
+        )).thenReturn(true);
 
         service.holdBudget(job);
 
         verify(walletService).debit(11L, new BigDecimal("120.00"), WalletTransactionType.EXPENSE_BUDGET_LOCK,
                 71L, "job:71:expense:lock");
         verify(escrowRepository).save(any(JobExpenseEscrow.class));
+    }
+
+    @Test
+    void refusesToCreateExpenseEscrowWhenWalletLockWasNotApplied() {
+        JobExpenseService service = service();
+        when(job.getId()).thenReturn(79L);
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(job.getExpenseBudget()).thenReturn(new BigDecimal("90.00"));
+        when(requester.getId()).thenReturn(19L);
+        when(escrowRepository.findByJob_Id(79L)).thenReturn(Optional.empty());
+        when(walletService.debit(
+                19L,
+                new BigDecimal("90.00"),
+                WalletTransactionType.EXPENSE_BUDGET_LOCK,
+                79L,
+                "job:79:expense:lock"
+        )).thenReturn(false);
+
+        assertThrows(ConflictException.class, () -> service.holdBudget(job));
+
+        verify(escrowRepository, never()).save(any(JobExpenseEscrow.class));
     }
 
     @Test
@@ -67,6 +95,21 @@ class JobExpenseServiceTest {
         JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("100.00"), java.time.LocalDateTime.now());
         escrow.addClaim(new BigDecimal("35.00"));
         when(escrowRepository.findByJobIdForUpdate(72L)).thenReturn(Optional.of(escrow));
+        when(walletService.credit(
+                22L,
+                new BigDecimal("35.00"),
+                WalletTransactionType.EXPENSE_REIMBURSEMENT,
+                72L,
+                "job:72:expense:reimburse"
+        )).thenReturn(true);
+        when(walletService.creditRestoringJobDebits(
+                12L,
+                new BigDecimal("65.00"),
+                WalletTransactionType.EXPENSE_BUDGET_REFUND,
+                72L,
+                "job:72:expense:refund",
+                Set.of(WalletTransactionType.EXPENSE_BUDGET_LOCK)
+        )).thenReturn(true);
 
         service.settleOnCompletion(job);
 
@@ -86,6 +129,31 @@ class JobExpenseServiceTest {
     }
 
     @Test
+    void refusesToSettleExpenseEscrowWhenWorkerReimbursementWasNotApplied() {
+        JobExpenseService service = service();
+        when(job.getId()).thenReturn(80L);
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(job.getTakenBy()).thenReturn(worker);
+        when(worker.getId()).thenReturn(30L);
+        JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("50.00"), java.time.LocalDateTime.now());
+        escrow.addClaim(new BigDecimal("20.00"));
+        when(escrowRepository.findByJobIdForUpdate(80L)).thenReturn(Optional.of(escrow));
+        when(walletService.credit(
+                30L,
+                new BigDecimal("20.00"),
+                WalletTransactionType.EXPENSE_REIMBURSEMENT,
+                80L,
+                "job:80:expense:reimburse"
+        )).thenReturn(false);
+
+        assertThrows(ConflictException.class, () -> service.settleOnCompletion(job));
+
+        assertEquals(JobExpenseEscrowStatus.HELD, escrow.getStatus());
+        verify(escrowRepository, never()).save(escrow);
+        verify(walletService, never()).creditRestoringJobDebits(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void disputeCanApproveOnlyPartOfClaimedExpenses() {
         JobExpenseService service = service();
         when(job.getId()).thenReturn(75L);
@@ -96,6 +164,21 @@ class JobExpenseServiceTest {
         JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("100.00"), java.time.LocalDateTime.now());
         escrow.addClaim(new BigDecimal("40.00"));
         when(escrowRepository.findByJobIdForUpdate(75L)).thenReturn(Optional.of(escrow));
+        when(walletService.credit(
+                25L,
+                new BigDecimal("25.00"),
+                WalletTransactionType.EXPENSE_REIMBURSEMENT,
+                75L,
+                "job:75:expense:reimburse"
+        )).thenReturn(true);
+        when(walletService.creditRestoringJobDebits(
+                15L,
+                new BigDecimal("75.00"),
+                WalletTransactionType.EXPENSE_BUDGET_REFUND,
+                75L,
+                "job:75:expense:refund",
+                Set.of(WalletTransactionType.EXPENSE_BUDGET_LOCK)
+        )).thenReturn(true);
 
         service.settleForDispute(job, new BigDecimal("25.00"));
 
@@ -128,6 +211,29 @@ class JobExpenseServiceTest {
         verify(walletService, never()).credit(any(), any(), any(), any(), any());
         verify(walletService, never()).creditRestoringJobDebits(any(), any(), any(), any(), any(), any());
         assertEquals(JobExpenseEscrowStatus.HELD, escrow.getStatus());
+    }
+
+    @Test
+    void refundAllDoesNotMarkEscrowRefundedWhenWalletRefundWasNotApplied() {
+        JobExpenseService service = service();
+        when(job.getId()).thenReturn(81L);
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(requester.getId()).thenReturn(41L);
+        JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("70.00"), java.time.LocalDateTime.now());
+        when(escrowRepository.findByJobIdForUpdate(81L)).thenReturn(Optional.of(escrow));
+        when(walletService.creditRestoringJobDebits(
+                41L,
+                new BigDecimal("70.00"),
+                WalletTransactionType.EXPENSE_BUDGET_REFUND,
+                81L,
+                "job:81:expense:refund",
+                Set.of(WalletTransactionType.EXPENSE_BUDGET_LOCK)
+        )).thenReturn(false);
+
+        assertThrows(ConflictException.class, () -> service.refundAll(job));
+
+        assertEquals(JobExpenseEscrowStatus.HELD, escrow.getStatus());
+        verify(escrowRepository, never()).save(escrow);
     }
 
     @Test
