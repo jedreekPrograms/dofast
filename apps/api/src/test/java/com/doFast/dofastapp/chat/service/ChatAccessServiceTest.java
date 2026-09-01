@@ -2,7 +2,7 @@ package com.doFast.dofastapp.chat.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
-import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
@@ -17,6 +17,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,20 +37,28 @@ class ChatAccessServiceTest {
     }
 
     @Test
-    void unrelatedUserCannotReadConversation() {
-        Job job = job(JobStatus.IN_PROGRESS);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+    void unrelatedUserCannotDistinguishExistingConversationFromMissingJob() {
+        when(jobRepository.findParticipantById(10L, 3L)).thenReturn(Optional.empty());
 
         assertThrows(
-                ForbiddenOperationException.class,
+                ResourceNotFoundException.class,
                 () -> accessService.requireParticipant(10L, user(3L, "stranger"))
         );
     }
 
     @Test
+    void missingAuthenticatedIdentityFailsClosedBeforeRepositoryAccess() {
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> accessService.requireParticipant(10L, user(null, "anonymous"))
+        );
+        verifyNoInteractions(jobRepository);
+    }
+
+    @Test
     void completedConversationRemainsReadableButCannotReceiveNewMessages() {
         Job job = job(JobStatus.DONE);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, owner.getId())).thenReturn(Optional.of(job));
 
         assertEquals(job, accessService.requireParticipant(10L, owner));
         assertThrows(ConflictException.class, () -> accessService.requireSendable(10L, owner));
@@ -58,7 +67,7 @@ class ChatAccessServiceTest {
     @Test
     void activeAcceptedConversationCanReceiveMessages() {
         Job job = job(JobStatus.IN_PROGRESS);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, worker.getId())).thenReturn(Optional.of(job));
 
         assertEquals(job, accessService.requireSendable(10L, worker));
         assertEquals(owner, accessService.otherParticipant(job, worker));

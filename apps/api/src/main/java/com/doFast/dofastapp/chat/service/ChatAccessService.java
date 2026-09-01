@@ -27,14 +27,13 @@ public class ChatAccessService {
     }
 
     public Job requireParticipant(Long jobId, User user) {
-        Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
-
-        if (!sameUser(job.getCreatedBy(), user) && !sameUser(job.getTakenBy(), user)) {
-            throw new ForbiddenOperationException("Nie masz dostępu do tego czatu");
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
         }
 
-        return job;
+        return jobRepository.findParticipantById(jobId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
     public Job requireSendable(Long jobId, User user) {
