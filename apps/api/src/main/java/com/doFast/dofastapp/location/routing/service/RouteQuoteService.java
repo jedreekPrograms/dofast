@@ -1,7 +1,6 @@
 package com.doFast.dofastapp.location.routing.service;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
-import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.location.routing.dto.RouteModeComparisonResponse;
 import com.doFast.dofastapp.location.routing.dto.RouteModeEstimateResponse;
@@ -124,9 +123,9 @@ public class RouteQuoteService {
 
     @Transactional
     public RouteQuote consume(UUID quoteId, User user) {
-        RouteQuote quote = routeQuoteRepository.findByIdForUpdate(quoteId)
-                .orElseThrow(() -> new ResourceNotFoundException("Wycena trasy nie istnieje"));
-        assertOwner(quote, user);
+        Long userId = authenticatedUserId(user);
+        RouteQuote quote = routeQuoteRepository.findOwnedByIdForUpdate(quoteId, userId)
+                .orElseThrow(this::routeQuoteNotFound);
 
         LocalDateTime now = LocalDateTime.now();
         if (quote.getConsumedAt() != null) {
@@ -155,16 +154,20 @@ public class RouteQuoteService {
     }
 
     private RouteQuote findOwnedQuote(UUID quoteId, User user) {
-        RouteQuote quote = routeQuoteRepository.findById(quoteId)
-                .orElseThrow(() -> new ResourceNotFoundException("Wycena trasy nie istnieje"));
-        assertOwner(quote, user);
-        return quote;
+        Long userId = authenticatedUserId(user);
+        return routeQuoteRepository.findOwnedById(quoteId, userId)
+                .orElseThrow(this::routeQuoteNotFound);
     }
 
-    private void assertOwner(RouteQuote quote, User user) {
-        if (user == null || user.getId() == null || !user.getId().equals(quote.getUser().getId())) {
-            throw new ForbiddenOperationException("Ta wycena trasy należy do innego użytkownika");
+    private Long authenticatedUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw routeQuoteNotFound();
         }
+        return user.getId();
+    }
+
+    private ResourceNotFoundException routeQuoteNotFound() {
+        return new ResourceNotFoundException("Wycena trasy nie istnieje");
     }
 
     private void validateRouteSequence(
