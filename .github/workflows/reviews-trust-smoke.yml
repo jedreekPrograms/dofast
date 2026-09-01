@@ -96,8 +96,10 @@ jobs:
             http://localhost:8080/users/login)
           OUTSIDER_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])' <<< "$OUTSIDER_LOGIN")
 
-          docker compose exec -T db psql -U dofast -d dofast -c \
-            "UPDATE wallets SET balance = 100.00 WHERE user_id = $REQUESTER_ID;"
+          bash .github/scripts/seed-wallet-funding.sh \
+            "$REQUESTER_ID" 100.00 PLATFORM_ADJUSTMENT \
+            "smoke:reviews:requester:$REQUESTER_ID" \
+            "smoke:reviews:seed:$REQUESTER_ID"
           CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
             "SELECT id FROM job_categories WHERE slug = 'malowanie' AND active = TRUE;")
           CATEGORY_ID="${CATEGORY_ID//[[:space:]]/}"
