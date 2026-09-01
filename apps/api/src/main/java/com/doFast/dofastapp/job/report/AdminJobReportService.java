@@ -5,9 +5,11 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
+import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.enums.UserStatus;
@@ -34,19 +36,25 @@ public class AdminJobReportService {
     private final JobReportAccountEnforcementRepository accountEnforcementRepository;
     private final JobRepository jobRepository;
     private final NotificationService notificationService;
+    private final TransactionService transactionService;
+    private final JobExpenseService expenseService;
 
     public AdminJobReportService(
             JobReportRepository repository,
             JobReportEnforcementRepository enforcementRepository,
             JobReportAccountEnforcementRepository accountEnforcementRepository,
             JobRepository jobRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            TransactionService transactionService,
+            JobExpenseService expenseService
     ) {
         this.repository = repository;
         this.enforcementRepository = enforcementRepository;
         this.accountEnforcementRepository = accountEnforcementRepository;
         this.jobRepository = jobRepository;
         this.notificationService = notificationService;
+        this.transactionService = transactionService;
+        this.expenseService = expenseService;
     }
 
     @Transactional(readOnly = true)
@@ -104,7 +112,7 @@ public class AdminJobReportService {
             throw new ConflictException("Moderacyjne anulowanie jest dozwolone wyłącznie dla otwartego zlecenia");
         }
 
-        job.cancel(LocalDateTime.now());
+        cancelOpenJobWithRefund(job, LocalDateTime.now());
         JobReportEnforcement enforcement = new JobReportEnforcement(
                 report,
                 job,
@@ -148,7 +156,7 @@ public class AdminJobReportService {
 
         LocalDateTime now = LocalDateTime.now();
         jobRepository.findAllByStatusAndCreatedBy(JobStatus.OPEN, target)
-                .forEach(job -> job.cancel(now));
+                .forEach(job -> cancelOpenJobWithRefund(job, now));
         target.setStatus(UserStatus.SUSPENDED);
 
         JobReportAccountEnforcement enforcement = new JobReportAccountEnforcement(
@@ -160,6 +168,12 @@ public class AdminJobReportService {
         );
         accountEnforcementRepository.save(enforcement);
         return JobReportAccountEnforcementResponse.from(enforcement);
+    }
+
+    private void cancelOpenJobWithRefund(Job job, LocalDateTime now) {
+        job.cancel(now);
+        transactionService.refundMoney(job);
+        expenseService.refundAll(job);
     }
 
     private void notifyReporter(JobReport report) {
