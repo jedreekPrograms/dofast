@@ -70,13 +70,16 @@ public class JobExpenseService {
             throw new ConflictException("Budżet wydatków dla tego zlecenia został już zablokowany");
         }
 
-        walletService.debit(
+        boolean debited = walletService.debit(
                 job.getCreatedBy().getId(),
                 budget,
                 WalletTransactionType.EXPENSE_BUDGET_LOCK,
                 job.getId(),
                 lockOperationKey(job.getId())
         );
+        if (!debited) {
+            throw new ConflictException("Wykryto niespójny stan blokady budżetu wydatków");
+        }
         escrowRepository.save(new JobExpenseEscrow(job, job.getCreatedBy(), budget, LocalDateTime.now()));
     }
 
@@ -203,16 +206,19 @@ public class JobExpenseService {
 
         BigDecimal refunded = escrow.getBudgetAmount().subtract(reimbursed).setScale(2, RoundingMode.UNNECESSARY);
         if (reimbursed.signum() > 0) {
-            walletService.credit(
+            boolean reimbursedApplied = walletService.credit(
                     job.getTakenBy().getId(),
                     reimbursed,
                     WalletTransactionType.EXPENSE_REIMBURSEMENT,
                     job.getId(),
                     reimbursementOperationKey(job.getId())
             );
+            if (!reimbursedApplied) {
+                throw new ConflictException("Wykryto niespójny stan zwrotu wydatków wykonawcy");
+            }
         }
         if (refunded.signum() > 0) {
-            walletService.creditRestoringJobDebits(
+            boolean refundApplied = walletService.creditRestoringJobDebits(
                     job.getCreatedBy().getId(),
                     refunded,
                     WalletTransactionType.EXPENSE_BUDGET_REFUND,
@@ -220,6 +226,9 @@ public class JobExpenseService {
                     refundOperationKey(job.getId()),
                     EXPENSE_SOURCE_DEBITS
             );
+            if (!refundApplied) {
+                throw new ConflictException("Wykryto niespójny stan zwrotu niewykorzystanego budżetu wydatków");
+            }
         }
         escrow.settle(reimbursed, refunded, LocalDateTime.now());
         escrowRepository.save(escrow);
@@ -232,7 +241,7 @@ public class JobExpenseService {
         if (escrow.getStatus() != JobExpenseEscrowStatus.HELD) {
             throw new ConflictException("Budżet wydatków został już rozliczony z wykonawcą");
         }
-        walletService.creditRestoringJobDebits(
+        boolean refunded = walletService.creditRestoringJobDebits(
                 job.getCreatedBy().getId(),
                 escrow.getBudgetAmount(),
                 WalletTransactionType.EXPENSE_BUDGET_REFUND,
@@ -240,6 +249,9 @@ public class JobExpenseService {
                 refundOperationKey(job.getId()),
                 EXPENSE_SOURCE_DEBITS
         );
+        if (!refunded) {
+            throw new ConflictException("Wykryto niespójny stan zwrotu budżetu wydatków");
+        }
         escrow.refundAll(LocalDateTime.now());
         escrowRepository.save(escrow);
     }
