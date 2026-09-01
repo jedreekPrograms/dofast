@@ -2,7 +2,6 @@ package com.doFast.dofastapp.job.saved;
 
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
-import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.dto.JobResponse;
@@ -42,11 +41,8 @@ public class SavedJobService {
 
     @Transactional
     public void save(Long jobId, User user) {
-        Job job = jobRepository.findById(jobId)
+        Job job = jobRepository.findByIdAndStatus(jobId, JobStatus.OPEN)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
-        if (job.getStatus() != JobStatus.OPEN) {
-            throw new ConflictException("Możesz zapisać tylko dostępne zlecenie");
-        }
         if (sameUser(job.getCreatedBy(), user)) {
             throw new ForbiddenOperationException("Nie możesz zapisać własnego zlecenia");
         }

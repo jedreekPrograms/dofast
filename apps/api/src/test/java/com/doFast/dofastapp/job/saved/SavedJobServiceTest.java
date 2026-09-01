@@ -2,8 +2,8 @@ package com.doFast.dofastapp.job.saved;
 
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
-import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
@@ -54,7 +54,7 @@ class SavedJobServiceTest {
 
     @Test
     void saveIsIdempotentForOpenJob() {
-        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
         when(savedJobRepository.existsByUser_IdAndJob_Id(7L, 11L)).thenReturn(false);
 
         service.save(11L, user);
@@ -67,7 +67,7 @@ class SavedJobServiceTest {
 
     @Test
     void saveDoesNotDuplicateExistingBookmark() {
-        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
         when(savedJobRepository.existsByUser_IdAndJob_Id(7L, 11L)).thenReturn(true);
 
         service.save(11L, user);
@@ -76,28 +76,31 @@ class SavedJobServiceTest {
     }
 
     @Test
-    void saveRejectsUnavailableJob() {
-        job.setStatus(JobStatus.IN_PROGRESS);
-        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+    void saveHidesUnavailableJobExistenceBehindOpenScopedLookup() {
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.empty());
 
-        assertThrows(ConflictException.class, () -> service.save(11L, user));
+        assertThrows(ResourceNotFoundException.class, () -> service.save(11L, user));
+
+        verify(jobRepository, never()).findById(11L);
+        verify(savedJobRepository, never()).existsByUser_IdAndJob_Id(7L, 11L);
+        verify(savedJobRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    void saveRejectsOwnJob() {
+    void saveRejectsOwnOpenJob() {
         job.setCreatedBy(user);
-        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
 
         assertThrows(ForbiddenOperationException.class, () -> service.save(11L, user));
         verify(savedJobRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    void saveRejectsJobAcrossUserBlock() {
+    void saveRejectsOpenJobAcrossUserBlock() {
         User owner = new User("owner@example.com", "Owner");
         ReflectionTestUtils.setField(owner, "id", 8L);
         job.setCreatedBy(owner);
-        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
         when(userBlockService.isInteractionBlocked(owner, user)).thenReturn(true);
 
         assertThrows(ForbiddenOperationException.class, () -> service.save(11L, user));

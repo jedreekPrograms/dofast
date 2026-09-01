@@ -20,6 +20,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
 
     List<Job> findByCreatedByOrTakenByOrderByCreatedAtDesc(User createdBy, User takenBy);
     List<Job> findAllByStatusAndCreatedBy(JobStatus status, User createdBy);
+    Optional<Job> findByIdAndStatus(Long id, JobStatus status);
     long countByStatusAndCreatedBy(JobStatus status, User createdBy);
     long countByStatusAndTakenBy(JobStatus status, User takenBy);
 
