@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.expense;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.attachment.JobAttachment;
 import com.doFast.dofastapp.job.attachment.JobAttachmentRepository;
 import com.doFast.dofastapp.job.attachment.JobAttachmentVisibility;
@@ -132,10 +133,10 @@ class JobExpenseServiceTest {
     @Test
     void claimRequiresPrivateParticipantReceiptUploadedByAssignedWorker() {
         JobExpenseService service = service();
-        when(jobRepository.findByIdForUpdate(73L)).thenReturn(Optional.of(job));
+        when(worker.getId()).thenReturn(23L);
+        when(jobRepository.findAssignedWorkerByIdForUpdate(73L, 23L)).thenReturn(Optional.of(job));
         when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
         when(job.getTakenBy()).thenReturn(worker);
-        when(worker.getId()).thenReturn(23L);
         JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("80.00"), java.time.LocalDateTime.now());
         when(escrowRepository.findByJobIdForUpdate(73L)).thenReturn(Optional.of(escrow));
         when(attachmentRepository.findByIdAndJob_IdAndDeletedAtIsNull(900L, 73L)).thenReturn(Optional.of(receipt));
@@ -151,10 +152,10 @@ class JobExpenseServiceTest {
     @Test
     void claimRejectsNonReceiptMediaBeforeMutatingEscrow() {
         JobExpenseService service = service();
-        when(jobRepository.findByIdForUpdate(74L)).thenReturn(Optional.of(job));
+        when(worker.getId()).thenReturn(24L);
+        when(jobRepository.findAssignedWorkerByIdForUpdate(74L, 24L)).thenReturn(Optional.of(job));
         when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
         when(job.getTakenBy()).thenReturn(worker);
-        when(worker.getId()).thenReturn(24L);
         JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("80.00"), java.time.LocalDateTime.now());
         when(escrowRepository.findByJobIdForUpdate(74L)).thenReturn(Optional.of(escrow));
         when(attachmentRepository.findByIdAndJob_IdAndDeletedAtIsNull(901L, 74L)).thenReturn(Optional.of(receipt));
@@ -168,6 +169,51 @@ class JobExpenseServiceTest {
         verify(claimRepository, never()).save(any());
         verify(escrowRepository, never()).save(any());
         assertEquals(new BigDecimal("0.00"), escrow.getClaimedAmount());
+    }
+
+    @Test
+    void outsiderCannotEnumeratePrivateExpenseSummary() {
+        JobExpenseService service = service();
+        when(requester.getId()).thenReturn(91L);
+        when(jobRepository.findParticipantById(73L, 91L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> service.getSummary(73L, requester));
+
+        verify(escrowRepository, never()).findByJob_Id(73L);
+        verify(claimRepository, never()).findAllByJob_IdOrderByCreatedAtAscIdAsc(73L);
+        verify(jobRepository, never()).findById(73L);
+    }
+
+    @Test
+    void participantSummaryUsesScopedLookupBeforeReadingFinancialEvidence() {
+        JobExpenseService service = service();
+        when(requester.getId()).thenReturn(11L);
+        when(jobRepository.findParticipantById(77L, 11L)).thenReturn(Optional.of(job));
+        when(escrowRepository.findByJob_Id(77L)).thenReturn(Optional.empty());
+
+        JobExpenseSummaryResponse summary = service.getSummary(77L, requester);
+
+        assertEquals(77L, summary.jobId());
+        assertEquals(new BigDecimal("0.00"), summary.budgetAmount());
+        verify(jobRepository).findParticipantById(77L, 11L);
+        verify(jobRepository, never()).findById(77L);
+    }
+
+    @Test
+    void outsiderCannotEnumerateOrCreateExpenseClaim() {
+        JobExpenseService service = service();
+        when(worker.getId()).thenReturn(99L);
+        when(jobRepository.findAssignedWorkerByIdForUpdate(78L, 99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.createClaim(78L, new CreateJobExpenseClaimRequest(new BigDecimal("20.00"), 902L), worker));
+
+        verify(jobRepository, never()).findByIdForUpdate(78L);
+        verify(escrowRepository, never()).findByJobIdForUpdate(78L);
+        verify(attachmentRepository, never()).findByIdAndJob_IdAndDeletedAtIsNull(902L, 78L);
+        verify(claimRepository, never()).save(any());
+        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).debit(any(), any(), any(), any(), any());
     }
 
     private JobExpenseService service() {
