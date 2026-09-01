@@ -10,6 +10,7 @@ import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
+import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.enums.UserStatus;
@@ -25,6 +26,7 @@ import java.util.Set;
 @Service
 public class AdminJobReportService {
 
+    private static final String ACCOUNT_SUSPENDED_SESSION_REASON = "ACCOUNT_SUSPENDED";
     private static final Set<JobStatus> ACCOUNT_SUSPENSION_BLOCKING_STATUSES = Set.of(
             JobStatus.IN_PROGRESS,
             JobStatus.COMPLETION_REQUESTED,
@@ -38,6 +40,7 @@ public class AdminJobReportService {
     private final NotificationService notificationService;
     private final TransactionService transactionService;
     private final JobExpenseService expenseService;
+    private final AuthRefreshSessionRepository refreshSessionRepository;
 
     public AdminJobReportService(
             JobReportRepository repository,
@@ -46,7 +49,8 @@ public class AdminJobReportService {
             JobRepository jobRepository,
             NotificationService notificationService,
             TransactionService transactionService,
-            JobExpenseService expenseService
+            JobExpenseService expenseService,
+            AuthRefreshSessionRepository refreshSessionRepository
     ) {
         this.repository = repository;
         this.enforcementRepository = enforcementRepository;
@@ -55,6 +59,7 @@ public class AdminJobReportService {
         this.notificationService = notificationService;
         this.transactionService = transactionService;
         this.expenseService = expenseService;
+        this.refreshSessionRepository = refreshSessionRepository;
     }
 
     @Transactional(readOnly = true)
@@ -158,6 +163,7 @@ public class AdminJobReportService {
         jobRepository.findAllByStatusAndCreatedBy(JobStatus.OPEN, target)
                 .forEach(job -> cancelOpenJobWithRefund(job, now));
         target.setStatus(UserStatus.SUSPENDED);
+        target.incrementAuthVersion();
 
         JobReportAccountEnforcement enforcement = new JobReportAccountEnforcement(
                 report,
@@ -167,7 +173,13 @@ public class AdminJobReportService {
                 normalize(request.reason())
         );
         accountEnforcementRepository.save(enforcement);
-        return JobReportAccountEnforcementResponse.from(enforcement);
+        JobReportAccountEnforcementResponse response = JobReportAccountEnforcementResponse.from(enforcement);
+        refreshSessionRepository.revokeAllActiveForUser(
+                target.getId(),
+                ACCOUNT_SUSPENDED_SESSION_REASON,
+                now
+        );
+        return response;
     }
 
     private void cancelOpenJobWithRefund(Job job, LocalDateTime now) {
