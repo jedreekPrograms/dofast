@@ -2,6 +2,7 @@ package com.doFast.dofastapp.location.tracking.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
@@ -36,6 +37,7 @@ class LiveTrackingServiceAuthorizationTest {
         User outsider = mock(User.class);
         when(outsider.getId()).thenReturn(99L);
         when(fixture.jobRepository.findAssignedWorkerByIdForUpdate(42L, 99L)).thenReturn(Optional.empty());
+        when(fixture.jobRepository.findByIdAndCreatedBy_Id(42L, 99L)).thenReturn(Optional.empty());
 
         ResourceNotFoundException error = assertThrows(
                 ResourceNotFoundException.class,
@@ -44,6 +46,27 @@ class LiveTrackingServiceAuthorizationTest {
 
         assertEquals("Zlecenie nie istnieje", error.getMessage());
         verify(fixture.jobRepository).findAssignedWorkerByIdForUpdate(42L, 99L);
+        verify(fixture.jobRepository).findByIdAndCreatedBy_Id(42L, 99L);
+        verify(fixture.jobRepository, never()).findByIdForUpdate(any());
+        verifyNoInteractions(fixture.trackingRepository, fixture.positionSanityValidator, fixture.updateRateLimiter);
+    }
+
+    @Test
+    void preservesForbiddenContractForKnownJobOwnerWithoutReadingTrackingState() {
+        Fixture fixture = fixture();
+        User owner = mock(User.class);
+        when(owner.getId()).thenReturn(11L);
+        when(fixture.jobRepository.findAssignedWorkerByIdForUpdate(42L, 11L)).thenReturn(Optional.empty());
+        when(fixture.jobRepository.findByIdAndCreatedBy_Id(42L, 11L)).thenReturn(Optional.of(mock(Job.class)));
+
+        ForbiddenOperationException error = assertThrows(
+                ForbiddenOperationException.class,
+                () -> fixture.service.updateLocation(42L, request(), owner)
+        );
+
+        assertEquals("Tylko przypisany wykonawca może udostępniać lokalizację", error.getMessage());
+        verify(fixture.jobRepository).findAssignedWorkerByIdForUpdate(42L, 11L);
+        verify(fixture.jobRepository).findByIdAndCreatedBy_Id(42L, 11L);
         verify(fixture.jobRepository, never()).findByIdForUpdate(any());
         verifyNoInteractions(fixture.trackingRepository, fixture.positionSanityValidator, fixture.updateRateLimiter);
     }
