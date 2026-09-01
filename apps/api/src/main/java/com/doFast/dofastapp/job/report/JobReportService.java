@@ -7,6 +7,7 @@ import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,9 +41,17 @@ public class JobReportService {
             details = null;
         }
 
-        return JobReportResponse.from(
-                reportRepository.save(new JobReport(job, reporter, request.reason(), details))
-        );
+        JobReport saved;
+        try {
+            saved = reportRepository.saveAndFlush(new JobReport(job, reporter, request.reason(), details));
+        } catch (DataIntegrityViolationException exception) {
+            // The unique reporter/job constraint is the final authority under concurrent requests.
+            // Translate the race into the same stable API contract as the optimistic pre-check
+            // instead of leaking a persistence exception as an internal server error.
+            throw new ConflictException("To zlecenie zostało już przez Ciebie zgłoszone");
+        }
+
+        return JobReportResponse.from(saved);
     }
 
     @Transactional
