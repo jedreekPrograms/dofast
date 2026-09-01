@@ -40,6 +40,16 @@ public interface DisputeRepository extends JpaRepository<Dispute, Long> {
 
     @Query("""
             select d from Dispute d
+            where d.id = :id
+              and (d.job.createdBy.id = :userId or d.job.takenBy.id = :userId)
+            """)
+    Optional<Dispute> findParticipantById(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
+    @Query("""
+            select d from Dispute d
             where d.job.createdBy = :user or d.job.takenBy = :user
             order by d.openedAt desc
             """)
