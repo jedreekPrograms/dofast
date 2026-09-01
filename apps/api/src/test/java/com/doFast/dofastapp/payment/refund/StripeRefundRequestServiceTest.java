@@ -116,4 +116,36 @@ class StripeRefundRequestServiceTest {
         verify(refunds).saveAll(List.of(request));
         verifyNoInteractions(wallet);
     }
+
+    @Test
+    void refreshedDispatchTimestampCannotExtendStripeIdempotencyWindow() {
+        StripeRefundRequestRepository refunds = mock(StripeRefundRequestRepository.class);
+        PaymentTransactionRepository payments = mock(PaymentTransactionRepository.class);
+        StripePaymentDisputeRepository disputes = mock(StripePaymentDisputeRepository.class);
+        WalletService wallet = mock(WalletService.class);
+        StripeRefundRequestService service = new StripeRefundRequestService(refunds, payments, disputes, wallet);
+
+        LocalDateTime requestCreatedAt = LocalDateTime.now().minusHours(24);
+        StripeRefundRequest request = StripeRefundRequest.create(
+                7L,
+                "pi_test",
+                "refund-clock-reset-regression",
+                new BigDecimal("10.00"),
+                "PLN",
+                requestCreatedAt
+        );
+        request.startDispatch(LocalDateTime.now().minusMinutes(5));
+        when(refunds.findStaleDispatchesForUpdate(any(LocalDateTime.class), eq(100)))
+                .thenReturn(List.of(request));
+
+        int recovered = service.requeueStaleDispatches();
+
+        assertThat(recovered).isEqualTo(1);
+        assertThat(request.getStatus()).isEqualTo(StripeRefundStatus.REVIEW_REQUIRED);
+        assertThat(request.getFailureReason()).isEqualTo("provider_idempotency_window_expired");
+        assertThat(request.getNextAttemptAt()).isNull();
+        assertThat(request.isWalletRestored()).isFalse();
+        verify(refunds).saveAll(List.of(request));
+        verifyNoInteractions(wallet);
+    }
 }

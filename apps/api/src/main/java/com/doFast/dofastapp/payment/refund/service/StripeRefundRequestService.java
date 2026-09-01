@@ -34,6 +34,8 @@ public class StripeRefundRequestService {
     // Stripe API v1 idempotency keys can be pruned once they are at least 24 hours old.
     // Stop automatic retries one hour earlier so a crash/restart cannot turn an old ambiguous
     // partial refund into a second provider-side refund after the original key was discarded.
+    // Anchor this window to immutable request creation rather than updatedAt: every dispatch/retry
+    // mutates updatedAt and must never be able to extend the provider safety deadline.
     private static final Duration PROVIDER_IDEMPOTENCY_RETRY_WINDOW = Duration.ofHours(23);
 
     private final StripeRefundRequestRepository refundRepository;
@@ -208,8 +210,8 @@ public class StripeRefundRequestService {
                 STALE_RECOVERY_BATCH_SIZE
         );
         for (StripeRefundRequest request : stale) {
-            LocalDateTime lastDispatchAt = request.getUpdatedAt();
-            if (lastDispatchAt == null || !lastDispatchAt.isAfter(unsafeRetryBefore)) {
+            LocalDateTime retryClockStartedAt = request.getCreatedAt();
+            if (retryClockStartedAt == null || !retryClockStartedAt.isAfter(unsafeRetryBefore)) {
                 request.markReviewRequired("provider_idempotency_window_expired", now);
             } else {
                 request.reschedule("stale_dispatch_recovered", now, now);
