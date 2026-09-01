@@ -119,9 +119,7 @@ public class JobPublicationService {
 
     @Transactional
     public JobPublicationResponse get(Long publicationId, User currentUser) {
-        JobPublication publication = publicationRepository.findByIdForUpdate(publicationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Publikacja nie istnieje"));
-        assertOwner(publication, currentUser);
+        JobPublication publication = findOwnedForUpdate(publicationId, currentUser);
         expireIfNecessary(publication, LocalDateTime.now());
         return toResponse(publication);
     }
@@ -135,9 +133,7 @@ public class JobPublicationService {
 
     @Transactional
     public JobPublicationResponse cancel(Long publicationId, User currentUser) {
-        JobPublication publication = publicationRepository.findByIdForUpdate(publicationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Publikacja nie istnieje"));
-        assertOwner(publication, currentUser);
+        JobPublication publication = findOwnedForUpdate(publicationId, currentUser);
         if (publication.getStatus() == JobPublicationStatus.CANCELLED) return toResponse(publication);
         if (publication.getStatus() != JobPublicationStatus.PAYMENT_REQUIRED) throw new ConflictException("Tej publikacji nie można już anulować");
         restoreReservation(publication);
@@ -213,9 +209,12 @@ public class JobPublicationService {
         if (location == null || location.privateLabel() == null || location.privateLabel().isBlank()) throw new BusinessException("Podaj dokładny adres wykonania usługi");
     }
 
-    private void assertOwner(JobPublication publication, User currentUser) {
-        if (currentUser == null || currentUser.getId() == null || !currentUser.getId().equals(publication.getUser().getId()))
-            throw new ForbiddenOperationException("Ta publikacja należy do innego użytkownika");
+    private JobPublication findOwnedForUpdate(Long publicationId, User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ResourceNotFoundException("Publikacja nie istnieje");
+        }
+        return publicationRepository.findOwnedByIdForUpdate(publicationId, currentUser.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Publikacja nie istnieje"));
     }
 
     private BigDecimal money(BigDecimal amount) {
@@ -226,12 +225,8 @@ public class JobPublicationService {
         try { return objectMapper.writeValueAsString(request); }
         catch (RuntimeException ex) { throw new IllegalStateException("Nie udało się zapisać danych publikacji", ex); }
     }
-    JobRequest deserialize(String payload) {
-        try { return objectMapper.readValue(payload, JobRequest.class); }
-        catch (RuntimeException ex) { throw new IllegalStateException("Nie udało się odczytać danych publikacji", ex); }
-    }
     private String sha256(String value) {
-        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
+        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); }
         catch (NoSuchAlgorithmException ex) { throw new IllegalStateException("SHA-256 is unavailable", ex); }
     }
     private String requestKey(Long userId, String clientRequestId) { return "job-publication:" + userId + ":" + clientRequestId.trim(); }
