@@ -4,9 +4,11 @@
 
 Authenticated users can maintain a private block list through:
 
-- `PUT /user-blocks/{userId}` — idempotently block another account.
+- `PUT /user-blocks/{userId}` — idempotently block another `ACTIVE` account.
 - `DELETE /user-blocks/{userId}` — idempotently remove the block.
 - `GET /user-blocks` — list only the caller's blocked accounts, newest first.
+
+A block target is resolved through the `ACTIVE` account boundary before any existing relation is read. Missing and suspended user IDs therefore produce the same neutral not-found result and cannot be used to recover the target's nickname through this mutation. Existing private block history is retained and remains removable so a later suspension does not erase a user's established safety relationship.
 
 The API deliberately returns only the blocked user's public identifier (`userId`, `nickname`) and the block timestamp. It does not expose email addresses, locations, routes, live tracking, payment data, moderation records or the other user's block state.
 
@@ -14,7 +16,7 @@ The authenticated web app exposes the caller's own list at `/blocked-users`. Use
 
 ## Persistence and invariants
 
-Flyway `V31__user_blocks.sql` creates `user_blocks` with foreign keys to `users`, `ON DELETE CASCADE`, a unique `(blocker_id, blocked_user_id)` pair and a database check preventing self-blocks. Service validation rejects self-blocks before persistence and treats repeated block/unblock requests as idempotent operations.
+Flyway `V31__user_blocks.sql` creates `user_blocks` with foreign keys to `users`, `ON DELETE CASCADE`, a unique `(blocker_id, blocked_user_id)` pair and a database check preventing self-blocks. Service validation rejects self-blocks before persistence and treats repeated block/unblock requests as idempotent operations for available targets.
 
 ## Interaction enforcement
 
