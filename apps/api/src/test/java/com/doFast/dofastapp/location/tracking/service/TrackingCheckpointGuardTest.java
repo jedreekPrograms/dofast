@@ -2,6 +2,7 @@ package com.doFast.dofastapp.location.tracking.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.location.tracking.entity.JobLiveTracking;
@@ -22,12 +23,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class TrackingCheckpointGuardTest {
 
     @Test
-    void validatesLockedSnapshotBeforeExecutingTransition() {
+    void validatesAssignedWorkerLockedSnapshotBeforeExecutingTransition() {
         JobRepository jobRepository = mock(JobRepository.class);
         JobLiveTrackingRepository trackingRepository = mock(JobLiveTrackingRepository.class);
         TrackingCheckpointProximityValidator proximityValidator = mock(TrackingCheckpointProximityValidator.class);
@@ -39,7 +41,6 @@ class TrackingCheckpointGuardTest {
         Job job = mock(Job.class);
         Point target = mock(Point.class);
         when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
-        when(job.getTakenBy()).thenReturn(worker);
         when(job.getLocation()).thenReturn(target);
 
         JobLiveTracking tracking = mock(JobLiveTracking.class);
@@ -48,7 +49,7 @@ class TrackingCheckpointGuardTest {
         when(tracking.getCurrentLocation()).thenReturn(current);
         when(tracking.getAccuracyMeters()).thenReturn(8.0);
 
-        when(jobRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(job));
+        when(jobRepository.findAssignedWorkerByIdForUpdate(42L, 7L)).thenReturn(Optional.of(job));
         when(trackingRepository.findByJobIdForUpdate(42L)).thenReturn(Optional.of(tracking));
 
         AtomicBoolean executed = new AtomicBoolean(false);
@@ -59,7 +60,8 @@ class TrackingCheckpointGuardTest {
 
         assertEquals("ok", result);
         assertTrue(executed.get());
-        verify(jobRepository).findByIdForUpdate(42L);
+        verify(jobRepository).findAssignedWorkerByIdForUpdate(42L, 7L);
+        verify(jobRepository, never()).findByIdForUpdate(any());
         verify(trackingRepository).findByJobIdForUpdate(42L);
         verify(proximityValidator).validate(any(), any(), any(), any(), any());
     }
@@ -77,7 +79,6 @@ class TrackingCheckpointGuardTest {
         Job job = mock(Job.class);
         Point destination = mock(Point.class);
         when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
-        when(job.getTakenBy()).thenReturn(worker);
         when(job.getDestinationLocation()).thenReturn(destination);
 
         JobLiveTracking tracking = mock(JobLiveTracking.class);
@@ -86,7 +87,7 @@ class TrackingCheckpointGuardTest {
         when(tracking.getCurrentLocation()).thenReturn(current);
         when(tracking.getAccuracyMeters()).thenReturn(5.0);
 
-        when(jobRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(job));
+        when(jobRepository.findAssignedWorkerByIdForUpdate(42L, 7L)).thenReturn(Optional.of(job));
         when(trackingRepository.findByJobIdForUpdate(42L)).thenReturn(Optional.of(tracking));
 
         assertEquals("arrived", guard.validateAndExecute(42L, worker, () -> "arrived"));
@@ -105,12 +106,11 @@ class TrackingCheckpointGuardTest {
 
         Job job = mock(Job.class);
         when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
-        when(job.getTakenBy()).thenReturn(worker);
 
         JobLiveTracking tracking = mock(JobLiveTracking.class);
         when(tracking.getPhase()).thenReturn(TrackingPhase.ARRIVED_DESTINATION);
 
-        when(jobRepository.findByIdForUpdate(42L)).thenReturn(Optional.of(job));
+        when(jobRepository.findAssignedWorkerByIdForUpdate(42L, 7L)).thenReturn(Optional.of(job));
         when(trackingRepository.findByJobIdForUpdate(42L)).thenReturn(Optional.of(tracking));
 
         AtomicBoolean executed = new AtomicBoolean(false);
@@ -121,5 +121,46 @@ class TrackingCheckpointGuardTest {
 
         assertTrue(!executed.get());
         verify(proximityValidator, never()).validate(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void hidesExistingJobFromUnassignedActorBeforeTrackingStateIsRead() {
+        JobRepository jobRepository = mock(JobRepository.class);
+        JobLiveTrackingRepository trackingRepository = mock(JobLiveTrackingRepository.class);
+        TrackingCheckpointProximityValidator proximityValidator = mock(TrackingCheckpointProximityValidator.class);
+        TrackingCheckpointGuard guard = new TrackingCheckpointGuard(jobRepository, trackingRepository, proximityValidator);
+
+        User outsider = mock(User.class);
+        when(outsider.getId()).thenReturn(99L);
+        when(jobRepository.findAssignedWorkerByIdForUpdate(42L, 99L)).thenReturn(Optional.empty());
+
+        ResourceNotFoundException error = assertThrows(
+                ResourceNotFoundException.class,
+                () -> guard.validateAndExecute(42L, outsider, () -> "unexpected")
+        );
+
+        assertEquals("Zlecenie nie istnieje", error.getMessage());
+        verify(jobRepository).findAssignedWorkerByIdForUpdate(42L, 99L);
+        verify(jobRepository, never()).findByIdForUpdate(any());
+        verifyNoInteractions(trackingRepository, proximityValidator);
+    }
+
+    @Test
+    void rejectsMissingPersistedIdentityBeforeRepositoryAccess() {
+        JobRepository jobRepository = mock(JobRepository.class);
+        JobLiveTrackingRepository trackingRepository = mock(JobLiveTrackingRepository.class);
+        TrackingCheckpointProximityValidator proximityValidator = mock(TrackingCheckpointProximityValidator.class);
+        TrackingCheckpointGuard guard = new TrackingCheckpointGuard(jobRepository, trackingRepository, proximityValidator);
+
+        User transientUser = mock(User.class);
+        when(transientUser.getId()).thenReturn(null);
+
+        ResourceNotFoundException error = assertThrows(
+                ResourceNotFoundException.class,
+                () -> guard.validateAndExecute(42L, transientUser, () -> "unexpected")
+        );
+
+        assertEquals("Zlecenie nie istnieje", error.getMessage());
+        verifyNoInteractions(jobRepository, trackingRepository, proximityValidator);
     }
 }
