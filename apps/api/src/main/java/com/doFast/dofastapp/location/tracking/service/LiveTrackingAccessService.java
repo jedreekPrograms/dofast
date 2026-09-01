@@ -19,16 +19,13 @@ public class LiveTrackingAccessService {
     }
 
     public Job requireViewer(Long jobId, User user) {
-        Job job = getJob(jobId);
+        Job job = getParticipantJob(jobId, user);
         requireActiveTrackingStatus(job);
-        if (!sameUser(job.getCreatedBy(), user) && !sameUser(job.getTakenBy(), user)) {
-            throw new ForbiddenOperationException("Lokalizacja wykonawcy jest dostępna tylko dla stron aktywnego zlecenia");
-        }
         return job;
     }
 
     public Job requireWorker(Long jobId, User user) {
-        Job job = getJob(jobId);
+        Job job = getParticipantJob(jobId, user);
         requireActiveTrackingStatus(job);
         if (!sameUser(job.getTakenBy(), user)) {
             throw new ForbiddenOperationException("Tylko przypisany wykonawca może udostępniać lokalizację");
@@ -41,8 +38,11 @@ public class LiveTrackingAccessService {
                 || job.getStatus() == JobStatus.COMPLETION_REQUESTED;
     }
 
-    private Job getJob(Long jobId) {
-        return jobRepository.findById(jobId)
+    private Job getParticipantJob(Long jobId, User user) {
+        if (user == null || user.getId() == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantById(jobId, user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
