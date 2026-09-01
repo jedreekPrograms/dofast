@@ -92,7 +92,7 @@ class JobMultiStopRouteTest {
         ReflectionTestUtils.setField(job, "id", 99L);
         job.setStatus(JobStatus.IN_PROGRESS);
         job.setTakenBy(worker);
-        when(jobRepository.findById(99L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(99L, worker.getId())).thenReturn(Optional.of(job));
 
         JobRouteResponse route = service.getExactRoute(99L, worker);
         assertEquals(2, route.stops().size());
