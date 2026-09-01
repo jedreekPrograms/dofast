@@ -18,9 +18,15 @@ final class PayoutProviderSafetyPolicy {
                 || !StripeConnectOnboardingService.PROVIDER_CODE.equals(payout.getProviderCode())) {
             return false;
         }
-        LocalDateTime processingStartedAt = payout.getProcessingStartedAt();
-        return processingStartedAt == null
-                || !processingStartedAt.isAfter(now.minus(STRIPE_CONNECT_SAFE_RETRY_WINDOW));
+
+        // Stripe idempotency keys are only guaranteed for a bounded provider-side retention window.
+        // processingStartedAt is intentionally reset on every retry, so using it here would let a
+        // sequence of retries continuously move the safety deadline forward. requestedAt never moves;
+        // using it as the lower-bound clock is conservative (it can quarantine an old queued payout
+        // earlier than strictly necessary) but it can never authorize a retry after our safe window.
+        LocalDateTime durableRetryOrigin = payout.getRequestedAt();
+        return durableRetryOrigin == null
+                || !durableRetryOrigin.isAfter(now.minus(STRIPE_CONNECT_SAFE_RETRY_WINDOW));
     }
 
     static boolean requiresExternalProviderReconciliation(PayoutRequest payout) {
