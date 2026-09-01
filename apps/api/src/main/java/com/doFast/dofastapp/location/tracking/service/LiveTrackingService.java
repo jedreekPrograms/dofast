@@ -122,7 +122,7 @@ public class LiveTrackingService {
                     .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
             assertWorkerAndActive(job, currentUser);
             JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(jobId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało jeszcze uruchomione"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało uruchomione"));
             if (tracking.getPhase() == TrackingPhase.ARRIVED_DESTINATION) {
                 throw new ConflictException("Dotarcie do miejsca docelowego zostało już potwierdzone");
             }
@@ -163,12 +163,7 @@ public class LiveTrackingService {
     ) {
         Long workerId = requireActorId(currentUser);
         Job job = jobRepository.findAssignedWorkerByIdForUpdate(jobId, workerId)
-                .orElseGet(() -> {
-                    if (jobRepository.findByIdAndCreatedBy_Id(jobId, workerId).isPresent()) {
-                        throw new ForbiddenOperationException("Tylko przypisany wykonawca może udostępniać lokalizację");
-                    }
-                    throw new ResourceNotFoundException(JOB_NOT_FOUND);
-                });
+                .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
         if (!LiveTrackingAccessService.isTrackingActive(job)) {
             throw new ConflictException("Śledzenie lokalizacji nie jest aktywne dla tego zlecenia");
         }
@@ -224,7 +219,7 @@ public class LiveTrackingService {
             Job job = jobRepository.findByIdForUpdate(persisted.jobId())
                     .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
             JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(persisted.jobId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało jeszcze uruchomione"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Śledzenie tego zlecenia nie zostało uruchomione"));
 
             if (!LiveTrackingAccessService.isTrackingActive(job)) {
                 tracking.stopAndClear(Instant.now());
