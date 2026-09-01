@@ -87,14 +87,17 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
             throw new BadCredentialsException("Missing websocket bearer token");
         }
 
-        String email;
+        JwtUtil.AccessTokenIdentity identity;
         try {
-            email = jwtUtil.extractEmail(authorization.substring(7));
+            identity = jwtUtil.parseAccessToken(authorization.substring(7));
         } catch (Exception ex) {
             throw new BadCredentialsException("Invalid websocket bearer token", ex);
         }
 
-        User user = activeUser(email);
+        User user = activeUser(identity.email());
+        if (user.getAuthVersion() != identity.authVersion()) {
+            throw new BadCredentialsException("WebSocket access token is no longer valid");
+        }
         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
         accessor.setUser(new UsernamePasswordAuthenticationToken(user.getEmail(), null, List.of(authority)));
     }

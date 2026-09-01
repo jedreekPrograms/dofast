@@ -52,6 +52,8 @@ test -n "$USER_ID"
 test -n "$OLD_ACCESS"
 test -n "$OLD_CSRF"
 
+python3 .github/scripts/websocket-auth-version-smoke.py "$OLD_ACCESS" connected
+
 EXISTING_FORGOT_STATUS=$(curl --silent --output /tmp/dofast-password-recovery-forgot-existing.json --write-out '%{http_code}' \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$email\"}" \
@@ -95,6 +97,8 @@ OLD_ACCESS_STATUS=$(curl --silent --output /tmp/dofast-password-recovery-old-acc
   "$api/users/me")
 test "$OLD_ACCESS_STATUS" = "401"
 
+python3 .github/scripts/websocket-auth-version-smoke.py "$OLD_ACCESS" rejected
+
 OLD_REFRESH_STATUS=$(curl --silent --output /tmp/dofast-password-recovery-old-refresh.json --write-out '%{http_code}' \
   -b "$cookie_jar" \
   -H "X-CSRF-Token: $OLD_CSRF" \
@@ -120,6 +124,8 @@ NEW_LOGIN_STATUS=$(curl --silent --output /tmp/dofast-password-recovery-new-logi
 test "$NEW_LOGIN_STATUS" = "200"
 
 grep -q '"accessToken"' /tmp/dofast-password-recovery-new-login.json
+NEW_ACCESS=$(json_value /tmp/dofast-password-recovery-new-login.json accessToken)
+python3 .github/scripts/websocket-auth-version-smoke.py "$NEW_ACCESS" connected
 
 REPLAY_STATUS=$(curl --silent --output /tmp/dofast-password-recovery-replay.json --write-out '%{http_code}' \
   -H 'Content-Type: application/json' \
