@@ -41,8 +41,11 @@ class JobProposalAssignmentModeTest {
 
     @Test
     void proposalBasedJobCannotBypassSelectionThroughDirectAccept() {
-        when(jobRepository.findByIdForUpdate(91L)).thenReturn(Optional.of(job));
-        when(job.getStatus()).thenReturn(JobStatus.OPEN);
+        when(worker.getId()).thenReturn(2L);
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                91L, JobStatus.OPEN, JobAssignmentMode.INSTANT
+        )).thenReturn(Optional.empty());
+        when(jobRepository.findByIdAndStatus(91L, JobStatus.OPEN)).thenReturn(Optional.of(job));
         when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
 
         JobService service = new JobService(
@@ -57,6 +60,7 @@ class JobProposalAssignmentModeTest {
 
         assertThrows(ConflictException.class, () -> service.acceptJob(91L, worker));
 
+        verify(jobRepository, never()).findByIdForUpdate(91L);
         verify(job, never()).assignTo(eq(worker), any());
         verify(jobRepository, never()).save(job);
         verify(liveTrackingService, never()).initializeForAcceptedJob(job);

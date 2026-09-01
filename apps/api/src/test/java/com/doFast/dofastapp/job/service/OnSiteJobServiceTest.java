@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.category.FulfillmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
@@ -128,13 +129,16 @@ class OnSiteJobServiceTest {
         job.setLocationPrivateLabel("ul. Powstańców Śląskich 100, mieszkanie 8");
         job.setCreatedBy(owner);
 
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                10L, JobStatus.OPEN, JobAssignmentMode.INSTANT
+        )).thenReturn(Optional.of(job));
         when(jobRepository.save(job)).thenReturn(job);
 
         JobResponse response = service.acceptJob(10L, worker);
 
         assertEquals(JobStatus.IN_PROGRESS, response.status());
         assertEquals(worker.getId(), response.takenById());
+        verify(jobRepository, never()).findByIdForUpdate(10L);
         verify(liveTrackingService, never()).initializeForAcceptedJob(any(Job.class));
     }
 

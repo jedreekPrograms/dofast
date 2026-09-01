@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.expense.JobExpenseService;
@@ -72,11 +73,14 @@ class JobAcceptanceBlockPolicyTest {
         job.setStatus(JobStatus.OPEN);
         job.setCreatedBy(owner);
 
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                10L, JobStatus.OPEN, JobAssignmentMode.INSTANT
+        )).thenReturn(Optional.of(job));
         when(userBlockService.isInteractionBlocked(owner, worker)).thenReturn(true);
 
         assertThrows(ForbiddenOperationException.class, () -> jobService.acceptJob(10L, worker));
 
+        verify(jobRepository, never()).findByIdForUpdate(10L);
         verify(jobRepository, never()).save(job);
         verify(liveTrackingService, never()).initializeForAcceptedJob(job);
         verify(notificationService, never()).notify(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
