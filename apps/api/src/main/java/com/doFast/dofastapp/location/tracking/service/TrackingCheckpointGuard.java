@@ -1,7 +1,6 @@
 package com.doFast.dofastapp.location.tracking.service;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
-import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.entity.JobRouteStop;
@@ -20,6 +19,8 @@ import java.util.function.Supplier;
 @Service
 public class TrackingCheckpointGuard {
 
+    private static final String JOB_NOT_FOUND = "Zlecenie nie istnieje";
+
     private final JobRepository jobRepository;
     private final JobLiveTrackingRepository trackingRepository;
     private final TrackingCheckpointProximityValidator proximityValidator;
@@ -36,13 +37,11 @@ public class TrackingCheckpointGuard {
 
     @Transactional
     public <T> T validateAndExecute(Long jobId, User currentUser, Supplier<T> action) {
-        Job job = jobRepository.findByIdForUpdate(jobId)
-                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+        Long workerId = requireActorId(currentUser);
+        Job job = jobRepository.findAssignedWorkerByIdForUpdate(jobId, workerId)
+                .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
         if (!LiveTrackingAccessService.isTrackingActive(job)) {
             throw new ConflictException("Śledzenie lokalizacji nie jest aktywne dla tego zlecenia");
-        }
-        if (!sameUser(job.getTakenBy(), currentUser)) {
-            throw new ForbiddenOperationException("Tylko przypisany wykonawca może potwierdzić punkt trasy");
         }
 
         JobLiveTracking tracking = trackingRepository.findByJobIdForUpdate(jobId)
@@ -62,6 +61,13 @@ public class TrackingCheckpointGuard {
         return action.get();
     }
 
+    private Long requireActorId(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ResourceNotFoundException(JOB_NOT_FOUND);
+        }
+        return currentUser.getId();
+    }
+
     private Point targetLocation(Job job, JobLiveTracking tracking) {
         if (tracking.getPhase() == TrackingPhase.TO_ORIGIN) {
             return job.getLocation();
@@ -78,9 +84,5 @@ public class TrackingCheckpointGuard {
                 .map(JobRouteStop::getLocation)
                 .findFirst()
                 .orElseThrow(() -> new ConflictException("Przystanek trasy nie istnieje"));
-    }
-
-    private boolean sameUser(User first, User second) {
-        return first != null && second != null && first.getId() != null && first.getId().equals(second.getId());
     }
 }
