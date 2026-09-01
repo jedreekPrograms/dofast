@@ -132,7 +132,6 @@ class JobExpenseServiceTest {
     void refusesToSettleExpenseEscrowWhenWorkerReimbursementWasNotApplied() {
         JobExpenseService service = service();
         when(job.getId()).thenReturn(80L);
-        when(job.getCreatedBy()).thenReturn(requester);
         when(job.getTakenBy()).thenReturn(worker);
         when(worker.getId()).thenReturn(30L);
         JobExpenseEscrow escrow = new JobExpenseEscrow(job, requester, new BigDecimal("50.00"), java.time.LocalDateTime.now());
