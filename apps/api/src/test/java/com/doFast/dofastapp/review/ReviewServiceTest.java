@@ -12,6 +12,7 @@ import com.doFast.dofastapp.review.entity.Review;
 import com.doFast.dofastapp.review.repository.ReviewRepository;
 import com.doFast.dofastapp.review.service.ReviewService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,8 +20,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -179,6 +182,32 @@ class ReviewServiceTest {
 
         verify(jobRepository, never()).findById(10L);
         verify(reviewRepository, never()).findByJobAndReviewer(any(), any());
+    }
+
+    @Test
+    void activeUserReviewsRemainPublicThroughActiveScopedLookup() {
+        when(userRepository.findByIdAndStatus(worker.getId(), UserStatus.ACTIVE)).thenReturn(Optional.of(worker));
+        when(reviewRepository.findByReviewedOrderByCreatedAtDescIdDesc(eq(worker), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        var response = reviewService.getReceivedReviews(worker.getId(), 0, 10);
+
+        assertEquals(0, response.totalElements());
+        verify(userRepository, never()).findById(worker.getId());
+    }
+
+    @Test
+    void suspendedOrMissingUserReviewsAreHiddenBeforeReviewLookup() {
+        worker.setStatus(UserStatus.SUSPENDED);
+        when(userRepository.findByIdAndStatus(worker.getId(), UserStatus.ACTIVE)).thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> reviewService.getReceivedReviews(worker.getId(), 0, 10)
+        );
+
+        verify(userRepository, never()).findById(worker.getId());
+        verify(reviewRepository, never()).findByReviewedOrderByCreatedAtDescIdDesc(any(), any());
     }
 
     private ReviewRequest request(Long jobId, int rating, String comment) {
