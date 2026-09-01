@@ -50,6 +50,7 @@ public class JobService {
 
     private static final String EXACT_LOCATION_ACCESS_DENIED =
             "Dokładna lokalizacja jest dostępna tylko dla stron aktywnego zlecenia";
+    private static final String JOB_NOT_FOUND = "Zlecenie nie istnieje";
 
     private final JobRepository jobRepository;
     private final JobCategoryRepository jobCategoryRepository;
@@ -227,12 +228,11 @@ public class JobService {
 
     @Transactional
     public JobResponse acceptJob(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
-        if (job.getStatus() != JobStatus.OPEN) throw new ConflictException("Zlecenie nie jest już dostępne");
-        if (job.getAssignmentMode() != JobAssignmentMode.INSTANT) {
-            throw new ConflictException("To zlecenie wymaga wyboru wykonawcy spośród propozycji");
+        requireActorId(currentUser);
+        Job job = getOpenInstantJobForUpdate(jobId);
+        if (sameUser(job.getCreatedBy(), currentUser)) {
+            throw new ForbiddenOperationException("Nie możesz przyjąć własnego zlecenia");
         }
-        if (sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Nie możesz przyjąć własnego zlecenia");
         if (userBlockService != null && userBlockService.isInteractionBlocked(job.getCreatedBy(), currentUser)) {
             throw new ForbiddenOperationException("Nie możesz przyjąć tego zlecenia");
         }
@@ -252,10 +252,11 @@ public class JobService {
 
     @Transactional
     public JobResponse requestCompletion(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
-        if (job.getStatus() != JobStatus.IN_PROGRESS) throw new ConflictException("Zlecenie nie jest w trakcie realizacji");
-        if (job.getTakenBy() == null || !sameUser(job.getTakenBy(), currentUser)) {
-            throw new ForbiddenOperationException("Tylko wykonawca może zgłosić wykonanie zlecenia");
+        Long actorId = requireActorId(currentUser);
+        Job job = jobRepository.findAssignedWorkerByIdForUpdate(jobId, actorId)
+                .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
+        if (job.getStatus() != JobStatus.IN_PROGRESS) {
+            throw new ConflictException("Zlecenie nie jest w trakcie realizacji");
         }
         job.requestCompletion(LocalDateTime.now());
         Job saved = jobRepository.save(job);
@@ -267,9 +268,12 @@ public class JobService {
 
     @Transactional
     public JobResponse confirmCompletion(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
-        if (!sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Tylko autor może potwierdzić wykonanie zlecenia");
-        if (job.getStatus() != JobStatus.COMPLETION_REQUESTED) throw new ConflictException("Wykonawca nie zgłosił jeszcze wykonania zlecenia");
+        Long actorId = requireActorId(currentUser);
+        Job job = jobRepository.findByIdAndCreatedByIdForUpdate(jobId, actorId)
+                .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
+        if (job.getStatus() != JobStatus.COMPLETION_REQUESTED) {
+            throw new ConflictException("Wykonawca nie zgłosił jeszcze wykonania zlecenia");
+        }
         if (job.getTakenBy() == null) throw new ConflictException("Zlecenie nie ma przypisanego wykonawcy");
         job.complete(LocalDateTime.now());
         Job saved = jobRepository.save(job);
@@ -286,9 +290,12 @@ public class JobService {
 
     @Transactional
     public JobResponse cancelJob(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
-        if (!sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Tylko autor może anulować zlecenie");
-        if (job.getStatus() != JobStatus.OPEN) throw new ConflictException("Można anulować tylko zlecenie, którego nikt jeszcze nie przyjął");
+        Long actorId = requireActorId(currentUser);
+        Job job = jobRepository.findByIdAndCreatedByIdForUpdate(jobId, actorId)
+                .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
+        if (job.getStatus() != JobStatus.OPEN) {
+            throw new ConflictException("Można anulować tylko zlecenie, którego nikt jeszcze nie przyjął");
+        }
         job.cancel(LocalDateTime.now());
         Job saved = jobRepository.save(job);
         transactionService.refundMoney(saved);
@@ -358,7 +365,8 @@ public class JobService {
     }
 
     private Job getJobForRead(Long jobId) {
-        return jobRepository.findById(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+        return jobRepository.findById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException(JOB_NOT_FOUND));
     }
 
     private Job getJobForExactLocationRead(Long jobId, User currentUser) {
@@ -369,8 +377,26 @@ public class JobService {
                 .orElseThrow(() -> new ForbiddenOperationException(EXACT_LOCATION_ACCESS_DENIED));
     }
 
-    private Job getJobForUpdate(Long jobId) {
-        return jobRepository.findByIdForUpdate(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    private Job getOpenInstantJobForUpdate(Long jobId) {
+        return jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                        jobId,
+                        JobStatus.OPEN,
+                        JobAssignmentMode.INSTANT
+                )
+                .orElseGet(() -> {
+                    Job publicOpenJob = jobRepository.findByIdAndStatus(jobId, JobStatus.OPEN).orElse(null);
+                    if (publicOpenJob != null && publicOpenJob.getAssignmentMode() != JobAssignmentMode.INSTANT) {
+                        throw new ConflictException("To zlecenie wymaga wyboru wykonawcy spośród propozycji");
+                    }
+                    throw new ResourceNotFoundException(JOB_NOT_FOUND);
+                });
+    }
+
+    private Long requireActorId(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ResourceNotFoundException(JOB_NOT_FOUND);
+        }
+        return currentUser.getId();
     }
 
     private void assertCanAccessExactLocation(Job job, User currentUser) {

@@ -5,6 +5,8 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
+import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.category.FulfillmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
@@ -45,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -163,40 +166,104 @@ class JobServiceTest {
     @Test
     void ownerCannotAcceptOwnJob() {
         Job job = job(JobStatus.OPEN, owner, null);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                10L, JobStatus.OPEN, JobAssignmentMode.INSTANT
+        )).thenReturn(Optional.of(job));
+
         assertThrows(ForbiddenOperationException.class, () -> jobService.acceptJob(10L, owner));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
     }
 
     @Test
-    void unavailableJobCannotBeAcceptedAgain() {
-        Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
-        assertThrows(ConflictException.class, () -> jobService.acceptJob(10L, user(3L, "other@example.com")));
+    void unavailableJobCannotBeEnumeratedThroughAcceptance() {
+        User outsider = user(3L, "other@example.com");
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                10L, JobStatus.OPEN, JobAssignmentMode.INSTANT
+        )).thenReturn(Optional.empty());
+        when(jobRepository.findByIdAndStatus(10L, JobStatus.OPEN)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> jobService.acceptJob(10L, outsider));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+        verify(jobRepository, never()).save(any(Job.class));
+    }
+
+    @Test
+    void openProposalJobPreservesPublicAssignmentModeConflict() {
+        User outsider = user(3L, "other@example.com");
+        Job proposalJob = job(JobStatus.OPEN, owner, null);
+        proposalJob.setAssignmentMode(JobAssignmentMode.PROPOSALS);
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                10L, JobStatus.OPEN, JobAssignmentMode.INSTANT
+        )).thenReturn(Optional.empty());
+        when(jobRepository.findByIdAndStatus(10L, JobStatus.OPEN)).thenReturn(Optional.of(proposalJob));
+
+        assertThrows(ConflictException.class, () -> jobService.acceptJob(10L, outsider));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+        verify(jobRepository, never()).save(any(Job.class));
     }
 
     @Test
     void workerRequestsCompletionBeforeOwnerCanConfirm() {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findAssignedWorkerByIdForUpdate(10L, worker.getId())).thenReturn(Optional.of(job));
+
         assertEquals(JobStatus.COMPLETION_REQUESTED, jobService.requestCompletion(10L, worker).status());
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+    }
+
+    @Test
+    void outsiderCannotEnumerateJobThroughCompletionRequest() {
+        User outsider = user(3L, "outsider@example.com");
+        when(jobRepository.findAssignedWorkerByIdForUpdate(10L, outsider.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> jobService.requestCompletion(10L, outsider));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+        verify(jobRepository, never()).save(any(Job.class));
     }
 
     @Test
     void ownerConfirmingCompletionReleasesEscrowAndStopsTracking() {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Job job = job(JobStatus.COMPLETION_REQUESTED, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndCreatedByIdForUpdate(10L, owner.getId())).thenReturn(Optional.of(job));
+
         assertEquals(JobStatus.DONE, jobService.confirmCompletion(10L, owner).status());
         verify(transactionService).releaseMoney(job, worker);
         verify(liveTrackingService).stopAndClear(10L);
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+    }
+
+    @Test
+    void outsiderCannotEnumerateJobThroughCompletionConfirmation() {
+        User outsider = user(3L, "outsider@example.com");
+        when(jobRepository.findByIdAndCreatedByIdForUpdate(10L, outsider.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> jobService.confirmCompletion(10L, outsider));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+        verify(jobRepository, never()).save(any(Job.class));
+        verify(transactionService, never()).releaseMoney(any(Job.class), any(User.class));
+        verify(liveTrackingService, never()).stopAndClear(any());
     }
 
     @Test
     void acceptedJobCannotBeCancelledDirectly() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndCreatedByIdForUpdate(10L, owner.getId())).thenReturn(Optional.of(job));
+
         assertThrows(ConflictException.class, () -> jobService.cancelJob(10L, owner));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+    }
+
+    @Test
+    void outsiderCannotEnumerateJobThroughCancellation() {
+        User outsider = user(3L, "outsider@example.com");
+        when(jobRepository.findByIdAndCreatedByIdForUpdate(10L, outsider.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> jobService.cancelJob(10L, outsider));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+        verify(jobRepository, never()).save(any(Job.class));
+        verify(transactionService, never()).refundMoney(any(Job.class));
     }
 
     @Test
