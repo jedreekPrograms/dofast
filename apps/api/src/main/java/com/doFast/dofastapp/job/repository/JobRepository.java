@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.repository;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.user.entity.User;
 import jakarta.persistence.LockModeType;
@@ -21,6 +22,8 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     List<Job> findByCreatedByOrTakenByOrderByCreatedAtDesc(User createdBy, User takenBy);
     List<Job> findAllByStatusAndCreatedBy(JobStatus status, User createdBy);
     Optional<Job> findByIdAndStatus(Long id, JobStatus status);
+    Optional<Job> findByIdAndStatusAndAssignmentMode(Long id, JobStatus status, JobAssignmentMode assignmentMode);
+    Optional<Job> findByIdAndCreatedBy_Id(Long id, Long createdById);
     long countByStatusAndCreatedBy(JobStatus status, User createdBy);
     long countByStatusAndTakenBy(JobStatus status, User takenBy);
 
@@ -89,6 +92,32 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select j from Job j where j.id = :id")
     Optional<Job> findByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
+              and j.status = :status
+              and j.assignmentMode = :assignmentMode
+            """)
+    Optional<Job> findByIdAndStatusAndAssignmentModeForUpdate(
+            @Param("id") Long id,
+            @Param("status") JobStatus status,
+            @Param("assignmentMode") JobAssignmentMode assignmentMode
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
+              and j.createdBy.id = :createdById
+            """)
+    Optional<Job> findByIdAndCreatedByIdForUpdate(
+            @Param("id") Long id,
+            @Param("createdById") Long createdById
+    );
 
     @Query("""
             select j

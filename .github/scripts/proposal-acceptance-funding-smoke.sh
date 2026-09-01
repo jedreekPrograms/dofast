@@ -79,6 +79,23 @@ OUTSIDER_QUOTE_STATUS=$(curl --silent --show-error --output /tmp/proposal-fundin
   "$api/jobs/$JOB_ID/proposals/$PROPOSAL_ID/acceptance-funding")
 test "$OUTSIDER_QUOTE_STATUS" = "403"
 
+MISSING_JOB_QUOTE_STATUS=$(curl --silent --show-error --output /tmp/proposal-funding-missing-job-quote.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $OUTSIDER_TOKEN" \
+  "$api/jobs/999999999/proposals/$PROPOSAL_ID/acceptance-funding")
+test "$MISSING_JOB_QUOTE_STATUS" = "403"
+
+OUTSIDER_ACCEPT_STATUS=$(curl --silent --show-error --output /tmp/proposal-funding-outsider-accept.json --write-out '%{http_code}' \
+  -X POST -H "Authorization: Bearer $OUTSIDER_TOKEN" \
+  "$api/jobs/$JOB_ID/proposals/$PROPOSAL_ID/accept")
+test "$OUTSIDER_ACCEPT_STATUS" = "403"
+
+MISSING_JOB_ACCEPT_STATUS=$(curl --silent --show-error --output /tmp/proposal-funding-missing-job-accept.json --write-out '%{http_code}' \
+  -X POST -H "Authorization: Bearer $OUTSIDER_TOKEN" \
+  "$api/jobs/999999999/proposals/$PROPOSAL_ID/accept")
+test "$MISSING_JOB_ACCEPT_STATUS" = "403"
+
+echo 'Owner-only proposal funding and acceptance do not disclose job existence: OK'
+
 LEDGER_BEFORE=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
   "SELECT count(*) FROM wallet_transactions wt JOIN wallets w ON w.id=wt.wallet_id WHERE w.user_id=$OWNER_ID;" | tr -d '[:space:]')
 
@@ -114,7 +131,7 @@ bash .github/scripts/seed-wallet-funding.sh \
 FUNDED=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $OWNER_TOKEN" \
   "$api/jobs/$JOB_ID/proposals/$PROPOSAL_ID/acceptance-funding")
-python3 -c 'import json,sys; d=json.load(sys.stdin); assert float(d["currentEscrowAmount"])==30.0; assert float(d["targetEscrowAmount"])==42.0; assert float(d["walletContributionAvailable"])==12.0; assert float(d["paymentShortfall"])==0.0; assert float(d["stripeChargeAmount"])==0.0; assert d["paymentRequired"] is False; assert d["onlinePaymentAvailable"] is True' <<< "$FUNDED"
+python3 -c 'import json,sys; d=json.load(sys.stdin); assert float(d["currentEscrowAmount"])==30.0; assert float(d["targetEscrowAmount"])==42.0; assert float(d["walletContributionAvailable"])==12.0; assert float(d["paymentShortfall"])==0.0; assert float(d["stripeChargeAmount"])==0.0; assert d["currency"]=="PLN"; assert d["paymentRequired"] is False; assert d["onlinePaymentAvailable"] is True' <<< "$FUNDED"
 
 ACCEPTED=$(curl --fail --silent --show-error -X POST \
   -H "Authorization: Bearer $OWNER_TOKEN" \
