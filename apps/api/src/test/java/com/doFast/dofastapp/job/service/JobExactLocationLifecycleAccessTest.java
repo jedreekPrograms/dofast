@@ -24,6 +24,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,9 +58,29 @@ class JobExactLocationLifecycleAccessTest {
     }
 
     @Test
+    void outsiderCannotDistinguishExactLocationOrRouteFromMissingJob() {
+        User outsider = user(3L, "outsider@example.com");
+        when(jobRepository.findParticipantById(10L, outsider.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> jobService.getExactLocation(10L, outsider));
+        assertThrows(ForbiddenOperationException.class,
+                () -> jobService.getExactRoute(10L, outsider));
+    }
+
+    @Test
+    void missingAuthenticatedIdentityFailsClosedBeforeRepositoryAccess() {
+        assertThrows(ForbiddenOperationException.class,
+                () -> jobService.getExactLocation(10L, null));
+        assertThrows(ForbiddenOperationException.class,
+                () -> jobService.getExactRoute(10L, user(null, "anonymous@example.com")));
+        verifyNoInteractions(jobRepository);
+    }
+
+    @Test
     void requesterCanStillInspectExactLocationBeforeAssignment() {
         Job job = job(JobStatus.OPEN);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, requester.getId())).thenReturn(Optional.of(job));
 
         var location = jobService.getExactLocation(10L, requester);
 
@@ -71,7 +92,7 @@ class JobExactLocationLifecycleAccessTest {
     @Test
     void requesterCanInspectExactLocationWhileAcceptedJobIsActive() {
         Job job = job(JobStatus.DISPUTED);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, requester.getId())).thenReturn(Optional.of(job));
 
         var location = jobService.getExactLocation(10L, requester);
 
@@ -81,7 +102,7 @@ class JobExactLocationLifecycleAccessTest {
     @Test
     void requesterCannotReadExactLocationAfterCompletion() {
         Job job = job(JobStatus.DONE);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, requester.getId())).thenReturn(Optional.of(job));
 
         assertThrows(ForbiddenOperationException.class,
                 () -> jobService.getExactLocation(10L, requester));
@@ -90,7 +111,7 @@ class JobExactLocationLifecycleAccessTest {
     @Test
     void requesterCannotReadExactLocationAfterCancellation() {
         Job job = job(JobStatus.CANCELLED);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, requester.getId())).thenReturn(Optional.of(job));
 
         assertThrows(ForbiddenOperationException.class,
                 () -> jobService.getExactLocation(10L, requester));
@@ -99,7 +120,7 @@ class JobExactLocationLifecycleAccessTest {
     @Test
     void workerCannotReadExactLocationAfterCancellation() {
         Job job = job(JobStatus.CANCELLED);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, worker.getId())).thenReturn(Optional.of(job));
 
         assertThrows(ForbiddenOperationException.class,
                 () -> jobService.getExactLocation(10L, worker));

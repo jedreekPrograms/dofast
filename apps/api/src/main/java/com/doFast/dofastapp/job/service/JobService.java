@@ -48,6 +48,9 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class JobService {
 
+    private static final String EXACT_LOCATION_ACCESS_DENIED =
+            "Dokładna lokalizacja jest dostępna tylko dla stron aktywnego zlecenia";
+
     private final JobRepository jobRepository;
     private final JobCategoryRepository jobCategoryRepository;
     private final TransactionService transactionService;
@@ -193,7 +196,7 @@ public class JobService {
     public JobResponse getJob(Long jobId) { return toResponse(getJobForRead(jobId)); }
 
     public LocationResponse getExactLocation(Long jobId, User currentUser) {
-        Job job = getJobForRead(jobId);
+        Job job = getJobForExactLocationRead(jobId, currentUser);
         assertCanAccessExactLocation(job, currentUser);
         Point point = job.getLocation();
         if (point == null) {
@@ -203,7 +206,7 @@ public class JobService {
     }
 
     public JobRouteResponse getExactRoute(Long jobId, User currentUser) {
-        Job job = getJobForRead(jobId);
+        Job job = getJobForExactLocationRead(jobId, currentUser);
         assertCanAccessExactLocation(job, currentUser);
         if (job.getLocation() == null || job.getDestinationLocation() == null) {
             throw new ResourceNotFoundException("Dokładna trasa zlecenia nie jest dostępna");
@@ -358,13 +361,21 @@ public class JobService {
         return jobRepository.findById(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
+    private Job getJobForExactLocationRead(Long jobId, User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ForbiddenOperationException(EXACT_LOCATION_ACCESS_DENIED);
+        }
+        return jobRepository.findParticipantById(jobId, currentUser.getId())
+                .orElseThrow(() -> new ForbiddenOperationException(EXACT_LOCATION_ACCESS_DENIED));
+    }
+
     private Job getJobForUpdate(Long jobId) {
         return jobRepository.findByIdForUpdate(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
     private void assertCanAccessExactLocation(Job job, User currentUser) {
         if (!canAccessExactLocation(job, currentUser)) {
-            throw new ForbiddenOperationException("Dokładna lokalizacja jest dostępna tylko dla stron aktywnego zlecenia");
+            throw new ForbiddenOperationException(EXACT_LOCATION_ACCESS_DENIED);
         }
     }
 

@@ -202,7 +202,7 @@ class JobServiceTest {
     @Test
     void assignedWorkerCanReadExactOriginAndFullRouteWhileJobIsActive() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, worker.getId())).thenReturn(Optional.of(job));
 
         LocationResponse origin = jobService.getExactLocation(10L, worker);
         JobRouteResponse route = jobService.getExactRoute(10L, worker);
@@ -218,15 +218,15 @@ class JobServiceTest {
 
     @Test
     void unrelatedUserCannotReadExactRoute() {
-        Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
-        assertThrows(ForbiddenOperationException.class, () -> jobService.getExactRoute(10L, user(3L, "stranger@example.com")));
+        User stranger = user(3L, "stranger@example.com");
+        when(jobRepository.findParticipantById(10L, stranger.getId())).thenReturn(Optional.empty());
+        assertThrows(ForbiddenOperationException.class, () -> jobService.getExactRoute(10L, stranger));
     }
 
     @Test
     void workerCannotReadExactRouteAfterCompletion() {
         Job job = job(JobStatus.DONE, owner, worker);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, worker.getId())).thenReturn(Optional.of(job));
         assertThrows(ForbiddenOperationException.class, () -> jobService.getExactRoute(10L, worker));
     }
 
