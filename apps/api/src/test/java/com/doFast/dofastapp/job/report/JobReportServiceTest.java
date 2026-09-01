@@ -1,7 +1,9 @@
 package com.doFast.dofastapp.job.report;
 
+import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
@@ -44,11 +46,12 @@ class JobReportServiceTest {
         job = new Job();
         ReflectionTestUtils.setField(job, "id", 11L);
         job.setCreatedBy(owner);
+        job.setStatus(JobStatus.OPEN);
     }
 
     @Test
     void createsReportAndNormalizesBlankDetails() {
-        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
         when(reportRepository.existsByReporter_IdAndJob_Id(7L, 11L)).thenReturn(false);
         when(reportRepository.save(org.mockito.ArgumentMatchers.any(JobReport.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -59,6 +62,20 @@ class JobReportServiceTest {
         verify(reportRepository).save(captor.capture());
         assertEquals(JobReportReason.FRAUD, captor.getValue().getReason());
         assertEquals(null, captor.getValue().getDetails());
+    }
+
+    @Test
+    void hidesUnavailableJobExistenceAndDoesNotCreateReport() {
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> service.report(11L, new JobReportRequest(JobReportReason.FRAUD, "private"), reporter)
+        );
+
+        verify(jobRepository, never()).findById(11L);
+        verify(reportRepository, never()).existsByReporter_IdAndJob_Id(7L, 11L);
+        verify(reportRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -103,7 +120,7 @@ class JobReportServiceTest {
     @Test
     void rejectsOwnJob() {
         job.setCreatedBy(reporter);
-        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
 
         assertThrows(
                 ForbiddenOperationException.class,
@@ -114,7 +131,7 @@ class JobReportServiceTest {
 
     @Test
     void rejectsDuplicateReport() {
-        when(jobRepository.findById(11L)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
         when(reportRepository.existsByReporter_IdAndJob_Id(7L, 11L)).thenReturn(true);
 
         assertThrows(

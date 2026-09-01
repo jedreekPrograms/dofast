@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.job.report;
 
+import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
@@ -24,7 +25,7 @@ public class JobReportService {
 
     @Transactional
     public JobReportResponse report(Long jobId, JobReportRequest request, User reporter) {
-        Job job = jobRepository.findById(jobId)
+        Job job = jobRepository.findByIdAndStatus(jobId, JobStatus.OPEN)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
 
         if (job.getCreatedBy() != null && job.getCreatedBy().getId().equals(reporter.getId())) {
