@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.job.service;
 
+import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
@@ -41,16 +42,40 @@ class JobVisibilityServiceTest {
         ReflectionTestUtils.setField(job, "id", 10L);
         job.setCreatedBy(owner);
         ReflectionTestUtils.setField(job, "takenBy", worker);
+        job.setStatus(JobStatus.OPEN);
     }
 
     @Test
-    void unauthenticatedPublicReadKeepsExistingBehavior() {
+    void unauthenticatedCanReadOpenPublicJob() {
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+
         assertDoesNotThrow(() -> service.assertCanViewPublicDetail(10L, null));
-        verifyNoInteractions(jobRepository, userBlockService);
+        verifyNoInteractions(userBlockService);
     }
 
     @Test
-    void jobParticipantsRetainDetailAccessAfterBlocking() {
+    void unauthenticatedCannotEnumerateNonOpenJob() {
+        job.setStatus(JobStatus.IN_PROGRESS);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.assertCanViewPublicDetail(10L, null));
+        verifyNoInteractions(userBlockService);
+    }
+
+    @Test
+    void nonParticipantCannotEnumerateNonOpenJob() {
+        job.setStatus(JobStatus.COMPLETED);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.assertCanViewPublicDetail(10L, stranger));
+        verifyNoInteractions(userBlockService);
+    }
+
+    @Test
+    void jobParticipantsRetainDetailAccessAfterJobLeavesPublicMarketplace() {
+        job.setStatus(JobStatus.COMPLETED);
         when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
 
         assertDoesNotThrow(() -> service.assertCanViewPublicDetail(10L, owner));
@@ -59,7 +84,7 @@ class JobVisibilityServiceTest {
     }
 
     @Test
-    void blockedNonParticipantReceivesNeutralNotFound() {
+    void blockedNonParticipantReceivesNeutralNotFoundForOpenJob() {
         when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
         when(userBlockService.isInteractionBlocked(owner, stranger)).thenReturn(true);
 
@@ -68,7 +93,7 @@ class JobVisibilityServiceTest {
     }
 
     @Test
-    void unblockedNonParticipantCanReadPublicDetail() {
+    void unblockedNonParticipantCanReadOpenPublicDetail() {
         when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
         when(userBlockService.isInteractionBlocked(owner, stranger)).thenReturn(false);
 
