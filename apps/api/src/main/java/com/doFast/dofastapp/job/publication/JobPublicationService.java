@@ -88,8 +88,18 @@ public class JobPublicationService {
         BigDecimal reservedAmount = funding.walletReservedAmount();
         BigDecimal paymentAmount = funding.onlinePaymentAmount();
         if (paymentAmount.compareTo(MAX_ONLINE_PAYMENT) > 0) throw new BusinessException("Brakująca kwota przekracza limit pojedynczej płatności online 10 000,00 PLN");
-        if (reservedAmount.signum() > 0) walletService.debit(lockedUser.getId(), reservedAmount,
-                WalletTransactionType.JOB_PUBLICATION_RESERVE, null, reserveOperationKey(requestKey));
+        if (reservedAmount.signum() > 0) {
+            boolean reserved = walletService.debit(
+                    lockedUser.getId(),
+                    reservedAmount,
+                    WalletTransactionType.JOB_PUBLICATION_RESERVE,
+                    null,
+                    reserveOperationKey(requestKey)
+            );
+            if (!reserved) {
+                throw new ConflictException("Wykryto niespójny stan rezerwacji publikacji zlecenia");
+            }
+        }
         JobPublication publication = new JobPublication();
         publication.initializePaymentRequired(lockedUser, requestKey, payloadHash, payload, request.job().getCategoryId(),
                 request.job().getRouteQuoteId(), totalAmount, reservedAmount, paymentAmount, now, expiresAt);
@@ -164,7 +174,7 @@ public class JobPublicationService {
 
     void restoreReservation(JobPublication publication) {
         if (publication.getWalletReservedAmount().signum() <= 0) return;
-        walletService.creditRestoringOperation(
+        boolean restored = walletService.creditRestoringOperation(
                 publication.getUser().getId(),
                 publication.getWalletReservedAmount(),
                 WalletTransactionType.JOB_PUBLICATION_RELEASE,
@@ -172,6 +182,9 @@ public class JobPublicationService {
                 releaseOperationKey(publication.getId()),
                 reserveOperationKey(publication.getRequestKey())
         );
+        if (!restored) {
+            throw new ConflictException("Wykryto niespójny stan zwrotu rezerwacji publikacji zlecenia");
+        }
     }
 
     JobPublicationResponse toResponse(JobPublication publication) {
