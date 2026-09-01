@@ -3,7 +3,6 @@ package com.doFast.dofastapp.location.tracking.service;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
-import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
@@ -12,6 +11,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class LiveTrackingAccessService {
 
+    private static final String TRACKING_ACCESS_DENIED = "Nie masz dostępu do śledzenia lokalizacji tego zlecenia";
+
     private final JobRepository jobRepository;
 
     public LiveTrackingAccessService(JobRepository jobRepository) {
@@ -19,16 +20,13 @@ public class LiveTrackingAccessService {
     }
 
     public Job requireViewer(Long jobId, User user) {
-        Job job = getJob(jobId);
+        Job job = getParticipantJob(jobId, user);
         requireActiveTrackingStatus(job);
-        if (!sameUser(job.getCreatedBy(), user) && !sameUser(job.getTakenBy(), user)) {
-            throw new ForbiddenOperationException("Lokalizacja wykonawcy jest dostępna tylko dla stron aktywnego zlecenia");
-        }
         return job;
     }
 
     public Job requireWorker(Long jobId, User user) {
-        Job job = getJob(jobId);
+        Job job = getParticipantJob(jobId, user);
         requireActiveTrackingStatus(job);
         if (!sameUser(job.getTakenBy(), user)) {
             throw new ForbiddenOperationException("Tylko przypisany wykonawca może udostępniać lokalizację");
@@ -41,9 +39,12 @@ public class LiveTrackingAccessService {
                 || job.getStatus() == JobStatus.COMPLETION_REQUESTED;
     }
 
-    private Job getJob(Long jobId) {
-        return jobRepository.findById(jobId)
-                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    private Job getParticipantJob(Long jobId, User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException(TRACKING_ACCESS_DENIED);
+        }
+        return jobRepository.findParticipantById(jobId, user.getId())
+                .orElseThrow(() -> new ForbiddenOperationException(TRACKING_ACCESS_DENIED));
     }
 
     private void requireActiveTrackingStatus(Job job) {
