@@ -126,12 +126,17 @@ jobs:
             "http://localhost:8080/reviews/jobs/$JOB_ID/eligibility")
           python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["eligible"] is True; assert d["counterpartId"] == int(sys.argv[1])' "$WORKER_ID" <<< "$REQUESTER_ELIGIBILITY"
 
+          OUTSIDER_ELIGIBILITY_STATUS=$(curl --silent --output /tmp/trust-outsider-eligibility.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer $OUTSIDER_TOKEN" \
+            "http://localhost:8080/reviews/jobs/$JOB_ID/eligibility")
+          test "$OUTSIDER_ELIGIBILITY_STATUS" = "404"
+
           OUTSIDER_STATUS=$(curl --silent --output /tmp/trust-outsider-review.json --write-out '%{http_code}' \
             -H "Authorization: Bearer $OUTSIDER_TOKEN" \
             -H 'Content-Type: application/json' \
-            -d "{\"jobId\":$JOB_ID,\"rating\":5,\"comment\":\"Must be forbidden\"}" \
+            -d "{\"jobId\":$JOB_ID,\"rating\":5,\"comment\":\"Must be hidden\"}" \
             http://localhost:8080/reviews)
-          test "$OUTSIDER_STATUS" = "403"
+          test "$OUTSIDER_STATUS" = "404"
 
           REQUESTER_REVIEW=$(curl --fail --silent \
             -H "Authorization: Bearer $REQUESTER_TOKEN" \
