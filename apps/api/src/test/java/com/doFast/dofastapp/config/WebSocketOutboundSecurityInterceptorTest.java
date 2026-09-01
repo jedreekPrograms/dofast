@@ -9,6 +9,9 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.support.MessageBuilder;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,12 +24,14 @@ import static org.mockito.Mockito.when;
 
 class WebSocketOutboundSecurityInterceptorTest {
 
+    private static final Instant FUTURE_EXPIRY = Instant.parse("2099-01-01T00:00:00Z");
+
     @Test
     void allowsOutboundMessageForCurrentActiveSession() {
         UserRepository userRepository = mock(UserRepository.class);
         WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
         User user = new User("user@example.com", "user");
-        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion());
+        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion(), FUTURE_EXPIRY);
         when(userRepository.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
         WebSocketOutboundSecurityInterceptor interceptor =
                 new WebSocketOutboundSecurityInterceptor(userRepository, sessionRegistry);
@@ -41,7 +46,7 @@ class WebSocketOutboundSecurityInterceptorTest {
         UserRepository userRepository = mock(UserRepository.class);
         WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
         User user = new User("user@example.com", "user");
-        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion());
+        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion(), FUTURE_EXPIRY);
         user.incrementAuthVersion();
         when(userRepository.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
         WebSocketOutboundSecurityInterceptor interceptor =
@@ -56,7 +61,7 @@ class WebSocketOutboundSecurityInterceptorTest {
         UserRepository userRepository = mock(UserRepository.class);
         WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
         User user = new User("user@example.com", "user");
-        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion());
+        sessionRegistry.register("session-1", user.getEmail(), user.getAuthVersion(), FUTURE_EXPIRY);
         user.setStatus(UserStatus.SUSPENDED);
         when(userRepository.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
         WebSocketOutboundSecurityInterceptor interceptor =
@@ -74,6 +79,20 @@ class WebSocketOutboundSecurityInterceptorTest {
                 new WebSocketOutboundSecurityInterceptor(userRepository, sessionRegistry);
 
         assertNull(interceptor.preSend(message(SimpMessageType.MESSAGE, "unknown-session"), null));
+        verify(userRepository, never()).findByEmailIgnoreCase(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void dropsMessageAfterBoundAccessTokenExpiresWithoutUserLookup() {
+        Instant now = Instant.parse("2026-09-01T20:00:00Z");
+        UserRepository userRepository = mock(UserRepository.class);
+        WebSocketSessionRegistry sessionRegistry =
+                new WebSocketSessionRegistry(Clock.fixed(now, ZoneOffset.UTC));
+        sessionRegistry.register("session-1", "user@example.com", 0L, now);
+        WebSocketOutboundSecurityInterceptor interceptor =
+                new WebSocketOutboundSecurityInterceptor(userRepository, sessionRegistry);
+
+        assertNull(interceptor.preSend(message(SimpMessageType.MESSAGE, "session-1"), null));
         verify(userRepository, never()).findByEmailIgnoreCase(org.mockito.ArgumentMatchers.anyString());
     }
 

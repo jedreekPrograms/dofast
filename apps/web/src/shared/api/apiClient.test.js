@@ -8,6 +8,7 @@ import {
   logoutAuthSession,
   refreshAccessToken,
   setAccessToken,
+  subscribeAccessToken,
 } from './apiClient.js'
 
 function response(status, payload = null) {
@@ -56,6 +57,23 @@ test('keeps access token only in module memory and never touches sessionStorage'
   assert.equal(getAccessToken(), 'short-lived-access-token')
   clearAccessToken()
   assert.equal(getAccessToken(), null)
+})
+
+test('publishes in-memory token rotation and expiry without browser storage', () => {
+  const observed = []
+  const unsubscribe = subscribeAccessToken((token, expiresAt) => {
+    observed.push({ token, expiresAt })
+  })
+
+  setAccessToken('first-access', 600000)
+  setAccessToken('second-access', 600000)
+  clearAccessToken()
+  unsubscribe()
+
+  assert.deepEqual(observed.map((entry) => entry.token), [null, 'first-access', 'second-access', null])
+  assert.ok(observed[1].expiresAt > Date.now())
+  assert.ok(observed[2].expiresAt > Date.now())
+  assert.equal(observed[3].expiresAt, null)
 })
 
 test('coalesces concurrent 401 responses into one refresh and retries with the fresh bearer', async () => {

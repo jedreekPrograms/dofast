@@ -108,7 +108,7 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
         String sessionId = requireSessionId(accessor);
         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
         accessor.setUser(new UsernamePasswordAuthenticationToken(user.getEmail(), null, List.of(authority)));
-        sessionRegistry.register(sessionId, user.getEmail(), identity.authVersion());
+        sessionRegistry.register(sessionId, user.getEmail(), identity.authVersion(), identity.expiresAt());
     }
 
     private User requireCurrentSession(StompHeaderAccessor accessor, Principal principal) {

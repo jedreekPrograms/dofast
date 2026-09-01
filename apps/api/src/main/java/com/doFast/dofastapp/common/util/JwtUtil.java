@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
+import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
@@ -75,7 +76,11 @@ public class JwtUtil {
         if (authVersion < 0) {
             throw new JwtException("JWT authentication version is invalid");
         }
-        return new AccessTokenIdentity(email, authVersion);
+        Date expiration = claims.getExpiration();
+        if (expiration == null) {
+            throw new JwtException("JWT access expiration is missing");
+        }
+        return new AccessTokenIdentity(email, authVersion, expiration.toInstant());
     }
 
     public String extractEmail(String token) {
@@ -86,5 +91,5 @@ public class JwtUtil {
         return expirationMs;
     }
 
-    public record AccessTokenIdentity(String email, long authVersion) {}
+    public record AccessTokenIdentity(String email, long authVersion, Instant expiresAt) {}
 }
