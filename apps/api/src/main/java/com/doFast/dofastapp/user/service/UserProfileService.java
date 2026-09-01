@@ -6,6 +6,7 @@ import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.review.repository.ReviewRepository;
 import com.doFast.dofastapp.user.dto.UserProfileResponse;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.verification.service.VerificationService;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,7 @@ public class UserProfileService {
     }
 
     public UserProfileResponse getProfile(Long userId) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdAndStatus(userId, UserStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
 
         Double average = reviewRepository.findAverageRatingByReviewedId(userId);

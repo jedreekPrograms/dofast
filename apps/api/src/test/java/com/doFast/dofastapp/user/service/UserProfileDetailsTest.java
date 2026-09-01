@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.common.util.JwtUtil;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.review.repository.ReviewRepository;
@@ -9,6 +10,7 @@ import com.doFast.dofastapp.user.auth.email.EmailVerificationService;
 import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.dto.UpdateProfileRequest;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.repository.UserAuthIdentityRepository;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.verification.service.VerificationService;
@@ -26,7 +28,10 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -85,7 +90,7 @@ class UserProfileDetailsTest {
         user.setBio("Montaż, drobne remonty i transport.");
         user.setPublicLocation("Wrocław i okolice");
 
-        when(userRepository.findById(9L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdAndStatus(9L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(reviewRepository.findAverageRatingByReviewedId(9L)).thenReturn(4.84);
         when(reviewRepository.countByReviewedId(9L)).thenReturn(17L);
         when(jobRepository.countByStatusAndCreatedBy(JobStatus.DONE, user)).thenReturn(4L);
@@ -93,13 +98,7 @@ class UserProfileDetailsTest {
         when(verificationService.isVerified(9L)).thenReturn(true);
         when(userServiceCategoryService.getForUser(9L)).thenReturn(List.of());
 
-        UserProfileService service = new UserProfileService(
-                userRepository,
-                reviewRepository,
-                jobRepository,
-                verificationService,
-                userServiceCategoryService
-        );
+        UserProfileService service = profileService();
 
         var profile = service.getProfile(9L);
 
@@ -113,6 +112,32 @@ class UserProfileDetailsTest {
         assertEquals(27L, profile.completedJobsTotal());
         assertTrue(profile.identityVerified());
         assertTrue(profile.serviceCategories().isEmpty());
+        verify(userRepository, never()).findById(9L);
+    }
+
+    @Test
+    void suspendedProfileIsHiddenBeforeTrustDataIsRead() {
+        when(userRepository.findByIdAndStatus(11L, UserStatus.ACTIVE)).thenReturn(Optional.empty());
+
+        UserProfileService service = profileService();
+
+        assertThrows(ResourceNotFoundException.class, () -> service.getProfile(11L));
+
+        verify(userRepository, never()).findById(11L);
+        verify(reviewRepository, never()).findAverageRatingByReviewedId(11L);
+        verify(reviewRepository, never()).countByReviewedId(11L);
+        verify(verificationService, never()).isVerified(11L);
+        verify(userServiceCategoryService, never()).getForUser(11L);
+    }
+
+    private UserProfileService profileService() {
+        return new UserProfileService(
+                userRepository,
+                reviewRepository,
+                jobRepository,
+                verificationService,
+                userServiceCategoryService
+        );
     }
 
     private User user(Long id, LocalDateTime createdAt) {
