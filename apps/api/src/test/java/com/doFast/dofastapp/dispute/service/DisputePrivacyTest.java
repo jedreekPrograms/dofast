@@ -73,7 +73,6 @@ class DisputePrivacyTest {
         dispute.setOpenedAt(LocalDateTime.now());
 
         when(disputeRepository.findById(100L)).thenReturn(Optional.of(dispute));
-        when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(100L)).thenReturn(List.of());
     }
 
     @Test
@@ -83,12 +82,16 @@ class DisputePrivacyTest {
 
     @Test
     void participantStillReadsOwnDispute() {
+        when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(100L)).thenReturn(List.of());
+
         assertEquals(100L, service.getDispute(100L, owner).dispute().id());
         assertEquals(100L, service.getDispute(100L, worker).dispute().id());
     }
 
     @Test
     void adminStillReadsDisputeThroughParticipantEndpoint() {
+        when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(100L)).thenReturn(List.of());
+
         assertEquals(100L, service.getDispute(100L, admin).dispute().id());
     }
 
