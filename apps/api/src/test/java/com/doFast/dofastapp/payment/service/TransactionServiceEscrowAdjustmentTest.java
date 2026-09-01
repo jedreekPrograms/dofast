@@ -2,6 +2,7 @@ package com.doFast.dofastapp.payment.service;
 
 import com.doFast.dofastapp.common.enums.TransactionStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.payment.entity.Transaction;
 import com.doFast.dofastapp.payment.fee.PlatformFeePolicy;
@@ -60,6 +61,13 @@ class TransactionServiceEscrowAdjustmentTest {
     @Test
     void locksOnlyTheAdditionalDeltaWhenAcceptedProposalIsHigher() {
         TransactionService service = serviceWithHeldEscrow("30.00");
+        when(walletService.debit(
+                7L,
+                new BigDecimal("12.00"),
+                WalletTransactionType.ESCROW_ADJUSTMENT_LOCK,
+                101L,
+                "escrow:101:proposal:9:adjust:lock"
+        )).thenReturn(true);
 
         service.adjustHeldAmount(job, new BigDecimal("42.00"), 9L);
 
@@ -77,6 +85,14 @@ class TransactionServiceEscrowAdjustmentTest {
     @Test
     void refundsOnlyTheExcessToTheOriginalFundingSourcesWhenAcceptedProposalIsLower() {
         TransactionService service = serviceWithHeldEscrow("30.00");
+        when(walletService.creditRestoringJobDebits(
+                7L,
+                new BigDecimal("5.00"),
+                WalletTransactionType.ESCROW_ADJUSTMENT_REFUND,
+                101L,
+                "escrow:101:proposal:10:adjust:refund",
+                Set.of(WalletTransactionType.ESCROW_LOCK, WalletTransactionType.ESCROW_ADJUSTMENT_LOCK)
+        )).thenReturn(true);
 
         service.adjustHeldAmount(job, new BigDecimal("25.00"), 10L);
 
@@ -109,6 +125,47 @@ class TransactionServiceEscrowAdjustmentTest {
         );
 
         verify(transaction, never()).adjustHeldAmount(new BigDecimal("50.00"));
+        verify(transactionRepository, never()).save(transaction);
+    }
+
+    @Test
+    void duplicateDeltaDebitFailsClosedWithoutIncreasingAuthoritativeEscrow() {
+        TransactionService service = serviceWithHeldEscrow("30.00");
+        when(walletService.debit(
+                7L,
+                new BigDecimal("12.00"),
+                WalletTransactionType.ESCROW_ADJUSTMENT_LOCK,
+                101L,
+                "escrow:101:proposal:12:adjust:lock"
+        )).thenReturn(false);
+
+        assertThrows(
+                ConflictException.class,
+                () -> service.adjustHeldAmount(job, new BigDecimal("42.00"), 12L)
+        );
+
+        verify(transaction, never()).adjustHeldAmount(new BigDecimal("42.00"));
+        verify(transactionRepository, never()).save(transaction);
+    }
+
+    @Test
+    void duplicateAdjustmentRefundFailsClosedWithoutReducingAuthoritativeEscrow() {
+        TransactionService service = serviceWithHeldEscrow("30.00");
+        when(walletService.creditRestoringJobDebits(
+                7L,
+                new BigDecimal("5.00"),
+                WalletTransactionType.ESCROW_ADJUSTMENT_REFUND,
+                101L,
+                "escrow:101:proposal:13:adjust:refund",
+                Set.of(WalletTransactionType.ESCROW_LOCK, WalletTransactionType.ESCROW_ADJUSTMENT_LOCK)
+        )).thenReturn(false);
+
+        assertThrows(
+                ConflictException.class,
+                () -> service.adjustHeldAmount(job, new BigDecimal("25.00"), 13L)
+        );
+
+        verify(transaction, never()).adjustHeldAmount(new BigDecimal("25.00"));
         verify(transactionRepository, never()).save(transaction);
     }
 
