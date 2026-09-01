@@ -3,7 +3,6 @@ package com.doFast.dofastapp.location.tracking.service;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
-import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
@@ -42,7 +41,7 @@ class LiveTrackingAccessServiceTest {
         when(jobRepository.findParticipantById(10L, 3L)).thenReturn(Optional.empty());
 
         assertThrows(
-                ResourceNotFoundException.class,
+                ForbiddenOperationException.class,
                 () -> accessService.requireViewer(10L, user(3L, "stranger"))
         );
     }
@@ -52,15 +51,15 @@ class LiveTrackingAccessServiceTest {
         when(jobRepository.findParticipantById(10L, 3L)).thenReturn(Optional.empty());
 
         assertThrows(
-                ResourceNotFoundException.class,
+                ForbiddenOperationException.class,
                 () -> accessService.requireWorker(10L, user(3L, "stranger"))
         );
     }
 
     @Test
     void missingAuthenticatedIdentityFailsClosedBeforeRepositoryAccess() {
-        assertThrows(ResourceNotFoundException.class, () -> accessService.requireViewer(10L, null));
-        assertThrows(ResourceNotFoundException.class, () -> accessService.requireWorker(10L, user(null, "anonymous")));
+        assertThrows(ForbiddenOperationException.class, () -> accessService.requireViewer(10L, null));
+        assertThrows(ForbiddenOperationException.class, () -> accessService.requireWorker(10L, user(null, "anonymous")));
         verifyNoInteractions(jobRepository);
     }
 
