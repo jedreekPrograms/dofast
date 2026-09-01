@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional(readOnly = true)
@@ -61,18 +62,15 @@ public class JobProposalService {
 
     @Transactional
     public JobProposalResponse submit(Long jobId, CreateJobProposalRequest request, User proposer) {
-        Job job = getJobForUpdate(jobId);
-        assertProposalJob(job);
-        if (job.getStatus() != JobStatus.OPEN) {
-            throw new ConflictException("Zlecenie nie przyjmuje już propozycji");
-        }
+        Long proposerId = requireUserId(proposer);
+        Job job = getOpenProposalJobForUpdate(jobId);
         if (sameUser(job.getCreatedBy(), proposer)) {
             throw new ForbiddenOperationException("Nie możesz złożyć propozycji do własnego zlecenia");
         }
         if (userBlockService.isInteractionBlocked(job.getCreatedBy(), proposer)) {
             throw new ForbiddenOperationException("Nie możesz złożyć propozycji do tego zlecenia");
         }
-        if (jobProposalRepository.findByJob_IdAndProposer_Id(jobId, proposer.getId()).isPresent()) {
+        if (jobProposalRepository.findByJob_IdAndProposer_Id(jobId, proposerId).isPresent()) {
             throw new ConflictException("Masz już propozycję dla tego zlecenia");
         }
 
@@ -93,20 +91,30 @@ public class JobProposalService {
     }
 
     public List<JobProposalResponse> listVisible(Long jobId, User viewer) {
-        Job job = getJob(jobId);
-        assertProposalJob(job);
-
-        if (sameUser(job.getCreatedBy(), viewer)) {
+        Long viewerId = requireUserId(viewer);
+        Optional<Job> ownedJob = jobRepository.findByIdAndCreatedBy_Id(jobId, viewerId);
+        if (ownedJob.isPresent()) {
+            assertProposalJob(ownedJob.get());
             return jobProposalRepository.findAllByJob_IdOrderByCreatedAtAscIdAsc(jobId)
                     .stream()
                     .map(this::toResponse)
                     .toList();
         }
 
-        return jobProposalRepository.findByJob_IdAndProposer_Id(jobId, viewer.getId())
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        Optional<JobProposal> ownProposal = jobProposalRepository.findByJob_IdAndProposer_Id(jobId, viewerId);
+        if (ownProposal.isPresent()) {
+            return List.of(toResponse(ownProposal.get()));
+        }
+
+        if (jobRepository.findByIdAndStatusAndAssignmentMode(
+                jobId,
+                JobStatus.OPEN,
+                JobAssignmentMode.PROPOSALS
+        ).isPresent()) {
+            return List.of();
+        }
+
+        throw new ResourceNotFoundException("Zlecenie nie istnieje");
     }
 
     public JobProposalAcceptanceFundingResponse getAcceptanceFunding(
@@ -114,7 +122,8 @@ public class JobProposalService {
             Long proposalId,
             User requester
     ) {
-        Job job = getJob(jobId);
+        Long requesterId = requireUserId(requester);
+        Job job = getRequesterOwnedJob(jobId, requesterId);
         assertProposalJob(job);
         assertRequesterCanSelect(job, requester);
 
@@ -123,7 +132,7 @@ public class JobProposalService {
 
         BigDecimal currentEscrowAmount = transactionService.getHeldAmount(job);
         BigDecimal additionalRequired = proposal.getAmount().subtract(currentEscrowAmount).max(ZERO_MONEY);
-        BigDecimal walletBalance = walletService.getMyWallet(requester.getId()).getBalance();
+        BigDecimal walletBalance = walletService.getMyWallet(requesterId).getBalance();
         BigDecimal walletContribution = additionalRequired.min(walletBalance);
         BigDecimal paymentShortfall = additionalRequired.subtract(walletContribution);
         boolean paymentRequired = paymentShortfall.signum() > 0;
@@ -147,6 +156,11 @@ public class JobProposalService {
 
     @Transactional
     public void withdraw(Long jobId, Long proposalId, User proposer) {
+        Long proposerId = requireUserId(proposer);
+        if (!jobProposalRepository.existsByIdAndJob_IdAndProposer_Id(proposalId, jobId, proposerId)) {
+            throw new ResourceNotFoundException("Propozycja nie istnieje");
+        }
+
         Job job = getJobForUpdate(jobId);
         assertProposalJob(job);
         JobProposal proposal = getProposal(jobId, proposalId);
@@ -166,7 +180,8 @@ public class JobProposalService {
 
     @Transactional
     public AcceptedJobProposalResponse accept(Long jobId, Long proposalId, User requester) {
-        Job job = getJobForUpdate(jobId);
+        Long requesterId = requireUserId(requester);
+        Job job = getRequesterOwnedJobForUpdate(jobId, requesterId);
         assertProposalJob(job);
         assertRequesterCanSelect(job, requester);
 
@@ -246,9 +261,23 @@ public class JobProposalService {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private Job getJob(Long jobId) {
-        return jobRepository.findById(jobId)
+    private Job getOpenProposalJobForUpdate(Long jobId) {
+        return jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                        jobId,
+                        JobStatus.OPEN,
+                        JobAssignmentMode.PROPOSALS
+                )
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private Job getRequesterOwnedJob(Long jobId, Long requesterId) {
+        return jobRepository.findByIdAndCreatedBy_Id(jobId, requesterId)
+                .orElseThrow(() -> new ForbiddenOperationException("Tylko zleceniodawca może wybrać propozycję"));
+    }
+
+    private Job getRequesterOwnedJobForUpdate(Long jobId, Long requesterId) {
+        return jobRepository.findByIdAndCreatedByIdForUpdate(jobId, requesterId)
+                .orElseThrow(() -> new ForbiddenOperationException("Tylko zleceniodawca może wybrać propozycję"));
     }
 
     private Job getJobForUpdate(Long jobId) {
@@ -269,6 +298,13 @@ public class JobProposalService {
 
     private boolean usesLiveTracking(Job job) {
         return job.getCategory() != null && job.getCategory().getFulfillmentMode() == FulfillmentMode.POINT_TO_POINT;
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Nie masz dostępu do propozycji tego zlecenia");
+        }
+        return user.getId();
     }
 
     private boolean sameUser(User first, User second) {

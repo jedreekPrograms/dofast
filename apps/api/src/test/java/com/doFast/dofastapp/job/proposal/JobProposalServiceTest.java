@@ -2,6 +2,9 @@ package com.doFast.dofastapp.job.proposal;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
@@ -51,7 +54,7 @@ class JobProposalServiceTest {
     @Test
     void fixedPriceProposalDefaultsToPublishedPrice() {
         JobProposalService service = service();
-        prepareOpenProposalJob();
+        prepareOpenProposalJobForSubmit();
         when(worker.getId()).thenReturn(22L);
         when(worker.getNickname()).thenReturn("Rowerzysta");
         when(jobProposalRepository.findByJob_IdAndProposer_Id(101L, 22L)).thenReturn(Optional.empty());
@@ -78,7 +81,7 @@ class JobProposalServiceTest {
     @Test
     void fixedPriceProposalRejectsDifferentAmountWhenNegotiationIsDisabled() {
         JobProposalService service = service();
-        prepareOpenProposalJob();
+        prepareOpenProposalJobForSubmit();
         when(worker.getId()).thenReturn(22L);
         when(jobProposalRepository.findByJob_IdAndProposer_Id(101L, 22L)).thenReturn(Optional.empty());
 
@@ -96,12 +99,33 @@ class JobProposalServiceTest {
     }
 
     @Test
+    void submitHidesUnavailableOrInstantJobBehindOpenProposalLookup() {
+        JobProposalService service = service();
+        when(worker.getId()).thenReturn(22L);
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                101L,
+                JobStatus.OPEN,
+                JobAssignmentMode.PROPOSALS
+        )).thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> service.submit(101L, new CreateJobProposalRequest(null, null), worker)
+        );
+
+        verify(jobRepository, never()).findByIdForUpdate(101L);
+        verify(jobProposalRepository, never()).findByJob_IdAndProposer_Id(101L, 22L);
+        verify(jobProposalRepository, never()).save(any(JobProposal.class));
+    }
+
+    @Test
     void nonOwnerCanReadOnlyTheirOwnProposal() {
         JobProposalService service = service();
-        prepareProposalJobForRead();
         when(worker.getId()).thenReturn(22L);
+        when(jobRepository.findByIdAndCreatedBy_Id(101L, 22L)).thenReturn(Optional.empty());
         when(jobProposalRepository.findByJob_IdAndProposer_Id(101L, 22L)).thenReturn(Optional.of(proposal));
         when(proposal.getJob()).thenReturn(job);
+        when(job.getId()).thenReturn(101L);
         when(proposal.getProposer()).thenReturn(worker);
         when(proposal.getAmount()).thenReturn(new BigDecimal("30.00"));
         when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
@@ -111,6 +135,46 @@ class JobProposalServiceTest {
         assertEquals(1, response.size());
         verify(jobProposalRepository).findByJob_IdAndProposer_Id(101L, 22L);
         verify(jobProposalRepository, never()).findAllByJob_IdOrderByCreatedAtAscIdAsc(101L);
+        verify(jobRepository, never()).findByIdAndStatusAndAssignmentMode(101L, JobStatus.OPEN, JobAssignmentMode.PROPOSALS);
+        verify(jobRepository, never()).findById(101L);
+    }
+
+    @Test
+    void terminalProposalJobIsHiddenFromUnrelatedListViewer() {
+        JobProposalService service = service();
+        when(worker.getId()).thenReturn(22L);
+        when(jobRepository.findByIdAndCreatedBy_Id(101L, 22L)).thenReturn(Optional.empty());
+        when(jobProposalRepository.findByJob_IdAndProposer_Id(101L, 22L)).thenReturn(Optional.empty());
+        when(jobRepository.findByIdAndStatusAndAssignmentMode(
+                101L,
+                JobStatus.OPEN,
+                JobAssignmentMode.PROPOSALS
+        )).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> service.listVisible(101L, worker));
+
+        verify(jobRepository, never()).findById(101L);
+        verify(jobProposalRepository, never()).findAllByJob_IdOrderByCreatedAtAscIdAsc(101L);
+    }
+
+    @Test
+    void ownerCanStillReadProposalHistoryAfterJobStopsBeingOpen() {
+        JobProposalService service = service();
+        when(requester.getId()).thenReturn(11L);
+        when(jobRepository.findByIdAndCreatedBy_Id(101L, 11L)).thenReturn(Optional.of(job));
+        when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
+        when(jobProposalRepository.findAllByJob_IdOrderByCreatedAtAscIdAsc(101L)).thenReturn(List.of(proposal));
+        when(proposal.getJob()).thenReturn(job);
+        when(job.getId()).thenReturn(101L);
+        when(proposal.getProposer()).thenReturn(worker);
+        when(worker.getId()).thenReturn(22L);
+        when(proposal.getStatus()).thenReturn(JobProposalStatus.ACCEPTED);
+
+        List<JobProposalResponse> response = service.listVisible(101L, requester);
+
+        assertEquals(1, response.size());
+        verify(jobProposalRepository, never()).findByJob_IdAndProposer_Id(101L, 11L);
+        verify(jobRepository, never()).findByIdAndStatusAndAssignmentMode(101L, JobStatus.OPEN, JobAssignmentMode.PROPOSALS);
     }
 
     @Test
@@ -160,9 +224,44 @@ class JobProposalServiceTest {
     }
 
     @Test
+    void fundingQuoteRejectsNonOwnerBeforeProposalLedgerOrWalletReads() {
+        JobProposalService service = service();
+        when(worker.getId()).thenReturn(22L);
+        when(jobRepository.findByIdAndCreatedBy_Id(101L, 22L)).thenReturn(Optional.empty());
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.getAcceptanceFunding(101L, 55L, worker)
+        );
+
+        verify(jobRepository, never()).findById(101L);
+        verify(jobProposalRepository, never()).findByIdAndJob_Id(55L, 101L);
+        verify(transactionService, never()).getHeldAmount(any(Job.class));
+        verify(walletService, never()).getMyWallet(22L);
+    }
+
+    @Test
+    void ownerGetsLifecycleConflictOnlyAfterOwnerScopedFundingLookup() {
+        JobProposalService service = service();
+        when(requester.getId()).thenReturn(11L);
+        when(jobRepository.findByIdAndCreatedBy_Id(101L, 11L)).thenReturn(Optional.of(job));
+        when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(job.getStatus()).thenReturn(JobStatus.IN_PROGRESS);
+
+        assertThrows(
+                ConflictException.class,
+                () -> service.getAcceptanceFunding(101L, 55L, requester)
+        );
+
+        verify(jobProposalRepository, never()).findByIdAndJob_Id(55L, 101L);
+        verify(transactionService, never()).getHeldAmount(any(Job.class));
+    }
+
+    @Test
     void acceptedHigherProposalAdjustsEscrowBeforeAssigningWorker() {
         JobProposalService service = service();
-        prepareOpenProposalJob();
+        prepareOpenProposalJobForOwnerUpdate();
         when(worker.getId()).thenReturn(22L);
         when(jobProposalRepository.findByIdAndJob_Id(55L, 101L)).thenReturn(Optional.of(proposal));
         when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
@@ -194,9 +293,25 @@ class JobProposalServiceTest {
     }
 
     @Test
+    void acceptRejectsNonOwnerBeforeProposalOrEscrowReads() {
+        JobProposalService service = service();
+        when(worker.getId()).thenReturn(22L);
+        when(jobRepository.findByIdAndCreatedByIdForUpdate(101L, 22L)).thenReturn(Optional.empty());
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.accept(101L, 55L, worker)
+        );
+
+        verify(jobRepository, never()).findByIdForUpdate(101L);
+        verify(jobProposalRepository, never()).findByIdAndJob_Id(55L, 101L);
+        verify(transactionService, never()).adjustHeldAmount(any(), any(), any());
+    }
+
+    @Test
     void failedEscrowTopUpDoesNotAssignWorkerOrAcceptProposal() {
         JobProposalService service = service();
-        prepareOpenProposalJob();
+        prepareOpenProposalJobForOwnerUpdate();
         when(jobProposalRepository.findByIdAndJob_Id(56L, 101L)).thenReturn(Optional.of(proposal));
         when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
         when(proposal.getProposer()).thenReturn(worker);
@@ -215,6 +330,36 @@ class JobProposalServiceTest {
         verify(notificationService, never()).notify(any(), any(), anyString(), anyString(), any(), any());
     }
 
+    @Test
+    void withdrawRejectsNonOwnerBeforeTakingJobLock() {
+        JobProposalService service = service();
+        when(worker.getId()).thenReturn(22L);
+        when(jobProposalRepository.existsByIdAndJob_IdAndProposer_Id(55L, 101L, 22L)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class, () -> service.withdraw(101L, 55L, worker));
+
+        verify(jobRepository, never()).findByIdForUpdate(101L);
+        verify(jobProposalRepository, never()).findByIdAndJob_Id(55L, 101L);
+    }
+
+    @Test
+    void proposerWithdrawKeepsExistingJobLockAndLifecycleChecks() {
+        JobProposalService service = service();
+        when(worker.getId()).thenReturn(22L);
+        when(jobProposalRepository.existsByIdAndJob_IdAndProposer_Id(55L, 101L, 22L)).thenReturn(true);
+        when(jobRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(job));
+        when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
+        when(jobProposalRepository.findByIdAndJob_Id(55L, 101L)).thenReturn(Optional.of(proposal));
+        when(proposal.getProposer()).thenReturn(worker);
+        when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
+        when(job.getStatus()).thenReturn(JobStatus.OPEN);
+
+        service.withdraw(101L, 55L, worker);
+
+        verify(proposal).withdraw(any());
+        verify(jobProposalRepository).save(proposal);
+    }
+
     private JobProposalService service() {
         return new JobProposalService(
                 jobRepository,
@@ -227,38 +372,43 @@ class JobProposalServiceTest {
         );
     }
 
-    private void prepareOpenProposalJob() {
-        when(jobRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(job));
+    private void prepareOpenProposalJobForSubmit() {
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                101L,
+                JobStatus.OPEN,
+                JobAssignmentMode.PROPOSALS
+        )).thenReturn(Optional.of(job));
+        lenient().when(job.getId()).thenReturn(101L);
+        when(job.getCreatedBy()).thenReturn(requester);
+        lenient().when(job.getPrice()).thenReturn(new BigDecimal("30.00"));
+        lenient().when(job.getTitle()).thenReturn("Zakupy");
+        when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(false);
+    }
+
+    private void prepareOpenProposalJobForOwnerUpdate() {
+        when(requester.getId()).thenReturn(11L);
+        when(jobRepository.findByIdAndCreatedByIdForUpdate(101L, 11L)).thenReturn(Optional.of(job));
         lenient().when(job.getId()).thenReturn(101L);
         when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
         when(job.getStatus()).thenReturn(JobStatus.OPEN);
         when(job.getCreatedBy()).thenReturn(requester);
         lenient().when(job.getPrice()).thenReturn(new BigDecimal("30.00"));
         lenient().when(job.getTitle()).thenReturn("Zakupy");
-        lenient().when(requester.getId()).thenReturn(11L);
         when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(false);
     }
 
     private void prepareProposalFundingQuote(BigDecimal proposalAmount) {
-        when(jobRepository.findById(101L)).thenReturn(Optional.of(job));
+        when(requester.getId()).thenReturn(11L);
+        when(jobRepository.findByIdAndCreatedBy_Id(101L, 11L)).thenReturn(Optional.of(job));
         when(job.getId()).thenReturn(101L);
         when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
         when(job.getStatus()).thenReturn(JobStatus.OPEN);
         when(job.getCreatedBy()).thenReturn(requester);
-        when(requester.getId()).thenReturn(11L);
         when(jobProposalRepository.findByIdAndJob_Id(55L, 101L)).thenReturn(Optional.of(proposal));
         when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
         when(proposal.getProposer()).thenReturn(worker);
         when(proposal.getAmount()).thenReturn(proposalAmount);
         when(proposal.getId()).thenReturn(55L);
         when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(false);
-    }
-
-    private void prepareProposalJobForRead() {
-        when(jobRepository.findById(101L)).thenReturn(Optional.of(job));
-        lenient().when(job.getId()).thenReturn(101L);
-        when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
-        when(job.getCreatedBy()).thenReturn(requester);
-        lenient().when(requester.getId()).thenReturn(11L);
     }
 }
