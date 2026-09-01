@@ -92,7 +92,7 @@ python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["provider"]=="DETE
 
 OUTSIDER_QUOTE_STATUS=$(curl --silent --output /tmp/outsider-quote.json --write-out '%{http_code}' \
   -H "Authorization: Bearer $OUTSIDER_TOKEN" "$api/routing/quotes/$ROUTE_QUOTE_ID")
-test "$OUTSIDER_QUOTE_STATUS" = "403"
+test "$OUTSIDER_QUOTE_STATUS" = "404"
 
 echo "Route quote ownership/estimate: OK"
 
