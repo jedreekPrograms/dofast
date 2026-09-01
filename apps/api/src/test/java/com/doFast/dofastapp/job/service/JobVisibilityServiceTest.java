@@ -65,7 +65,7 @@ class JobVisibilityServiceTest {
 
     @Test
     void nonParticipantCannotEnumerateNonOpenJob() {
-        job.setStatus(JobStatus.COMPLETED);
+        job.setStatus(JobStatus.DONE);
         when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
 
         assertThrows(ResourceNotFoundException.class,
@@ -75,7 +75,7 @@ class JobVisibilityServiceTest {
 
     @Test
     void jobParticipantsRetainDetailAccessAfterJobLeavesPublicMarketplace() {
-        job.setStatus(JobStatus.COMPLETED);
+        job.setStatus(JobStatus.DONE);
         when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
 
         assertDoesNotThrow(() -> service.assertCanViewPublicDetail(10L, owner));
