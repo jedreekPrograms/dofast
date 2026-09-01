@@ -26,6 +26,19 @@ public interface JobPublicationRepository extends JpaRepository<JobPublication, 
     Optional<JobPublication> findByIdForUpdate(@Param("id") Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select publication
+            from JobPublication publication
+            join fetch publication.user
+            where publication.id = :id
+              and publication.user.id = :userId
+            """)
+    Optional<JobPublication> findOwnedByIdForUpdate(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<JobPublication> findFirstByStatusAndExpiresAtBeforeOrderByExpiresAtAscIdAsc(
             JobPublicationStatus status,
             LocalDateTime expiresAt
