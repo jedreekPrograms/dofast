@@ -27,6 +27,17 @@ public interface DisputeRepository extends JpaRepository<Dispute, Long> {
     @Query("select d from Dispute d where d.id = :id")
     Optional<Dispute> findByIdForUpdate(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select d from Dispute d
+            where d.id = :id
+              and d.openedBy.id = :userId
+            """)
+    Optional<Dispute> findByIdAndOpenedByIdForUpdate(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
     @Query("""
             select d from Dispute d
             where d.job.createdBy = :user or d.job.takenBy = :user

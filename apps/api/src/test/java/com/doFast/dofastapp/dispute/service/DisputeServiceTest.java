@@ -119,7 +119,7 @@ class DisputeServiceTest {
         stubSuccessfulPersistence();
         Job job = job(JobStatus.DISPUTED);
         Dispute dispute = dispute(job, requester, DisputeStatus.OPEN, JobStatus.COMPLETION_REQUESTED);
-        when(disputeRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(dispute));
+        when(disputeRepository.findByIdAndOpenedByIdForUpdate(100L, requester.getId())).thenReturn(Optional.of(dispute));
         when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
 
         var response = disputeService.cancelDispute(100L, requester);
@@ -127,6 +127,41 @@ class DisputeServiceTest {
         assertEquals(DisputeStatus.CANCELLED, response.dispute().status());
         assertEquals(JobStatus.COMPLETION_REQUESTED, job.getStatus());
         verify(transactionService).assertHeld(job);
+        verify(disputeRepository, never()).findByIdForUpdate(100L);
+    }
+
+    @Test
+    void outsiderCannotEnumerateExistingDisputeThroughCancellation() {
+        User stranger = user(3L, UserRole.USER, "stranger");
+        when(disputeRepository.findByIdAndOpenedByIdForUpdate(100L, stranger.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> disputeService.cancelDispute(100L, stranger));
+
+        verify(disputeRepository, never()).findByIdForUpdate(100L);
+        verify(jobRepository, never()).findByIdForUpdate(anyLong());
+        verify(transactionService, never()).assertHeld(any());
+        verify(disputeRepository, never()).save(any());
+    }
+
+    @Test
+    void claimedDisputeStillCannotBeCancelledByItsOpener() {
+        Job job = job(JobStatus.DISPUTED);
+        Dispute dispute = dispute(job, requester, DisputeStatus.UNDER_REVIEW, JobStatus.IN_PROGRESS);
+        when(disputeRepository.findByIdAndOpenedByIdForUpdate(100L, requester.getId())).thenReturn(Optional.of(dispute));
+
+        assertThrows(ConflictException.class, () -> disputeService.cancelDispute(100L, requester));
+
+        verify(jobRepository, never()).findByIdForUpdate(anyLong());
+        verify(transactionService, never()).assertHeld(any());
+    }
+
+    @Test
+    void cancelWithMissingIdentityFailsClosedBeforeDisputeLookup() {
+        assertThrows(ResourceNotFoundException.class, () -> disputeService.cancelDispute(100L, null));
+
+        verify(disputeRepository, never()).findByIdAndOpenedByIdForUpdate(anyLong(), anyLong());
+        verify(disputeRepository, never()).findByIdForUpdate(anyLong());
+        verify(jobRepository, never()).findByIdForUpdate(anyLong());
     }
 
     @Test
