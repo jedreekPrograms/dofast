@@ -193,7 +193,7 @@ public class JobService {
     public JobResponse getJob(Long jobId) { return toResponse(getJobForRead(jobId)); }
 
     public LocationResponse getExactLocation(Long jobId, User currentUser) {
-        Job job = getJobForRead(jobId);
+        Job job = getParticipantJob(jobId, currentUser);
         assertCanAccessExactLocation(job, currentUser);
         Point point = job.getLocation();
         if (point == null) {
@@ -203,7 +203,7 @@ public class JobService {
     }
 
     public JobRouteResponse getExactRoute(Long jobId, User currentUser) {
-        Job job = getJobForRead(jobId);
+        Job job = getParticipantJob(jobId, currentUser);
         assertCanAccessExactLocation(job, currentUser);
         if (job.getLocation() == null || job.getDestinationLocation() == null) {
             throw new ResourceNotFoundException("Dokładna trasa zlecenia nie jest dostępna");
@@ -224,7 +224,7 @@ public class JobService {
 
     @Transactional
     public JobResponse acceptJob(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
+        Job job = getPublicOrParticipantJobForUpdate(jobId, currentUser);
         if (job.getStatus() != JobStatus.OPEN) throw new ConflictException("Zlecenie nie jest już dostępne");
         if (job.getAssignmentMode() != JobAssignmentMode.INSTANT) {
             throw new ConflictException("To zlecenie wymaga wyboru wykonawcy spośród propozycji");
@@ -249,7 +249,7 @@ public class JobService {
 
     @Transactional
     public JobResponse requestCompletion(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
+        Job job = getParticipantJobForUpdate(jobId, currentUser);
         if (job.getStatus() != JobStatus.IN_PROGRESS) throw new ConflictException("Zlecenie nie jest w trakcie realizacji");
         if (job.getTakenBy() == null || !sameUser(job.getTakenBy(), currentUser)) {
             throw new ForbiddenOperationException("Tylko wykonawca może zgłosić wykonanie zlecenia");
@@ -264,7 +264,7 @@ public class JobService {
 
     @Transactional
     public JobResponse confirmCompletion(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
+        Job job = getParticipantJobForUpdate(jobId, currentUser);
         if (!sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Tylko autor może potwierdzić wykonanie zlecenia");
         if (job.getStatus() != JobStatus.COMPLETION_REQUESTED) throw new ConflictException("Wykonawca nie zgłosił jeszcze wykonania zlecenia");
         if (job.getTakenBy() == null) throw new ConflictException("Zlecenie nie ma przypisanego wykonawcy");
@@ -283,7 +283,7 @@ public class JobService {
 
     @Transactional
     public JobResponse cancelJob(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
+        Job job = getParticipantJobForUpdate(jobId, currentUser);
         if (!sameUser(job.getCreatedBy(), currentUser)) throw new ForbiddenOperationException("Tylko autor może anulować zlecenie");
         if (job.getStatus() != JobStatus.OPEN) throw new ConflictException("Można anulować tylko zlecenie, którego nikt jeszcze nie przyjął");
         job.cancel(LocalDateTime.now());
@@ -358,8 +358,31 @@ public class JobService {
         return jobRepository.findById(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
-    private Job getJobForUpdate(Long jobId) {
-        return jobRepository.findByIdForUpdate(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    private Job getParticipantJob(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantById(jobId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private Job getParticipantJobForUpdate(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantByIdForUpdate(jobId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private Job getPublicOrParticipantJobForUpdate(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findPublicOrParticipantByIdForUpdate(jobId, JobStatus.OPEN, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
     private void assertCanAccessExactLocation(Job job, User currentUser) {

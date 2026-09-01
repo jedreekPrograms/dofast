@@ -5,6 +5,7 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.category.FulfillmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
@@ -45,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -137,9 +139,7 @@ class JobServiceTest {
     void discoveryUsesTypedEmptyStringWhenTextQueryIsMissing() {
         when(jobRepository.findOpenJobs(eq(JobStatus.OPEN), eq(""), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-
         PageResponse<JobResponse> response = jobService.getOpenJobs(null, null, null, 0, 20);
-
         assertEquals(0, response.totalElements());
         verify(jobRepository).findOpenJobs(eq(JobStatus.OPEN), eq(""), isNull(), isNull(), any(Pageable.class));
     }
@@ -148,9 +148,7 @@ class JobServiceTest {
     void discoveryUsesTypedEmptyStringWhenTextQueryIsBlank() {
         when(jobRepository.findOpenJobs(eq(JobStatus.OPEN), eq(""), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-
         jobService.getOpenJobs("   ", null, null, 0, 20);
-
         verify(jobRepository).findOpenJobs(eq(JobStatus.OPEN), eq(""), isNull(), isNull(), any(Pageable.class));
     }
 
@@ -163,46 +161,82 @@ class JobServiceTest {
     @Test
     void ownerCannotAcceptOwnJob() {
         Job job = job(JobStatus.OPEN, owner, null);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findPublicOrParticipantByIdForUpdate(10L, JobStatus.OPEN, owner.getId()))
+                .thenReturn(Optional.of(job));
         assertThrows(ForbiddenOperationException.class, () -> jobService.acceptJob(10L, owner));
     }
 
     @Test
-    void unavailableJobCannotBeAcceptedAgain() {
+    void participantGetsLifecycleConflictWhenJobWasAlreadyAccepted() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
-        assertThrows(ConflictException.class, () -> jobService.acceptJob(10L, user(3L, "other@example.com")));
+        when(jobRepository.findPublicOrParticipantByIdForUpdate(10L, JobStatus.OPEN, worker.getId()))
+                .thenReturn(Optional.of(job));
+        assertThrows(ConflictException.class, () -> jobService.acceptJob(10L, worker));
+    }
+
+    @Test
+    void outsiderCannotEnumerateUnavailableJobThroughAccept() {
+        User outsider = user(3L, "other@example.com");
+        when(jobRepository.findPublicOrParticipantByIdForUpdate(10L, JobStatus.OPEN, outsider.getId()))
+                .thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> jobService.acceptJob(10L, outsider));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
     }
 
     @Test
     void workerRequestsCompletionBeforeOwnerCanConfirm() {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, worker.getId())).thenReturn(Optional.of(job));
         assertEquals(JobStatus.COMPLETION_REQUESTED, jobService.requestCompletion(10L, worker).status());
+    }
+
+    @Test
+    void outsiderCannotEnumerateJobThroughCompletionRequest() {
+        User outsider = user(3L, "stranger@example.com");
+        when(jobRepository.findParticipantByIdForUpdate(10L, outsider.getId())).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> jobService.requestCompletion(10L, outsider));
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+        verify(jobRepository, never()).save(any());
     }
 
     @Test
     void ownerConfirmingCompletionReleasesEscrowAndStopsTracking() {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Job job = job(JobStatus.COMPLETION_REQUESTED, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, owner.getId())).thenReturn(Optional.of(job));
         assertEquals(JobStatus.DONE, jobService.confirmCompletion(10L, owner).status());
         verify(transactionService).releaseMoney(job, worker);
         verify(liveTrackingService).stopAndClear(10L);
     }
 
     @Test
+    void outsiderCannotEnumerateJobThroughCompletionConfirmation() {
+        User outsider = user(3L, "stranger@example.com");
+        when(jobRepository.findParticipantByIdForUpdate(10L, outsider.getId())).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> jobService.confirmCompletion(10L, outsider));
+        verify(transactionService, never()).releaseMoney(any(), any());
+    }
+
+    @Test
     void acceptedJobCannotBeCancelledDirectly() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, owner.getId())).thenReturn(Optional.of(job));
         assertThrows(ConflictException.class, () -> jobService.cancelJob(10L, owner));
+    }
+
+    @Test
+    void outsiderCannotEnumerateJobThroughDirectCancellation() {
+        User outsider = user(3L, "stranger@example.com");
+        when(jobRepository.findParticipantByIdForUpdate(10L, outsider.getId())).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> jobService.cancelJob(10L, outsider));
+        verify(transactionService, never()).refundMoney(any());
     }
 
     @Test
     void assignedWorkerCanReadExactOriginAndFullRouteWhileJobIsActive() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, worker.getId())).thenReturn(Optional.of(job));
 
         LocationResponse origin = jobService.getExactLocation(10L, worker);
         JobRouteResponse route = jobService.getExactRoute(10L, worker);
@@ -217,16 +251,17 @@ class JobServiceTest {
     }
 
     @Test
-    void unrelatedUserCannotReadExactRoute() {
-        Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
-        assertThrows(ForbiddenOperationException.class, () -> jobService.getExactRoute(10L, user(3L, "stranger@example.com")));
+    void unrelatedUserCannotEnumerateJobThroughExactRoute() {
+        User outsider = user(3L, "stranger@example.com");
+        when(jobRepository.findParticipantById(10L, outsider.getId())).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> jobService.getExactRoute(10L, outsider));
+        verify(jobRepository, never()).findById(10L);
     }
 
     @Test
     void workerCannotReadExactRouteAfterCompletion() {
         Job job = job(JobStatus.DONE, owner, worker);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, worker.getId())).thenReturn(Optional.of(job));
         assertThrows(ForbiddenOperationException.class, () -> jobService.getExactRoute(10L, worker));
     }
 

@@ -22,6 +22,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     List<Job> findAllByStatusAndCreatedBy(JobStatus status, User createdBy);
     long countByStatusAndCreatedBy(JobStatus status, User createdBy);
     long countByStatusAndTakenBy(JobStatus status, User takenBy);
+    Optional<Job> findByIdAndStatus(Long id, JobStatus status);
 
     @Query("""
             select count(j) > 0
@@ -112,6 +113,40 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             @Param("userId") Long userId
     );
 
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
+              and j.createdBy.id = :userId
+            """)
+    Optional<Job> findOwnerById(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
+              and j.createdBy.id = :userId
+            """)
+    Optional<Job> findOwnerByIdForUpdate(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
+              and j.takenBy.id = :userId
+            """)
+    Optional<Job> findAssignedWorkerById(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select j
@@ -121,6 +156,23 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             """)
     Optional<Job> findAssignedWorkerByIdForUpdate(
             @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
+              and (
+                    j.status = :publicStatus
+                    or j.createdBy.id = :userId
+                    or j.takenBy.id = :userId
+              )
+            """)
+    Optional<Job> findPublicOrParticipantByIdForUpdate(
+            @Param("id") Long id,
+            @Param("publicStatus") JobStatus publicStatus,
             @Param("userId") Long userId
     );
 
