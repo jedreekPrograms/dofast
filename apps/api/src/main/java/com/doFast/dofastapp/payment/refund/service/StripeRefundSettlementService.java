@@ -128,7 +128,7 @@ public class StripeRefundSettlementService {
         if (request.isWalletRestored()) {
             return;
         }
-        walletService.creditRestoringOperation(
+        boolean restored = walletService.creditRestoringOperation(
                 request.getUserId(),
                 request.getAmount(),
                 WalletTransactionType.STRIPE_REFUND_RESTORE,
@@ -136,6 +136,9 @@ public class StripeRefundSettlementService {
                 restoreOperationKey(request.getId()),
                 reserveOperationKey(request.getId())
         );
+        if (!restored) {
+            throw new ConflictException("Wykryto niespójny stan zwrotu rezerwacji zwrotu Stripe");
+        }
         request.markWalletRestored(now);
     }
 
