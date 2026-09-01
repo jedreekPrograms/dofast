@@ -52,7 +52,7 @@ class RouteQuoteModeComparisonTest {
         List<RouteCoordinate> stops = List.of(new RouteCoordinate(51.1110, 17.0500));
         RouteCoordinate destination = new RouteCoordinate(51.1090, 17.0320);
 
-        when(routeQuoteRepository.findById(quoteId)).thenReturn(Optional.of(quote));
+        when(routeQuoteRepository.findByIdAndUser_Id(quoteId, 7L)).thenReturn(Optional.of(quote));
         when(routeProvider.estimate(origin, stops, destination, RouteTravelMode.BICYCLE))
                 .thenReturn(new RouteProviderResult(3_900, 900, null, "GOOGLE_ROUTES"));
         when(routeProvider.estimate(origin, stops, destination, RouteTravelMode.WALK))
