@@ -17,7 +17,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -105,7 +104,5 @@ class JobProposalSuspendedProposerTest {
         when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
         when(proposal.getProposer()).thenReturn(suspendedWorker);
         when(suspendedWorker.getStatus()).thenReturn(UserStatus.SUSPENDED);
-        when(proposal.getAmount()).thenReturn(new BigDecimal("42.00"));
-        when(proposal.getId()).thenReturn(55L);
     }
 }
