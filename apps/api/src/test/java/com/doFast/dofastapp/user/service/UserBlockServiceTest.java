@@ -4,6 +4,7 @@ import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.entity.UserBlock;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.repository.UserBlockRepository;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,10 +44,10 @@ class UserBlockServiceTest {
     }
 
     @Test
-    void blockCreatesPrivateRelationAndReturnsOnlyPublicTargetIdentity() {
+    void blockCreatesPrivateRelationForActiveTargetAndReturnsOnlyPublicIdentity() {
+        when(userRepository.findByIdAndStatus(2L, UserStatus.ACTIVE)).thenReturn(Optional.of(target));
         when(userBlockRepository.findByBlocker_IdAndBlockedUser_Id(1L, 2L))
                 .thenReturn(Optional.empty());
-        when(userRepository.findById(2L)).thenReturn(Optional.of(target));
         when(userBlockRepository.save(any(UserBlock.class))).thenAnswer(invocation -> {
             UserBlock block = invocation.getArgument(0);
             ReflectionTestUtils.setField(block, "id", 10L);
@@ -58,35 +59,45 @@ class UserBlockServiceTest {
 
         assertEquals(2L, response.userId());
         assertEquals("target", response.nickname());
+        verify(userRepository).findByIdAndStatus(2L, UserStatus.ACTIVE);
+        verify(userRepository, never()).findById(any());
         verify(userBlockRepository).save(any(UserBlock.class));
     }
 
     @Test
-    void blockIsIdempotent() {
+    void blockIsIdempotentForActiveTarget() {
         UserBlock existing = block(blocker, target, LocalDateTime.of(2026, 8, 28, 1, 0));
+        when(userRepository.findByIdAndStatus(2L, UserStatus.ACTIVE)).thenReturn(Optional.of(target));
         when(userBlockRepository.findByBlocker_IdAndBlockedUser_Id(1L, 2L))
                 .thenReturn(Optional.of(existing));
 
         var response = service.block(2L, blocker);
 
         assertEquals(2L, response.userId());
+        verify(userRepository).findByIdAndStatus(2L, UserStatus.ACTIVE);
         verify(userRepository, never()).findById(any());
         verify(userBlockRepository, never()).save(any());
     }
 
     @Test
-    void selfBlockIsRejected() {
+    void selfBlockIsRejectedBeforeTargetLookup() {
         assertThrows(ForbiddenOperationException.class, () -> service.block(1L, blocker));
+        verify(userRepository, never()).findByIdAndStatus(any(), any());
+        verify(userRepository, never()).findById(any());
+        verify(userBlockRepository, never()).findByBlocker_IdAndBlockedUser_Id(any(), any());
         verify(userBlockRepository, never()).save(any());
     }
 
     @Test
-    void unknownTargetIsRejected() {
-        when(userBlockRepository.findByBlocker_IdAndBlockedUser_Id(1L, 999L))
-                .thenReturn(Optional.empty());
-        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+    void suspendedOrUnknownTargetIsRejectedBeforeBlockRelationLookup() {
+        when(userRepository.findByIdAndStatus(999L, UserStatus.ACTIVE)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> service.block(999L, blocker));
+
+        verify(userRepository).findByIdAndStatus(999L, UserStatus.ACTIVE);
+        verify(userRepository, never()).findById(any());
+        verify(userBlockRepository, never()).findByBlocker_IdAndBlockedUser_Id(any(), any());
+        verify(userBlockRepository, never()).save(any());
     }
 
     @Test

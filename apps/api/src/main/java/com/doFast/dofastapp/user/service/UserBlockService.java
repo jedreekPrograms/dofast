@@ -5,6 +5,7 @@ import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.user.dto.UserBlockResponse;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.entity.UserBlock;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.repository.UserBlockRepository;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -29,15 +30,14 @@ public class UserBlockService {
             throw new ForbiddenOperationException("Nie możesz zablokować własnego konta");
         }
 
+        User target = userRepository.findByIdAndStatus(targetUserId, UserStatus.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
+
         return userBlockRepository.findByBlocker_IdAndBlockedUser_Id(blocker.getId(), targetUserId)
                 .map(UserBlockResponse::from)
-                .orElseGet(() -> {
-                    User target = userRepository.findById(targetUserId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
-                    return UserBlockResponse.from(
-                            userBlockRepository.save(new UserBlock(blocker, target))
-                    );
-                });
+                .orElseGet(() -> UserBlockResponse.from(
+                        userBlockRepository.save(new UserBlock(blocker, target))
+                ));
     }
 
     @Transactional
