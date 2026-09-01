@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.payout.service;
 
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.payout.config.PayoutProperties;
 import com.doFast.dofastapp.payout.dto.CreatePayoutRequest;
 import com.doFast.dofastapp.payout.entity.PayoutRequest;
@@ -78,17 +79,11 @@ class PayoutServiceTest {
             return payout;
         });
         when(walletService.debit(
-                eq(7L),
-                eq(new BigDecimal("25.00")),
-                eq(WalletTransactionType.PAYOUT_RESERVE),
-                eq(null),
+                eq(7L), eq(new BigDecimal("25.00")), eq(WalletTransactionType.PAYOUT_RESERVE), eq(null),
                 eq("payout:7:client:req-12345:reserve")
         )).thenReturn(true);
 
-        var response = payoutService.request(
-                new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"),
-                user
-        );
+        var response = payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user);
 
         assertEquals(41L, response.id());
         assertEquals(PayoutStatus.REQUESTED, response.status());
@@ -108,10 +103,8 @@ class PayoutServiceTest {
         when(onboardingService.setupAvailable()).thenReturn(true);
         when(onboardingService.refreshAndIsRecipientReady(user)).thenReturn(false);
 
-        assertThrows(
-                ForbiddenOperationException.class,
-                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user)
-        );
+        assertThrows(ForbiddenOperationException.class,
+                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user));
 
         verify(onboardingService).refreshAndIsRecipientReady(user);
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
@@ -128,10 +121,8 @@ class PayoutServiceTest {
         when(verificationRepository.findByUserIdForUpdate(7L)).thenReturn(Optional.of(verified));
         when(onboardingService.setupAvailable()).thenReturn(false);
 
-        assertThrows(
-                ForbiddenOperationException.class,
-                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user)
-        );
+        assertThrows(ForbiddenOperationException.class,
+                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user));
 
         verify(onboardingService, never()).refreshAndIsRecipientReady(any());
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
@@ -145,10 +136,8 @@ class PayoutServiceTest {
         when(providerRegistry.providerCodeForNewRequest()).thenReturn("sandbox");
         when(verificationRepository.findByUserIdForUpdate(7L)).thenReturn(Optional.empty());
 
-        assertThrows(
-                ForbiddenOperationException.class,
-                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user)
-        );
+        assertThrows(ForbiddenOperationException.class,
+                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user));
 
         verify(walletService, never()).debit(any(), any(), any(), any(), any());
         verify(payoutRepository, never()).saveAndFlush(any());
@@ -161,10 +150,7 @@ class PayoutServiceTest {
         when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
         when(payoutRepository.findByRequestKey("payout:7:client:req-12345")).thenReturn(Optional.of(existing));
 
-        var response = payoutService.request(
-                new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"),
-                user
-        );
+        var response = payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), user);
 
         assertEquals(41L, response.id());
         assertEquals(PayoutStatus.REQUESTED, response.status());
@@ -176,14 +162,10 @@ class PayoutServiceTest {
     void ownerCanCancelQueuedPayoutAndRestoreReservedSources() {
         User user = user(7L, UserStatus.ACTIVE);
         PayoutRequest payout = payout(41L, user, new BigDecimal("25.00"));
-        when(payoutRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payout));
+        when(payoutRepository.findOwnedByIdForUpdate(41L, 7L)).thenReturn(Optional.of(payout));
         when(walletService.creditRestoringOperation(
-                7L,
-                new BigDecimal("25.00"),
-                WalletTransactionType.PAYOUT_RESTORE,
-                null,
-                "payout:41:restore",
-                "payout:7:client:req-12345:reserve"
+                7L, new BigDecimal("25.00"), WalletTransactionType.PAYOUT_RESTORE, null,
+                "payout:41:restore", "payout:7:client:req-12345:reserve"
         )).thenReturn(true);
 
         var response = payoutService.cancel(41L, user);
@@ -191,14 +173,23 @@ class PayoutServiceTest {
         assertEquals(PayoutStatus.CANCELLED, response.status());
         assertFalse(response.cancellable());
         verify(walletService).creditRestoringOperation(
-                7L,
-                new BigDecimal("25.00"),
-                WalletTransactionType.PAYOUT_RESTORE,
-                null,
-                "payout:41:restore",
-                "payout:7:client:req-12345:reserve"
+                7L, new BigDecimal("25.00"), WalletTransactionType.PAYOUT_RESTORE, null,
+                "payout:41:restore", "payout:7:client:req-12345:reserve"
         );
         verify(eventRepository, org.mockito.Mockito.times(2)).save(any());
+    }
+
+    @Test
+    void outsiderCannotEnumerateExistingPayoutThroughCancel() {
+        User outsider = user(8L, UserStatus.ACTIVE);
+        when(payoutRepository.findOwnedByIdForUpdate(41L, 8L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> payoutService.cancel(41L, outsider));
+
+        verify(payoutRepository).findOwnedByIdForUpdate(41L, 8L);
+        verify(payoutRepository, never()).findByIdForUpdate(41L);
+        verify(walletService, never()).creditRestoringOperation(any(), any(), any(), any(), any(), any());
+        verify(eventRepository, never()).save(any());
     }
 
     @Test

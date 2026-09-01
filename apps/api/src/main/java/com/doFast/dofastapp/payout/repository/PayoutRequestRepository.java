@@ -32,6 +32,18 @@ public interface PayoutRequestRepository extends JpaRepository<PayoutRequest, Lo
     @EntityGraph(attributePaths = "user")
     @Query("""
             select payout from PayoutRequest payout
+            where payout.id = :id
+              and payout.user.id = :userId
+            """)
+    Optional<PayoutRequest> findOwnedByIdForUpdate(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+            select payout from PayoutRequest payout
             where payout.providerCode = :providerCode
               and payout.providerReference = :providerReference
             """)

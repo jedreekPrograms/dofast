@@ -146,11 +146,12 @@ public class PayoutService {
 
     @Transactional
     public PayoutResponse cancel(Long payoutId, User currentUser) {
-        PayoutRequest payout = payoutRepository.findByIdForUpdate(payoutId)
-                .orElseThrow(() -> new ResourceNotFoundException("Wypłata nie istnieje"));
-        if (!payout.getUser().getId().equals(currentUser.getId())) {
-            throw new ForbiddenOperationException("Nie możesz anulować tej wypłaty");
+        Long ownerId = currentUser == null ? null : currentUser.getId();
+        if (ownerId == null) {
+            throw new ResourceNotFoundException("Wypłata nie istnieje");
         }
+        PayoutRequest payout = payoutRepository.findOwnedByIdForUpdate(payoutId, ownerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Wypłata nie istnieje"));
         if (payout.getStatus() != PayoutStatus.REQUESTED) {
             throw new ConflictException("Można anulować tylko wypłatę oczekującą na rozpoczęcie przetwarzania");
         }
