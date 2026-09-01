@@ -15,6 +15,7 @@ import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.service.UserBlockService;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import org.springframework.stereotype.Service;
@@ -239,7 +240,11 @@ public class JobProposalService {
         if (proposal.getStatus() != JobProposalStatus.SUBMITTED) {
             throw new ConflictException("Propozycja nie jest już aktywna");
         }
-        if (userBlockService.isInteractionBlocked(job.getCreatedBy(), proposal.getProposer())) {
+        User proposer = proposal.getProposer();
+        if (proposer == null || proposer.getStatus() == UserStatus.SUSPENDED) {
+            throw new ForbiddenOperationException("Nie możesz zaakceptować tej propozycji");
+        }
+        if (userBlockService.isInteractionBlocked(job.getCreatedBy(), proposer)) {
             throw new ForbiddenOperationException("Nie możesz zaakceptować tej propozycji");
         }
     }
