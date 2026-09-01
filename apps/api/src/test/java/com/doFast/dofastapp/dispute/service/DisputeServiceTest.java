@@ -2,7 +2,7 @@ package com.doFast.dofastapp.dispute.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
-import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.dispute.dto.CreateDisputeRequest;
 import com.doFast.dofastapp.dispute.dto.ResolveDisputeRequest;
 import com.doFast.dofastapp.dispute.entity.Dispute;
@@ -72,7 +72,7 @@ class DisputeServiceTest {
     void participantCanOpenDisputeAndEscrowRemainsHeld() {
         stubSuccessfulPersistence();
         Job job = job(JobStatus.IN_PROGRESS);
-        when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(50L, requester.getId())).thenReturn(Optional.of(job));
         when(disputeRepository.findFirstByJobAndStatusInOrderByOpenedAtDesc(any(Job.class), any()))
                 .thenReturn(Optional.empty());
 
@@ -90,20 +90,23 @@ class DisputeServiceTest {
     }
 
     @Test
-    void unrelatedUserCannotOpenDispute() {
-        Job job = job(JobStatus.IN_PROGRESS);
-        when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
+    void outsiderCannotEnumerateJobThroughDisputeCreation() {
         User stranger = user(3L, UserRole.USER, "stranger");
+        when(jobRepository.findParticipantByIdForUpdate(50L, stranger.getId())).thenReturn(Optional.empty());
 
-        assertThrows(ForbiddenOperationException.class, () -> disputeService.openDispute(
+        assertThrows(ResourceNotFoundException.class, () -> disputeService.openDispute(
                 new CreateDisputeRequest(50L, DisputeReason.OTHER, "Nie moja sprawa"), stranger));
+
+        verify(jobRepository, never()).findByIdForUpdate(50L);
+        verify(disputeRepository, never()).findFirstByJobAndStatusInOrderByOpenedAtDesc(any(), any());
+        verify(transactionService, never()).assertHeld(any());
     }
 
     @Test
     void secondActiveDisputeIsRejected() {
         Job job = job(JobStatus.IN_PROGRESS);
         Dispute existing = dispute(job, requester, DisputeStatus.OPEN, JobStatus.IN_PROGRESS);
-        when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(50L, requester.getId())).thenReturn(Optional.of(job));
         when(disputeRepository.findFirstByJobAndStatusInOrderByOpenedAtDesc(any(Job.class), any()))
                 .thenReturn(Optional.of(existing));
 

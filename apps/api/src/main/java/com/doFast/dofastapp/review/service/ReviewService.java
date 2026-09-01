@@ -52,8 +52,7 @@ public class ReviewService {
 
     @Transactional
     public ReviewResponse addReview(ReviewRequest request, User reviewer) {
-        Job job = jobRepository.findByIdForUpdate(request.getJobId())
-                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+        Job job = getParticipantJobForUpdate(request.getJobId(), reviewer);
 
         if (job.getStatus() != JobStatus.DONE) {
             throw new ConflictException("Opinię można wystawić dopiero po zakończeniu zlecenia");
@@ -99,8 +98,7 @@ public class ReviewService {
     }
 
     public ReviewEligibilityResponse getEligibility(Long jobId, User currentUser) {
-        Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+        Job job = getParticipantJob(jobId, currentUser);
 
         User reviewed = counterpart(job, currentUser);
         boolean alreadyReviewed = reviewRepository.findByJobAndReviewer(job, currentUser).isPresent();
@@ -127,6 +125,24 @@ public class ReviewService {
                 .toList();
 
         return PageResponse.from(result, content);
+    }
+
+    private Job getParticipantJob(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantById(jobId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private Job getParticipantJobForUpdate(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantByIdForUpdate(jobId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 
     private User counterpart(Job job, User reviewer) {
