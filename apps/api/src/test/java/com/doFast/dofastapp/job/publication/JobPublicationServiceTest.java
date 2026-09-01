@@ -197,7 +197,7 @@ class JobPublicationServiceTest {
     @Test
     void cancelRestoresReservationSourcesExactlyOnce() {
         JobPublication publication = pendingPublication(user, 11L, "job-publication:7:req-cancel", "hash", "70.00", "25.00", "45.00");
-        when(publicationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(publication));
+        when(publicationRepository.findOwnedByIdForUpdate(11L, 7L)).thenReturn(Optional.of(publication));
         when(publicationRepository.save(publication)).thenReturn(publication);
         when(walletService.creditRestoringOperation(
                 7L,
