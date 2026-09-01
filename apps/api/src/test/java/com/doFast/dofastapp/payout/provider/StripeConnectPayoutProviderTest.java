@@ -18,6 +18,9 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -82,6 +85,85 @@ class StripeConnectPayoutProviderTest {
         verify(moneyGateway, never()).reverseTransfer(
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void transferAmountMismatchPreservesTrustedTransferIdentityAndStopsBeforePayout() {
+        when(dispatchStateService.transferReference(41L)).thenReturn(null);
+        Transfer transfer = transfer("tr_123");
+        transfer.setAmount(12400L);
+        when(moneyGateway.createTransfer(12500L, "pln", "acct_123", 41L, 7L, "payout:41:provider:transfer"))
+                .thenReturn(transfer);
+
+        StripeConnectPayoutResponseException exception = assertThrows(
+                StripeConnectPayoutResponseException.class,
+                () -> provider.dispatch(command)
+        );
+
+        assertEquals("STRIPE_TRANSFER_AMOUNT_MISMATCH", exception.failureCode());
+        assertEquals("tr_123", exception.trustedTransferReference());
+        assertNull(exception.trustedPayoutReference());
+        verify(dispatchStateService, never()).recordTransferReference(41L, "tr_123");
+        verify(moneyGateway, never()).createConnectedPayout(
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void transferIdentityMismatchDoesNotTrustReturnedTransferId() {
+        when(dispatchStateService.transferReference(41L)).thenReturn(null);
+        Transfer transfer = transfer("tr_other");
+        transfer.setDestination("acct_other");
+        when(moneyGateway.createTransfer(12500L, "pln", "acct_123", 41L, 7L, "payout:41:provider:transfer"))
+                .thenReturn(transfer);
+
+        StripeConnectPayoutResponseException exception = assertThrows(
+                StripeConnectPayoutResponseException.class,
+                () -> provider.dispatch(command)
+        );
+
+        assertEquals("STRIPE_TRANSFER_IDENTITY_MISMATCH", exception.failureCode());
+        assertNull(exception.trustedTransferReference());
+        assertNull(exception.trustedPayoutReference());
+    }
+
+    @Test
+    void payoutAmountMismatchPreservesTrustedTransferAndPayoutIdentityForReview() {
+        when(dispatchStateService.transferReference(41L)).thenReturn("tr_123");
+        when(moneyGateway.retrieveTransfer("tr_123")).thenReturn(transfer("tr_123"));
+        Payout payout = payout("po_123", "pending");
+        payout.setAmount(12400L);
+        when(moneyGateway.createConnectedPayout(12500L, "pln", "acct_123", 41L, 7L, "tr_123", "payout:41:provider:payout"))
+                .thenReturn(payout);
+
+        StripeConnectPayoutResponseException exception = assertThrows(
+                StripeConnectPayoutResponseException.class,
+                () -> provider.dispatch(command)
+        );
+
+        assertEquals("STRIPE_PAYOUT_AMOUNT_MISMATCH", exception.failureCode());
+        assertEquals("tr_123", exception.trustedTransferReference());
+        assertEquals("po_123", exception.trustedPayoutReference());
+    }
+
+    @Test
+    void payoutIdentityMismatchDoesNotTrustReturnedPayoutId() {
+        when(dispatchStateService.transferReference(41L)).thenReturn("tr_123");
+        when(moneyGateway.retrieveTransfer("tr_123")).thenReturn(transfer("tr_123"));
+        Payout payout = payout("po_other", "pending");
+        payout.setMetadata(Map.of("dofastPayoutId", "99", "dofastUserId", "7", "dofastTransferId", "tr_123"));
+        when(moneyGateway.createConnectedPayout(12500L, "pln", "acct_123", 41L, 7L, "tr_123", "payout:41:provider:payout"))
+                .thenReturn(payout);
+
+        StripeConnectPayoutResponseException exception = assertThrows(
+                StripeConnectPayoutResponseException.class,
+                () -> provider.dispatch(command)
+        );
+
+        assertEquals("STRIPE_PAYOUT_IDENTITY_MISMATCH", exception.failureCode());
+        assertEquals("tr_123", exception.trustedTransferReference());
+        assertNull(exception.trustedPayoutReference());
     }
 
     private Transfer transfer(String id) {

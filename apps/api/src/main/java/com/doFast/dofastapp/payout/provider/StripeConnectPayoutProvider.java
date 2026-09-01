@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.RoundingMode;
 import java.util.Locale;
+import java.util.Map;
 
 @Component
 @ConditionalOnProperty(
@@ -72,12 +73,26 @@ public class StripeConnectPayoutProvider implements PayoutProvider {
                     command.userId(),
                     command.idempotencyKey() + ":transfer"
             );
-            validateTransfer(transfer, amountInCents, currency, recipient.getProviderAccountId(), command);
+            validateTransfer(
+                    transfer,
+                    amountInCents,
+                    currency,
+                    recipient.getProviderAccountId(),
+                    command,
+                    null
+            );
             transferId = transfer.getId();
             dispatchStateService.recordTransferReference(command.payoutId(), transferId);
         } else {
             transfer = moneyGateway.retrieveTransfer(transferId);
-            validateTransfer(transfer, amountInCents, currency, recipient.getProviderAccountId(), command);
+            validateTransfer(
+                    transfer,
+                    amountInCents,
+                    currency,
+                    recipient.getProviderAccountId(),
+                    command,
+                    transferId
+            );
         }
 
         Payout payout = moneyGateway.createConnectedPayout(
@@ -97,40 +112,164 @@ public class StripeConnectPayoutProvider implements PayoutProvider {
         return PayoutDispatchResult.submitted(payout.getId());
     }
 
-    private void validateTransfer(
+    void validateTransfer(
             Transfer transfer,
             long amountInCents,
             String currency,
             String connectedAccountId,
-            PayoutDispatchCommand command
+            PayoutDispatchCommand command,
+            String alreadyPersistedTransferReference
     ) {
-        if (transfer == null || transfer.getId() == null || transfer.getId().isBlank()
-                || transfer.getAmount() == null || transfer.getAmount() != amountInCents
-                || transfer.getCurrency() == null || !currency.equalsIgnoreCase(transfer.getCurrency())
-                || transfer.getDestination() == null || !connectedAccountId.equals(transfer.getDestination())
-                || transfer.getMetadata() == null
-                || !command.payoutId().toString().equals(transfer.getMetadata().get("dofastPayoutId"))
-                || !command.userId().toString().equals(transfer.getMetadata().get("dofastUserId"))) {
-            throw new IllegalStateException("Stripe Connect transfer does not match payout request");
+        if (transfer == null) {
+            throw anomaly(
+                    "Stripe Connect returned no transfer after the provider call",
+                    "STRIPE_TRANSFER_RESPONSE_MISSING",
+                    alreadyPersistedTransferReference,
+                    null
+            );
+        }
+
+        String returnedId = normalizedReference(transfer.getId());
+        Map<String, String> metadata = transfer.getMetadata();
+        boolean returnedIdentityMatches = returnedId != null
+                && connectedAccountId.equals(transfer.getDestination())
+                && metadata != null
+                && command.payoutId().toString().equals(metadata.get("dofastPayoutId"))
+                && command.userId().toString().equals(metadata.get("dofastUserId"));
+        String trustedReference = normalizedReference(alreadyPersistedTransferReference);
+        if (trustedReference == null && returnedIdentityMatches) {
+            trustedReference = returnedId;
+        }
+
+        if (returnedId == null) {
+            throw anomaly(
+                    "Stripe Connect transfer response is missing an id",
+                    "STRIPE_TRANSFER_ID_MISSING",
+                    trustedReference,
+                    null
+            );
+        }
+        if (alreadyPersistedTransferReference != null
+                && !alreadyPersistedTransferReference.equals(returnedId)) {
+            throw anomaly(
+                    "Stripe Connect returned a different transfer than the persisted payout transfer",
+                    "STRIPE_TRANSFER_REFERENCE_MISMATCH",
+                    normalizedReference(alreadyPersistedTransferReference),
+                    null
+            );
+        }
+        if (!returnedIdentityMatches) {
+            throw anomaly(
+                    "Stripe Connect transfer identity does not match payout request",
+                    "STRIPE_TRANSFER_IDENTITY_MISMATCH",
+                    normalizedReference(alreadyPersistedTransferReference),
+                    null
+            );
+        }
+        if (transfer.getAmount() == null || transfer.getAmount() != amountInCents) {
+            throw anomaly(
+                    "Stripe Connect transfer amount does not match payout request",
+                    "STRIPE_TRANSFER_AMOUNT_MISMATCH",
+                    trustedReference,
+                    null
+            );
+        }
+        if (transfer.getCurrency() == null || !currency.equalsIgnoreCase(transfer.getCurrency())) {
+            throw anomaly(
+                    "Stripe Connect transfer currency does not match payout request",
+                    "STRIPE_TRANSFER_CURRENCY_MISMATCH",
+                    trustedReference,
+                    null
+            );
         }
     }
 
-    private void validatePayout(
+    void validatePayout(
             Payout payout,
             long amountInCents,
             String currency,
             String transferId,
             PayoutDispatchCommand command
     ) {
-        if (payout == null || payout.getId() == null || payout.getId().isBlank()
-                || payout.getAmount() == null || payout.getAmount() != amountInCents
-                || payout.getCurrency() == null || !currency.equalsIgnoreCase(payout.getCurrency())
-                || payout.getStatus() == null || payout.getStatus().isBlank()
-                || payout.getMetadata() == null
-                || !command.payoutId().toString().equals(payout.getMetadata().get("dofastPayoutId"))
-                || !command.userId().toString().equals(payout.getMetadata().get("dofastUserId"))
-                || !transferId.equals(payout.getMetadata().get("dofastTransferId"))) {
-            throw new IllegalStateException("Stripe Connect payout does not match payout request");
+        if (payout == null) {
+            throw anomaly(
+                    "Stripe Connect returned no payout after the provider call",
+                    "STRIPE_PAYOUT_RESPONSE_MISSING",
+                    transferId,
+                    null
+            );
         }
+
+        String payoutId = normalizedReference(payout.getId());
+        Map<String, String> metadata = payout.getMetadata();
+        boolean identityMatches = payoutId != null
+                && metadata != null
+                && command.payoutId().toString().equals(metadata.get("dofastPayoutId"))
+                && command.userId().toString().equals(metadata.get("dofastUserId"))
+                && transferId.equals(metadata.get("dofastTransferId"));
+        String trustedPayoutReference = identityMatches ? payoutId : null;
+
+        if (payoutId == null) {
+            throw anomaly(
+                    "Stripe Connect payout response is missing an id",
+                    "STRIPE_PAYOUT_ID_MISSING",
+                    transferId,
+                    null
+            );
+        }
+        if (!identityMatches) {
+            throw anomaly(
+                    "Stripe Connect payout identity does not match payout request",
+                    "STRIPE_PAYOUT_IDENTITY_MISMATCH",
+                    transferId,
+                    null
+            );
+        }
+        if (payout.getAmount() == null || payout.getAmount() != amountInCents) {
+            throw anomaly(
+                    "Stripe Connect payout amount does not match payout request",
+                    "STRIPE_PAYOUT_AMOUNT_MISMATCH",
+                    transferId,
+                    trustedPayoutReference
+            );
+        }
+        if (payout.getCurrency() == null || !currency.equalsIgnoreCase(payout.getCurrency())) {
+            throw anomaly(
+                    "Stripe Connect payout currency does not match payout request",
+                    "STRIPE_PAYOUT_CURRENCY_MISMATCH",
+                    transferId,
+                    trustedPayoutReference
+            );
+        }
+        if (payout.getStatus() == null || payout.getStatus().isBlank()) {
+            throw anomaly(
+                    "Stripe Connect payout response is missing a status",
+                    "STRIPE_PAYOUT_STATUS_MISSING",
+                    transferId,
+                    trustedPayoutReference
+            );
+        }
+    }
+
+    private StripeConnectPayoutResponseException anomaly(
+            String message,
+            String failureCode,
+            String trustedTransferReference,
+            String trustedPayoutReference
+    ) {
+        return new StripeConnectPayoutResponseException(
+                message,
+                failureCode,
+                normalizedReference(trustedTransferReference),
+                normalizedReference(trustedPayoutReference)
+        );
+    }
+
+    private String normalizedReference(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.length() <= 255 ? normalized : null;
     }
 }
