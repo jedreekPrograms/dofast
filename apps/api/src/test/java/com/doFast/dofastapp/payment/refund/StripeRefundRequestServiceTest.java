@@ -6,10 +6,12 @@ import com.doFast.dofastapp.payment.refund.dto.CreateStripeRefundRequest;
 import com.doFast.dofastapp.payment.refund.entity.StripeRefundRequest;
 import com.doFast.dofastapp.payment.refund.entity.StripeRefundStatus;
 import com.doFast.dofastapp.payment.refund.repository.StripeRefundRequestRepository;
+import com.doFast.dofastapp.payment.refund.service.StripeRefundProviderResult;
 import com.doFast.dofastapp.payment.refund.service.StripeRefundRequestService;
 import com.doFast.dofastapp.payment.repository.PaymentTransactionRepository;
 import com.doFast.dofastapp.payment.risk.entity.StripePaymentDispute;
 import com.doFast.dofastapp.payment.risk.repository.StripePaymentDisputeRepository;
+import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import org.junit.jupiter.api.Test;
 
@@ -23,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -52,6 +55,39 @@ class StripeRefundRequestServiceTest {
                 .hasMessageContaining("dispute Stripe");
 
         verifyNoInteractions(wallet);
+    }
+
+    @Test
+    void providerRejectionDoesNotMarkWalletRestoredWhenLedgerRestoreWasNotApplied() {
+        StripeRefundRequestRepository refunds = mock(StripeRefundRequestRepository.class);
+        PaymentTransactionRepository payments = mock(PaymentTransactionRepository.class);
+        StripePaymentDisputeRepository disputes = mock(StripePaymentDisputeRepository.class);
+        WalletService wallet = mock(WalletService.class);
+        StripeRefundRequestService service = new StripeRefundRequestService(refunds, payments, disputes, wallet);
+
+        StripeRefundRequest request = mock(StripeRefundRequest.class);
+        when(request.getId()).thenReturn(1002L);
+        when(request.getUserId()).thenReturn(7L);
+        when(request.getAmount()).thenReturn(new BigDecimal("15.00"));
+        when(request.getStatus()).thenReturn(StripeRefundStatus.FAILED);
+        when(request.isWalletRestored()).thenReturn(false);
+        when(refunds.findByIdForUpdate(1002L)).thenReturn(Optional.of(request));
+        when(wallet.creditRestoringOperation(
+                7L,
+                new BigDecimal("15.00"),
+                WalletTransactionType.STRIPE_REFUND_RESTORE,
+                null,
+                "stripe:refund:1002:restore",
+                "stripe:refund:1002:reserve"
+        )).thenReturn(false);
+
+        assertThatThrownBy(() -> service.recordProviderResult(
+                1002L,
+                new StripeRefundProviderResult("re_failed", "failed", "declined")
+        )).isInstanceOf(ConflictException.class)
+                .hasMessageContaining("niespójny stan zwrotu rezerwacji");
+
+        verify(request, never()).markWalletRestored(any(LocalDateTime.class));
     }
 
     @Test
