@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.publication;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -37,7 +39,7 @@ class JobPublicationPaymentIntentCreateStateServiceTest {
     void prepareCommitsDurableCreateClaimBeforeReturningProviderCommand() {
         LocalDateTime now = LocalDateTime.now();
         JobPublication publication = paymentRequiredPublication(now, now.plusMinutes(10));
-        when(publicationRepository.findByIdForUpdate(99L)).thenReturn(Optional.of(publication));
+        when(publicationRepository.findOwnedByIdForUpdate(99L, 7L)).thenReturn(Optional.of(publication));
 
         JobPublicationPaymentIntentCreateCommand command = stateService.prepareForOwner(99L, owner);
 
@@ -57,12 +59,26 @@ class JobPublicationPaymentIntentCreateStateServiceTest {
         LocalDateTime now = LocalDateTime.now();
         JobPublication publication = paymentRequiredPublication(now, now.plusMinutes(10));
         publication.claimStripePaymentIntentCreate(now, now.plusMinutes(2));
-        when(publicationRepository.findByIdForUpdate(99L)).thenReturn(Optional.of(publication));
+        when(publicationRepository.findOwnedByIdForUpdate(99L, 7L)).thenReturn(Optional.of(publication));
 
         assertThatThrownBy(() -> stateService.prepareForOwner(99L, owner))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("już przygotowywana");
         assertThat(publication.getStripePaymentIntentCreateAttemptCount()).isEqualTo(1);
+    }
+
+    @Test
+    void outsiderCannotEnumeratePublicationThroughPaymentPreparation() {
+        User outsider = new User("outsider@example.com", "outsider");
+        ReflectionTestUtils.setField(outsider, "id", 8L);
+        when(publicationRepository.findOwnedByIdForUpdate(99L, 8L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> stateService.prepareForOwner(99L, outsider))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Publikacja nie istnieje");
+
+        verify(publicationRepository, never()).findByIdForUpdate(99L);
+        verify(publicationRepository, never()).saveAndFlush(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
