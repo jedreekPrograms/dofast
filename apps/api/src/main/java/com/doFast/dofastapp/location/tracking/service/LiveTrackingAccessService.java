@@ -3,7 +3,6 @@ package com.doFast.dofastapp.location.tracking.service;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
-import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.user.entity.User;
@@ -11,6 +10,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class LiveTrackingAccessService {
+
+    private static final String TRACKING_ACCESS_DENIED =
+            "Lokalizacja wykonawcy jest dostępna tylko dla stron aktywnego zlecenia";
 
     private final JobRepository jobRepository;
 
@@ -40,10 +42,10 @@ public class LiveTrackingAccessService {
 
     private Job getParticipantJob(Long jobId, User user) {
         if (user == null || user.getId() == null) {
-            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+            throw new ForbiddenOperationException(TRACKING_ACCESS_DENIED);
         }
         return jobRepository.findParticipantById(jobId, user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+                .orElseThrow(() -> new ForbiddenOperationException(TRACKING_ACCESS_DENIED));
     }
 
     private void requireActiveTrackingStatus(Job job) {
