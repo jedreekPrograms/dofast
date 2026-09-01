@@ -15,6 +15,7 @@ import com.doFast.dofastapp.review.dto.ReviewResponse;
 import com.doFast.dofastapp.review.entity.Review;
 import com.doFast.dofastapp.review.repository.ReviewRepository;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserStatus;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.user.service.UserBlockService;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -113,7 +114,7 @@ public class ReviewService {
     }
 
     public PageResponse<ReviewResponse> getReceivedReviews(Long userId, int page, int size) {
-        User reviewed = userRepository.findById(userId)
+        User reviewed = userRepository.findByIdAndStatus(userId, UserStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
 
         Page<Review> result = reviewRepository.findByReviewedOrderByCreatedAtDescIdDesc(

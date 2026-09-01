@@ -188,6 +188,17 @@ jobs:
             "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'uk_reviews_job_reviewer';")
           test "${UNIQUE_CONSTRAINT//[[:space:]]/}" = "1"
 
+          docker compose exec -T db psql -U dofast -d dofast -c \
+            "UPDATE users SET status = 'SUSPENDED' WHERE id = $WORKER_ID;" >/dev/null
+
+          SUSPENDED_PROFILE_STATUS=$(curl --silent --output /tmp/trust-suspended-profile.json --write-out '%{http_code}' \
+            "http://localhost:8080/users/$WORKER_ID/profile")
+          test "$SUSPENDED_PROFILE_STATUS" = "404"
+
+          SUSPENDED_REVIEWS_STATUS=$(curl --silent --output /tmp/trust-suspended-reviews.json --write-out '%{http_code}' \
+            "http://localhost:8080/reviews/users/$WORKER_ID?page=0&size=10")
+          test "$SUSPENDED_REVIEWS_STATUS" = "404"
+
       - name: Diagnostics
         if: failure()
         run: |
