@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -53,13 +54,13 @@ class JobReportServiceTest {
     void createsReportAndNormalizesBlankDetails() {
         when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
         when(reportRepository.existsByReporter_IdAndJob_Id(7L, 11L)).thenReturn(false);
-        when(reportRepository.save(org.mockito.ArgumentMatchers.any(JobReport.class)))
+        when(reportRepository.saveAndFlush(org.mockito.ArgumentMatchers.any(JobReport.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         service.report(11L, new JobReportRequest(JobReportReason.FRAUD, "   "), reporter);
 
         ArgumentCaptor<JobReport> captor = ArgumentCaptor.forClass(JobReport.class);
-        verify(reportRepository).save(captor.capture());
+        verify(reportRepository).saveAndFlush(captor.capture());
         assertEquals(JobReportReason.FRAUD, captor.getValue().getReason());
         assertEquals(null, captor.getValue().getDetails());
     }
@@ -75,7 +76,7 @@ class JobReportServiceTest {
 
         verify(jobRepository, never()).findById(11L);
         verify(reportRepository, never()).existsByReporter_IdAndJob_Id(7L, 11L);
-        verify(reportRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(reportRepository, never()).saveAndFlush(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -126,7 +127,7 @@ class JobReportServiceTest {
                 ForbiddenOperationException.class,
                 () -> service.report(11L, new JobReportRequest(JobReportReason.SPAM, null), reporter)
         );
-        verify(reportRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(reportRepository, never()).saveAndFlush(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -138,6 +139,21 @@ class JobReportServiceTest {
                 ConflictException.class,
                 () -> service.report(11L, new JobReportRequest(JobReportReason.OTHER, "duplicate"), reporter)
         );
-        verify(reportRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(reportRepository, never()).saveAndFlush(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void translatesConcurrentDuplicateConstraintViolationToConflict() {
+        when(jobRepository.findByIdAndStatus(11L, JobStatus.OPEN)).thenReturn(Optional.of(job));
+        when(reportRepository.existsByReporter_IdAndJob_Id(7L, 11L)).thenReturn(false);
+        when(reportRepository.saveAndFlush(org.mockito.ArgumentMatchers.any(JobReport.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_job_reports_reporter_job"));
+
+        assertThrows(
+                ConflictException.class,
+                () -> service.report(11L, new JobReportRequest(JobReportReason.FRAUD, "race"), reporter)
+        );
+
+        verify(reportRepository).saveAndFlush(org.mockito.ArgumentMatchers.any(JobReport.class));
     }
 }
