@@ -86,8 +86,11 @@ public class DisputeService {
     public List<DisputeResponse> getMyDisputes(User currentUser) {
         return disputeRepository.findAllForParticipant(currentUser).stream().map(this::toResponse).toList();
     }
+
     public DisputeDetailResponse getDispute(Long disputeId, User currentUser) {
-        Dispute dispute = getForRead(disputeId); assertParticipantOrAdmin(dispute, currentUser); return toDetail(dispute);
+        Dispute dispute = getForRead(disputeId);
+        assertParticipantOrAdminForRead(dispute, currentUser);
+        return toDetail(dispute);
     }
 
     @Transactional
@@ -189,8 +192,12 @@ public class DisputeService {
     private void assertParticipant(Job job, User user) {
         if (!sameUser(job.getCreatedBy(), user) && !sameUser(job.getTakenBy(), user)) throw new ForbiddenOperationException("Tylko strony zlecenia mogą otworzyć spór");
     }
-    private void assertParticipantOrAdmin(Dispute dispute, User user) {
-        if (user != null && user.getRole() == UserRole.ADMIN) return; assertParticipant(dispute.getJob(), user);
+    private void assertParticipantOrAdminForRead(Dispute dispute, User user) {
+        if (user != null && user.getRole() == UserRole.ADMIN) return;
+        Job job = dispute.getJob();
+        if (sameUser(job.getCreatedBy(), user) || sameUser(job.getTakenBy(), user)) return;
+        // A neutral 404 keeps authenticated outsiders from confirming that a sensitive dispute ID exists.
+        throw new ResourceNotFoundException("Spór nie istnieje");
     }
     private void assertAdmin(User user) {
         if (user == null || user.getRole() != UserRole.ADMIN) throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
