@@ -3,9 +3,11 @@ package com.doFast.dofastapp.job.report;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
+import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.enums.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +38,8 @@ class AdminJobReportServiceTest {
     @Mock private JobReportAccountEnforcementRepository accountEnforcementRepository;
     @Mock private JobRepository jobRepository;
     @Mock private NotificationService notificationService;
+    @Mock private TransactionService transactionService;
+    @Mock private JobExpenseService expenseService;
 
     private AdminJobReportService service;
     private JobReport report;
@@ -50,7 +55,9 @@ class AdminJobReportServiceTest {
                 enforcementRepository,
                 accountEnforcementRepository,
                 jobRepository,
-                notificationService
+                notificationService,
+                transactionService,
+                expenseService
         );
         reporter = new User("reporter@example.com", "Reporter");
         owner = new User("owner@example.com", "Owner");
@@ -134,7 +141,7 @@ class AdminJobReportServiceTest {
     }
 
     @Test
-    void cancelsReviewedOpenJobAndPersistsAuditRecord() {
+    void cancelsReviewedOpenJobRefundsFundingAndPersistsAuditRecord() {
         report.moderate(JobReportStatus.REVIEWED, admin, "confirmed");
         when(repository.findById(15L)).thenReturn(Optional.of(report));
         when(enforcementRepository.existsByReport_Id(15L)).thenReturn(false);
@@ -148,13 +155,16 @@ class AdminJobReportServiceTest {
         assertEquals(JobStatus.CANCELLED, job.getStatus());
         assertEquals(JobReportEnforcementAction.CANCEL_OPEN_JOB, response.action());
         assertEquals("prohibited listing", response.reason());
+        verify(transactionService).refundMoney(job);
+        verify(expenseService).refundAll(job);
         verify(enforcementRepository).save(any(JobReportEnforcement.class));
     }
 
     @Test
-    void suspendsReviewedJobOwnerAndCancelsTheirOpenListings() {
+    void suspendsReviewedJobOwnerAndRefundsAllCancelledOpenListings() {
         report.moderate(JobReportStatus.REVIEWED, admin, "confirmed");
         Job secondOpenJob = new Job();
+        ReflectionTestUtils.setField(secondOpenJob, "id", 12L);
         secondOpenJob.setCreatedBy(owner);
         secondOpenJob.setStatus(JobStatus.OPEN);
         when(repository.findById(15L)).thenReturn(Optional.of(report));
@@ -177,11 +187,15 @@ class AdminJobReportServiceTest {
         assertEquals(JobStatus.CANCELLED, secondOpenJob.getStatus());
         assertEquals(8L, response.targetUserId());
         assertEquals("repeated fraud", response.reason());
+        verify(transactionService).refundMoney(job);
+        verify(transactionService).refundMoney(secondOpenJob);
+        verify(expenseService).refundAll(job);
+        verify(expenseService).refundAll(secondOpenJob);
         verify(accountEnforcementRepository).save(any(JobReportAccountEnforcement.class));
     }
 
     @Test
-    void rejectsAccountSuspensionWhileTargetHasActiveLifecycleJob() {
+    void rejectsAccountSuspensionWhileTargetHasActiveLifecycleJobWithoutRefundingAnything() {
         report.moderate(JobReportStatus.REVIEWED, admin, "confirmed");
         when(repository.findById(15L)).thenReturn(Optional.of(report));
         when(accountEnforcementRepository.existsByReport_Id(15L)).thenReturn(false);
@@ -199,6 +213,8 @@ class AdminJobReportServiceTest {
                 )
         );
         assertEquals(UserStatus.ACTIVE, owner.getStatus());
+        verify(transactionService, never()).refundMoney(any());
+        verify(expenseService, never()).refundAll(any());
     }
 
     @Test
@@ -230,6 +246,8 @@ class AdminJobReportServiceTest {
                         admin
                 )
         );
+        verify(transactionService, never()).refundMoney(any());
+        verify(expenseService, never()).refundAll(any());
     }
 
     @Test
