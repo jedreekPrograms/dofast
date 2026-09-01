@@ -59,8 +59,7 @@ public class DisputeService {
 
     @Transactional
     public DisputeDetailResponse openDispute(CreateDisputeRequest request, User currentUser) {
-        Job job = jobRepository.findByIdForUpdate(request.jobId()).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
-        assertParticipant(job, currentUser);
+        Job job = getParticipantJobForUpdate(request.jobId(), currentUser);
         if (job.getStatus() != JobStatus.IN_PROGRESS && job.getStatus() != JobStatus.COMPLETION_REQUESTED)
             throw new ConflictException("Spór można otworzyć tylko dla aktywnego, przyjętego zlecenia");
         disputeRepository.findFirstByJobAndStatusInOrderByOpenedAtDesc(job, ACTIVE_STATUSES).ifPresent(existing -> {
@@ -187,11 +186,26 @@ public class DisputeService {
         return note + " | approvedExpenseAmount=" + request.approvedExpenseAmount().toPlainString() + " PLN";
     }
 
+    private String resolutionMessage(Dispute dispute, DisputeResolution resolution) {
+        String action = switch (resolution) {
+            case RELEASE_TO_WORKER -> "środki zostały wypłacone wykonawcy";
+            case REFUND_TO_REQUESTER -> "środki zostały zwrócone zlecającemu";
+            case RESUME_JOB -> "zlecenie zostało wznowione";
+        };
+        return "Spór dotyczący zlecenia „" + dispute.getJob().getTitle() + "” został rozstrzygnięty: " + action + ".";
+    }
+
+    private Job getParticipantJobForUpdate(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantByIdForUpdate(jobId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
     private Dispute getForRead(Long id) { return disputeRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje")); }
     private Dispute getForUpdate(Long id) { return disputeRepository.findByIdForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje")); }
-    private void assertParticipant(Job job, User user) {
-        if (!sameUser(job.getCreatedBy(), user) && !sameUser(job.getTakenBy(), user)) throw new ForbiddenOperationException("Tylko strony zlecenia mogą otworzyć spór");
-    }
     private void assertParticipantOrAdminForRead(Dispute dispute, User user) {
         if (user != null && user.getRole() == UserRole.ADMIN) return;
         Job job = dispute.getJob();
@@ -221,14 +235,6 @@ public class DisputeService {
         notificationService.notify(job.getCreatedBy(), type, title, body, job, dispute);
         if (job.getTakenBy() != null && !sameUser(job.getTakenBy(), job.getCreatedBy()))
             notificationService.notify(job.getTakenBy(), type, title, body, job, dispute);
-    }
-    private String resolutionMessage(Dispute dispute, DisputeResolution resolution) {
-        String action = switch (resolution) {
-            case RELEASE_TO_WORKER -> "środki zostały wypłacone wykonawcy";
-            case REFUND_TO_REQUESTER -> "środki zostały zwrócone zlecającemu";
-            case RESUME_JOB -> "zlecenie zostało wznowione";
-        };
-        return "Spór dotyczący zlecenia „" + dispute.getJob().getTitle() + "” został rozstrzygnięty: " + action + ".";
     }
     private void recordEvent(Dispute dispute, User actor, DisputeEventType type, String note, LocalDateTime at) {
         DisputeEvent event = new DisputeEvent(); event.setDispute(dispute); event.setActor(actor); event.setEventType(type);

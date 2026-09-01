@@ -96,8 +96,10 @@ jobs:
             http://localhost:8080/users/login)
           OUTSIDER_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])' <<< "$OUTSIDER_LOGIN")
 
-          docker compose exec -T db psql -U dofast -d dofast -c \
-            "UPDATE wallets SET balance = 100.00 WHERE user_id = $REQUESTER_ID;"
+          bash .github/scripts/seed-wallet-funding.sh \
+            "$REQUESTER_ID" 100.00 PLATFORM_ADJUSTMENT \
+            "smoke:reviews:requester:$REQUESTER_ID" \
+            "smoke:reviews:seed:$REQUESTER_ID"
           CATEGORY_ID=$(docker compose exec -T db psql -U dofast -d dofast -tAc \
             "SELECT id FROM job_categories WHERE slug = 'malowanie' AND active = TRUE;")
           CATEGORY_ID="${CATEGORY_ID//[[:space:]]/}"
@@ -126,12 +128,17 @@ jobs:
             "http://localhost:8080/reviews/jobs/$JOB_ID/eligibility")
           python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["eligible"] is True; assert d["counterpartId"] == int(sys.argv[1])' "$WORKER_ID" <<< "$REQUESTER_ELIGIBILITY"
 
+          OUTSIDER_ELIGIBILITY_STATUS=$(curl --silent --output /tmp/trust-outsider-eligibility.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer $OUTSIDER_TOKEN" \
+            "http://localhost:8080/reviews/jobs/$JOB_ID/eligibility")
+          test "$OUTSIDER_ELIGIBILITY_STATUS" = "404"
+
           OUTSIDER_STATUS=$(curl --silent --output /tmp/trust-outsider-review.json --write-out '%{http_code}' \
             -H "Authorization: Bearer $OUTSIDER_TOKEN" \
             -H 'Content-Type: application/json' \
-            -d "{\"jobId\":$JOB_ID,\"rating\":5,\"comment\":\"Must be forbidden\"}" \
+            -d "{\"jobId\":$JOB_ID,\"rating\":5,\"comment\":\"Must be hidden\"}" \
             http://localhost:8080/reviews)
-          test "$OUTSIDER_STATUS" = "403"
+          test "$OUTSIDER_STATUS" = "404"
 
           REQUESTER_REVIEW=$(curl --fail --silent \
             -H "Authorization: Bearer $REQUESTER_TOKEN" \

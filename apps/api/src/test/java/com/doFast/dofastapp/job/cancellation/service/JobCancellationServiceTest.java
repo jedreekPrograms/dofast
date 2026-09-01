@@ -3,6 +3,7 @@ package com.doFast.dofastapp.job.cancellation.service;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.cancellation.dto.CreateJobCancellationRequest;
 import com.doFast.dofastapp.job.cancellation.entity.JobCancellationRequest;
 import com.doFast.dofastapp.job.cancellation.enums.JobCancellationStatus;
@@ -69,7 +70,7 @@ class JobCancellationServiceTest {
     @Test
     void cannotRequestNegotiatedCancellationBeforeJobIsAccepted() {
         Job job = job(JobStatus.OPEN, owner, null);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, owner.getId())).thenReturn(Optional.of(job));
 
         assertThrows(
                 ConflictException.class,
@@ -81,7 +82,7 @@ class JobCancellationServiceTest {
     @Test
     void participantCanCreatePendingRequestAndCounterpartyIsNotified() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, worker.getId())).thenReturn(Optional.of(job));
         when(cancellationRepository.findPendingForUpdate(10L, JobCancellationStatus.PENDING))
                 .thenReturn(Optional.empty());
         when(cancellationRepository.save(any(JobCancellationRequest.class))).thenAnswer(invocation -> {
@@ -106,22 +107,35 @@ class JobCancellationServiceTest {
     }
 
     @Test
-    void outsiderCannotRequestCancellation() {
-        Job job = job(JobStatus.IN_PROGRESS, owner, worker);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+    void outsiderCannotEnumerateJobThroughCancellationRequest() {
+        when(jobRepository.findParticipantByIdForUpdate(10L, outsider.getId())).thenReturn(Optional.empty());
 
         assertThrows(
-                ForbiddenOperationException.class,
+                ResourceNotFoundException.class,
                 () -> service.requestCancellation(10L, new CreateJobCancellationRequest("Nie jestem stroną"), outsider)
         );
+
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+        verify(cancellationRepository, never()).findPendingForUpdate(any(), any());
         verify(cancellationRepository, never()).save(any());
+    }
+
+    @Test
+    void outsiderCannotEnumeratePendingCancellation() {
+        when(jobRepository.findParticipantById(10L, outsider.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> service.getPending(10L, outsider));
+
+        verify(jobRepository, never()).findById(10L);
+        verify(cancellationRepository, never())
+                .findFirstByJob_IdAndStatusOrderByRequestedAtDesc(any(), any());
     }
 
     @Test
     void secondPendingRequestIsRejected() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
         JobCancellationRequest existing = pending(job, owner, 44L);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, worker.getId())).thenReturn(Optional.of(job));
         when(cancellationRepository.findPendingForUpdate(10L, JobCancellationStatus.PENDING))
                 .thenReturn(Optional.of(existing));
 
@@ -136,7 +150,7 @@ class JobCancellationServiceTest {
     void requesterCannotApproveOwnCancellationRequest() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
         JobCancellationRequest request = pending(job, owner, 44L);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, owner.getId())).thenReturn(Optional.of(job));
         when(cancellationRepository.findPendingForUpdate(10L, JobCancellationStatus.PENDING))
                 .thenReturn(Optional.of(request));
 
@@ -151,7 +165,7 @@ class JobCancellationServiceTest {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
         JobCancellationRequest request = pending(job, owner, 44L);
 
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, worker.getId())).thenReturn(Optional.of(job));
         when(cancellationRepository.findPendingForUpdate(10L, JobCancellationStatus.PENDING))
                 .thenReturn(Optional.of(request));
         when(cancellationRepository.save(any(JobCancellationRequest.class)))
@@ -179,7 +193,7 @@ class JobCancellationServiceTest {
     void counterpartyCanDeclineWithoutTouchingEscrowOrTracking() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
         JobCancellationRequest request = pending(job, owner, 44L);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, worker.getId())).thenReturn(Optional.of(job));
         when(cancellationRepository.findPendingForUpdate(10L, JobCancellationStatus.PENDING))
                 .thenReturn(Optional.of(request));
         when(cancellationRepository.save(any(JobCancellationRequest.class)))
@@ -202,7 +216,7 @@ class JobCancellationServiceTest {
     void requesterCanWithdrawWithoutTouchingEscrowOrTracking() {
         Job job = job(JobStatus.IN_PROGRESS, owner, worker);
         JobCancellationRequest request = pending(job, worker, 44L);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, worker.getId())).thenReturn(Optional.of(job));
         when(cancellationRepository.findPendingForUpdate(10L, JobCancellationStatus.PENDING))
                 .thenReturn(Optional.of(request));
         when(cancellationRepository.save(any(JobCancellationRequest.class)))

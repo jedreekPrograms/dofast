@@ -45,15 +45,14 @@ public class JobCancellationService {
     }
 
     public Optional<JobCancellationResponse> getPending(Long jobId, User currentUser) {
-        Job job = getJob(jobId);
-        assertParticipant(job, currentUser);
+        Job job = getParticipantJob(jobId, currentUser);
         return cancellationRepository.findFirstByJob_IdAndStatusOrderByRequestedAtDesc(jobId, JobCancellationStatus.PENDING)
                 .map(request -> toResponse(request, job));
     }
 
     @Transactional
     public JobCancellationResponse requestCancellation(Long jobId, CreateJobCancellationRequest payload, User currentUser) {
-        Job job = getJobForUpdate(jobId);
+        Job job = getParticipantJobForUpdate(jobId, currentUser);
         assertCanNegotiateCancellation(job, currentUser);
         if (cancellationRepository.findPendingForUpdate(jobId, JobCancellationStatus.PENDING).isPresent())
             throw new ConflictException("Dla tego zlecenia istnieje już oczekująca prośba o anulowanie");
@@ -67,7 +66,7 @@ public class JobCancellationService {
 
     @Transactional
     public JobCancellationResponse approve(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
+        Job job = getParticipantJobForUpdate(jobId, currentUser);
         assertCanNegotiateCancellation(job, currentUser);
         JobCancellationRequest request = getPendingForUpdate(jobId);
         assertCounterpartyCanResolve(request, job, currentUser);
@@ -91,7 +90,7 @@ public class JobCancellationService {
 
     @Transactional
     public JobCancellationResponse decline(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
+        Job job = getParticipantJobForUpdate(jobId, currentUser);
         assertCanNegotiateCancellation(job, currentUser);
         JobCancellationRequest request = getPendingForUpdate(jobId);
         assertCounterpartyCanResolve(request, job, currentUser);
@@ -104,7 +103,7 @@ public class JobCancellationService {
 
     @Transactional
     public JobCancellationResponse withdraw(Long jobId, User currentUser) {
-        Job job = getJobForUpdate(jobId);
+        Job job = getParticipantJobForUpdate(jobId, currentUser);
         assertCanNegotiateCancellation(job, currentUser);
         JobCancellationRequest request = getPendingForUpdate(jobId);
         if (!sameUser(request.getRequestedBy(), currentUser)) throw new ForbiddenOperationException("Tylko autor prośby może ją wycofać");
@@ -116,8 +115,24 @@ public class JobCancellationService {
         return toResponse(saved, job);
     }
 
-    private Job getJob(Long jobId) { return jobRepository.findById(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje")); }
-    private Job getJobForUpdate(Long jobId) { return jobRepository.findByIdForUpdate(jobId).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje")); }
+    private Job getParticipantJob(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantById(jobId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private Job getParticipantJobForUpdate(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantByIdForUpdate(jobId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
     private JobCancellationRequest getPendingForUpdate(Long jobId) {
         return cancellationRepository.findPendingForUpdate(jobId, JobCancellationStatus.PENDING)
                 .orElseThrow(() -> new ResourceNotFoundException("Brak oczekującej prośby o anulowanie"));

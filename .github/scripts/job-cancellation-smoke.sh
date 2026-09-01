@@ -64,7 +64,7 @@ python3 -c 'import json; d=json.load(open("/tmp/accepted.json")); assert d["stat
 OUTSIDER_STATUS=$(curl --silent --show-error --output /tmp/outsider-cancellation.json --write-out '%{http_code}' \
   -H "Authorization: Bearer $OUTSIDER_TOKEN" \
   "$api/jobs/$JOB_ID/cancellation")
-test "$OUTSIDER_STATUS" = "403"
+test "$OUTSIDER_STATUS" = "404"
 
 REQUEST=$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $OWNER_TOKEN" \
@@ -72,6 +72,16 @@ REQUEST=$(curl --fail --silent --show-error \
   -d '{"reason":"Zmiana planów — obie strony uzgodniły przerwanie realizacji."}' \
   "$api/jobs/$JOB_ID/cancellation")
 REQUEST_ID=$(python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]=="PENDING"; assert d["requestedById"]=='"$OWNER_ID"'; assert d["counterpartyId"]=='"$WORKER_ID"'; print(d["id"])' <<< "$REQUEST")
+
+OUTSIDER_PENDING_STATUS=$(curl --silent --show-error --output /tmp/outsider-pending-cancellation.json --write-out '%{http_code}' \
+  -H "Authorization: Bearer $OUTSIDER_TOKEN" \
+  "$api/jobs/$JOB_ID/cancellation")
+test "$OUTSIDER_PENDING_STATUS" = "404"
+
+OUTSIDER_APPROVE_STATUS=$(curl --silent --show-error --output /tmp/outsider-approve-cancellation.json --write-out '%{http_code}' \
+  -X POST -H "Authorization: Bearer $OUTSIDER_TOKEN" \
+  "$api/jobs/$JOB_ID/cancellation/approve")
+test "$OUTSIDER_APPROVE_STATUS" = "404"
 
 SELF_APPROVE_STATUS=$(curl --silent --show-error --output /tmp/self-approve.json --write-out '%{http_code}' \
   -X POST -H "Authorization: Bearer $OWNER_TOKEN" \
@@ -122,4 +132,4 @@ POST_CANCEL_PENDING_STATUS=$(curl --silent --show-error --output /tmp/no-pending
   "$api/jobs/$JOB_ID/cancellation")
 test "$POST_CANCEL_PENDING_STATUS" = "204"
 
-echo "Negotiated cancellation, escrow refund, funding restoration and tracking shutdown: OK"
+echo "Negotiated cancellation, neutral outsider privacy, escrow refund, funding restoration and tracking shutdown: OK"

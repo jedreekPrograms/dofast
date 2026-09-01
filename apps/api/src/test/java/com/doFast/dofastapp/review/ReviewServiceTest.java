@@ -2,7 +2,7 @@ package com.doFast.dofastapp.review;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
-import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.notification.enums.NotificationType;
@@ -61,7 +61,7 @@ class ReviewServiceTest {
     @Test
     void requesterCanReviewWorkerAfterCompletedJob() {
         Job job = job(JobStatus.DONE);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, requester.getId())).thenReturn(Optional.of(job));
         when(reviewRepository.findByJobAndReviewer(job, requester)).thenReturn(Optional.empty());
         when(reviewRepository.saveAndFlush(any(Review.class))).thenAnswer(invocation -> {
             Review review = invocation.getArgument(0);
@@ -87,7 +87,7 @@ class ReviewServiceTest {
     @Test
     void blockedParticipantsKeepReviewAccountabilityWithoutDirectNotification() {
         Job job = job(JobStatus.DONE);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, requester.getId())).thenReturn(Optional.of(job));
         when(reviewRepository.findByJobAndReviewer(job, requester)).thenReturn(Optional.empty());
         when(reviewRepository.saveAndFlush(any(Review.class))).thenAnswer(invocation -> {
             Review review = invocation.getArgument(0);
@@ -107,7 +107,7 @@ class ReviewServiceTest {
     @Test
     void workerCanReviewRequesterAfterCompletedJob() {
         Job job = job(JobStatus.DONE);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, worker.getId())).thenReturn(Optional.of(job));
         when(reviewRepository.findByJobAndReviewer(job, worker)).thenReturn(Optional.empty());
         when(reviewRepository.saveAndFlush(any(Review.class))).thenAnswer(invocation -> {
             Review review = invocation.getArgument(0);
@@ -122,21 +122,23 @@ class ReviewServiceTest {
     }
 
     @Test
-    void outsiderCannotReviewJobParticipants() {
-        Job job = job(JobStatus.DONE);
+    void outsiderCannotEnumerateCompletedJobThroughReviewCreation() {
         User outsider = user(3L, "outsider");
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, outsider.getId())).thenReturn(Optional.empty());
 
         assertThrows(
-                ForbiddenOperationException.class,
+                ResourceNotFoundException.class,
                 () -> reviewService.addReview(request(10L, 5, "Nie moja transakcja"), outsider)
         );
+
+        verify(jobRepository, never()).findByIdForUpdate(10L);
+        verify(reviewRepository, never()).findByJobAndReviewer(any(), any());
     }
 
     @Test
     void unfinishedJobCannotBeReviewed() {
         Job job = job(JobStatus.IN_PROGRESS);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, requester.getId())).thenReturn(Optional.of(job));
 
         assertThrows(
                 ConflictException.class,
@@ -147,7 +149,7 @@ class ReviewServiceTest {
     @Test
     void sameParticipantCannotReviewSameJobTwice() {
         Job job = job(JobStatus.DONE);
-        when(jobRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantByIdForUpdate(10L, requester.getId())).thenReturn(Optional.of(job));
         when(reviewRepository.findByJobAndReviewer(job, requester)).thenReturn(Optional.of(new Review()));
 
         assertThrows(
@@ -159,13 +161,24 @@ class ReviewServiceTest {
     @Test
     void eligibilityTurnsOffAfterExistingReview() {
         Job job = job(JobStatus.DONE);
-        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(jobRepository.findParticipantById(10L, requester.getId())).thenReturn(Optional.of(job));
         when(reviewRepository.findByJobAndReviewer(job, requester)).thenReturn(Optional.of(new Review()));
 
         var eligibility = reviewService.getEligibility(10L, requester);
 
         assertFalse(eligibility.eligible());
         assertEquals(worker.getId(), eligibility.counterpartId());
+    }
+
+    @Test
+    void outsiderCannotEnumerateCompletedJobThroughReviewEligibility() {
+        User outsider = user(3L, "outsider");
+        when(jobRepository.findParticipantById(10L, outsider.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> reviewService.getEligibility(10L, outsider));
+
+        verify(jobRepository, never()).findById(10L);
+        verify(reviewRepository, never()).findByJobAndReviewer(any(), any());
     }
 
     private ReviewRequest request(Long jobId, int rating, String comment) {
