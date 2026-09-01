@@ -61,7 +61,7 @@ public class JobAttachmentService {
         if (visibility == null) {
             throw new IllegalArgumentException("Attachment visibility is required");
         }
-        Job job = getJobForUpdate(jobId);
+        Job job = getParticipantJobForUpdate(jobId, user);
         accessPolicy.assertCanUpload(job, user, visibility);
         filePolicy.assertCanAdd(attachmentRepository.countByJob_IdAndDeletedAtIsNull(jobId));
         ValidatedAttachmentFile validated = filePolicy.validate(file);
@@ -101,7 +101,7 @@ public class JobAttachmentService {
 
     @Transactional
     public void delete(Long jobId, Long attachmentId, User user) {
-        getJobForUpdate(jobId);
+        getParticipantJobForUpdate(jobId, user);
         JobAttachment attachment = getAttachment(jobId, attachmentId);
         accessPolicy.assertCanDelete(attachment, user);
         if (expenseClaimRepository.existsByAttachment_Id(attachmentId)) {
@@ -112,8 +112,12 @@ public class JobAttachmentService {
         registerCommitDeletion(attachment.getStorageKey());
     }
 
-    private Job getJobForUpdate(Long jobId) {
-        return jobRepository.findByIdForUpdate(jobId)
+    private Job getParticipantJobForUpdate(Long jobId, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Zlecenie nie istnieje");
+        }
+        return jobRepository.findParticipantByIdForUpdate(jobId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
     }
 

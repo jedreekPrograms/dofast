@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.attachment;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.expense.JobExpenseClaimRepository;
 import com.doFast.dofastapp.job.repository.JobRepository;
@@ -44,12 +45,12 @@ class JobAttachmentServiceTest {
         byte[] bytes = "validated".getBytes(StandardCharsets.UTF_8);
         String sha = "a".repeat(64);
         MockMultipartFile upload = new MockMultipartFile("file", "user.exe", "application/octet-stream", bytes);
-        when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
+        when(creator.getId()).thenReturn(7L);
+        when(jobRepository.findParticipantByIdForUpdate(50L, 7L)).thenReturn(Optional.of(job));
         when(attachmentRepository.countByJob_IdAndDeletedAtIsNull(50L)).thenReturn(0L);
         when(filePolicy.validate(upload)).thenReturn(new ValidatedAttachmentFile(bytes, "lista.png", "image/png", sha));
         when(attachmentRepository.save(any(JobAttachment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(job.getId()).thenReturn(50L);
-        when(creator.getId()).thenReturn(7L);
 
         JobAttachmentResponse response = service.upload(50L, JobAttachmentVisibility.PARTICIPANTS, upload, creator);
 
@@ -59,8 +60,26 @@ class JobAttachmentServiceTest {
         assertEquals("lista.png", response.originalFilename());
         assertEquals("image/png", response.mediaType());
         assertEquals(JobAttachmentVisibility.PARTICIPANTS, response.visibility());
+        verify(jobRepository).findParticipantByIdForUpdate(50L, 7L);
         verify(accessPolicy).assertCanUpload(job, creator, JobAttachmentVisibility.PARTICIPANTS);
         verify(filePolicy).assertCanAdd(0L);
+    }
+
+    @Test
+    void outsiderCannotEnumeratePrivateJobThroughAttachmentUpload() {
+        JobAttachmentService service = service();
+        MockMultipartFile upload = new MockMultipartFile("file", "x.png", "image/png", new byte[]{1});
+        when(creator.getId()).thenReturn(99L);
+        when(jobRepository.findParticipantByIdForUpdate(50L, 99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.upload(50L, JobAttachmentVisibility.PARTICIPANTS, upload, creator));
+
+        verify(accessPolicy, never()).assertCanUpload(any(), any(), any());
+        verify(attachmentRepository, never()).countByJob_IdAndDeletedAtIsNull(50L);
+        verify(filePolicy, never()).validate(any());
+        verify(storage, never()).store(any(), any());
+        verify(attachmentRepository, never()).save(any());
     }
 
     @Test
@@ -79,7 +98,8 @@ class JobAttachmentServiceTest {
     @Test
     void claimedReceiptCannotBeDeletedOrRemovedFromStorage() {
         JobAttachmentService service = service();
-        when(jobRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(job));
+        when(creator.getId()).thenReturn(7L);
+        when(jobRepository.findParticipantByIdForUpdate(50L, 7L)).thenReturn(Optional.of(job));
         when(attachmentRepository.findByIdAndJob_IdAndDeletedAtIsNull(90L, 50L)).thenReturn(Optional.of(attachment));
         when(expenseClaimRepository.existsByAttachment_Id(90L)).thenReturn(true);
 
@@ -88,6 +108,21 @@ class JobAttachmentServiceTest {
         verify(accessPolicy).assertCanDelete(attachment, creator);
         verify(attachment, never()).markDeleted(any());
         verify(attachmentRepository, never()).save(attachment);
+        verify(storage, never()).delete(any());
+    }
+
+    @Test
+    void outsiderCannotEnumeratePrivateJobOrAttachmentThroughDelete() {
+        JobAttachmentService service = service();
+        when(creator.getId()).thenReturn(99L);
+        when(jobRepository.findParticipantByIdForUpdate(50L, 99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> service.delete(50L, 90L, creator));
+
+        verify(attachmentRepository, never()).findByIdAndJob_IdAndDeletedAtIsNull(90L, 50L);
+        verify(accessPolicy, never()).assertCanDelete(any(), any());
+        verify(expenseClaimRepository, never()).existsByAttachment_Id(90L);
+        verify(attachmentRepository, never()).save(any());
         verify(storage, never()).delete(any());
     }
 

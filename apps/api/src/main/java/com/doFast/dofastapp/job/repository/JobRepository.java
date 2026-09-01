@@ -105,6 +105,18 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             select j
             from Job j
             where j.id = :id
+              and (j.createdBy.id = :userId or j.takenBy.id = :userId)
+            """)
+    Optional<Job> findParticipantByIdForUpdate(
+            @Param("id") Long id,
+            @Param("userId") Long userId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select j
+            from Job j
+            where j.id = :id
               and j.takenBy.id = :userId
             """)
     Optional<Job> findAssignedWorkerByIdForUpdate(
