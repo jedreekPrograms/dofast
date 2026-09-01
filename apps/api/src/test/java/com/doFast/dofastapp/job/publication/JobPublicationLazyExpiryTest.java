@@ -45,6 +45,14 @@ class JobPublicationLazyExpiryTest {
         when(publication.getStatus()).thenReturn(JobPublicationStatus.PAYMENT_REQUIRED);
         when(publication.getExpiresAt()).thenReturn(now.minusSeconds(1));
         when(publication.getWalletReservedAmount()).thenReturn(new BigDecimal("12.50"));
+        when(walletService.creditRestoringOperation(
+                7L,
+                new BigDecimal("12.50"),
+                WalletTransactionType.JOB_PUBLICATION_RELEASE,
+                null,
+                "job-publication:55:release",
+                "job-publication:7:req-55:reserve"
+        )).thenReturn(true);
 
         assertThat(service.expireIfNecessary(publication, now)).isTrue();
 
