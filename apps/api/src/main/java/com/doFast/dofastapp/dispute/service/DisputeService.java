@@ -94,8 +94,7 @@ public class DisputeService {
 
     @Transactional
     public DisputeDetailResponse cancelDispute(Long disputeId, User currentUser) {
-        Dispute dispute = getForUpdate(disputeId);
-        if (!sameUser(dispute.getOpenedBy(), currentUser)) throw new ForbiddenOperationException("Tylko osoba, która otworzyła spór, może go anulować");
+        Dispute dispute = getOwnedForUpdate(disputeId, currentUser);
         if (dispute.getStatus() != DisputeStatus.OPEN) throw new ConflictException("Można anulować tylko spór, którego admin jeszcze nie podjął");
         Job job = jobRepository.findByIdForUpdate(dispute.getJob().getId()).orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
         assertJobIsDisputed(job); transactionService.assertHeld(job);
@@ -202,6 +201,15 @@ public class DisputeService {
         }
         return jobRepository.findParticipantByIdForUpdate(jobId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private Dispute getOwnedForUpdate(Long id, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Spór nie istnieje");
+        }
+        return disputeRepository.findByIdAndOpenedByIdForUpdate(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje"));
     }
 
     private Dispute getForRead(Long id) { return disputeRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje")); }
