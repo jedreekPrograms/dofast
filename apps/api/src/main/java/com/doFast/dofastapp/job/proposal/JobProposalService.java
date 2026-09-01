@@ -241,7 +241,7 @@ public class JobProposalService {
             throw new ConflictException("Propozycja nie jest już aktywna");
         }
         User proposer = proposal.getProposer();
-        if (proposer == null || proposer.getStatus() != UserStatus.ACTIVE) {
+        if (proposer == null || proposer.getStatus() == UserStatus.SUSPENDED) {
             throw new ForbiddenOperationException("Nie możesz zaakceptować tej propozycji");
         }
         if (userBlockService.isInteractionBlocked(job.getCreatedBy(), proposer)) {
