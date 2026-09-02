@@ -110,6 +110,20 @@ class DisputePrivacyTest {
     }
 
     @Test
+    void transientAdminCannotUseGlobalReadOrPrivateListPath() {
+        User transientAdmin = new User("transient-admin@example.com", "transient-admin");
+        transientAdmin.setRole(UserRole.ADMIN);
+
+        assertThrows(ResourceNotFoundException.class, () -> service.getDispute(100L, transientAdmin));
+        assertThrows(ResourceNotFoundException.class, () -> service.getMyDisputes(transientAdmin));
+
+        verify(disputeRepository, never()).findById(anyLong());
+        verify(disputeRepository, never()).findParticipantById(anyLong(), anyLong());
+        verify(disputeRepository, never()).findAllForParticipant(transientAdmin);
+        verify(eventRepository, never()).findByDispute_IdOrderByCreatedAtAsc(anyLong());
+    }
+
+    @Test
     void adminStillReadsDisputeThroughAdministrativeGlobalPath() {
         when(disputeRepository.findById(100L)).thenReturn(Optional.of(dispute));
         when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(100L)).thenReturn(List.of());

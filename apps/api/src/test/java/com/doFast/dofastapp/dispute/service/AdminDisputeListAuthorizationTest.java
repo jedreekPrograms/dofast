@@ -16,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -70,9 +71,22 @@ class AdminDisputeListAuthorizationTest {
     }
 
     @Test
-    void administratorCanReadAdminDisputeQueue() {
+    void transientAdministratorCannotReadAdminDisputeQueue() {
         User admin = new User("admin@example.com", "admin");
         admin.setRole(UserRole.ADMIN);
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> disputeService.getAdminDisputes(null, 0, 20, admin));
+
+        verify(disputeRepository, never()).findAll(any(Pageable.class));
+        verify(disputeRepository, never()).findByStatus(any(), any(Pageable.class));
+    }
+
+    @Test
+    void persistedAdministratorCanReadAdminDisputeQueue() {
+        User admin = new User("admin@example.com", "admin");
+        admin.setRole(UserRole.ADMIN);
+        ReflectionTestUtils.setField(admin, "id", 10L);
         when(disputeRepository.findAll(any(Pageable.class))).thenReturn(Page.empty());
 
         assertDoesNotThrow(() -> disputeService.getAdminDisputes(null, 0, 20, admin));

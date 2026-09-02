@@ -21,7 +21,8 @@ This document defines minimum engineering rules for doFast while the product is 
 - User blocking/unblocking, private block-list reads and symmetric interaction-block checks must reject missing or transient identities before accessing user or block persistence.
 - Job-report creation, withdrawal and private history are user-scoped operations and must reject missing or transient reporter identities before reading either jobs or report persistence.
 - Sensitive resource reads must be scoped to the authenticated actor in the repository/query whenever practical, so unauthorized rows are not loaded before authorization is established; outsider failures should remain neutral and must not trigger dependent sensitive reads.
-- Admin-only service operations that expose sensitive queues, evidence or financial state must validate the admin principal themselves and must not rely solely on URL-level security matchers.
+- Admin-only service operations that expose sensitive queues, moderation state, evidence or financial state must require both a persisted principal ID and the `ADMIN` role before any repository or provider interaction; URL-level security matchers are an additional perimeter, not the service authorization boundary.
+- This fail-closed service boundary covers admin users/reactivation audits, job-report moderation and enforcement, dispute queues/chat evidence, payout review, finance reconciliation, expense evidence and identity verification.
 
 ## Money and webhooks
 

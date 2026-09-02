@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,6 +71,19 @@ class AdminDisputeEvidenceServiceTest {
         assertEquals(50L, response.messages().getFirst().jobId());
         assertEquals("Dowód z rozmowy", response.messages().getFirst().content());
         verify(chatMessageRepository).findByJobOrderByIdDesc(any(Job.class), any(Pageable.class));
+    }
+
+    @Test
+    void transientAdminCannotUseAdminEvidenceService() {
+        User transientAdmin = new User("transient-admin@example.com", "transient-admin");
+        transientAdmin.setRole(UserRole.ADMIN);
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.getChatEvidence(100L, null, 100, transientAdmin)
+        );
+
+        verifyNoInteractions(disputeRepository, chatMessageRepository);
     }
 
     @Test
