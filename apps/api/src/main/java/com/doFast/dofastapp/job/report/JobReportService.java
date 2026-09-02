@@ -26,13 +26,14 @@ public class JobReportService {
 
     @Transactional
     public JobReportResponse report(Long jobId, JobReportRequest request, User reporter) {
+        Long reporterId = requireReporterId(reporter);
         Job job = jobRepository.findByIdAndStatus(jobId, JobStatus.OPEN)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
 
-        if (job.getCreatedBy() != null && job.getCreatedBy().getId().equals(reporter.getId())) {
+        if (job.getCreatedBy() != null && reporterId.equals(job.getCreatedBy().getId())) {
             throw new ForbiddenOperationException("Nie możesz zgłosić własnego zlecenia");
         }
-        if (reportRepository.existsByReporter_IdAndJob_Id(reporter.getId(), jobId)) {
+        if (reportRepository.existsByReporter_IdAndJob_Id(reporterId, jobId)) {
             throw new ConflictException("To zlecenie zostało już przez Ciebie zgłoszone");
         }
 
@@ -56,7 +57,8 @@ public class JobReportService {
 
     @Transactional
     public JobReportResponse withdraw(Long reportId, User reporter) {
-        JobReport report = reportRepository.findByIdAndReporter_Id(reportId, reporter.getId())
+        Long reporterId = requireReporterId(reporter);
+        JobReport report = reportRepository.findByIdAndReporter_Id(reportId, reporterId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zgłoszenie nie istnieje"));
 
         if (report.getStatus() != JobReportStatus.SUBMITTED) {
@@ -69,9 +71,17 @@ public class JobReportService {
 
     @Transactional(readOnly = true)
     public List<JobReportResponse> mine(User reporter) {
-        return reportRepository.findAllByReporter_IdOrderByCreatedAtDesc(reporter.getId())
+        Long reporterId = requireReporterId(reporter);
+        return reportRepository.findAllByReporter_IdOrderByCreatedAtDesc(reporterId)
                 .stream()
                 .map(JobReportResponse::from)
                 .toList();
+    }
+
+    private Long requireReporterId(User reporter) {
+        if (reporter == null || reporter.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać zgłoszeniami zleceń");
+        }
+        return reporter.getId();
     }
 }
