@@ -15,6 +15,7 @@ This document defines minimum engineering rules for doFast while the product is 
 - JWT signing material must be externally configured and high entropy.
 - Authentication failures must not reveal whether an account exists.
 - Authorization is enforced server-side for every mutating resource operation.
+- Sensitive resource reads must be scoped to the authenticated actor in the repository/query whenever practical, so unauthorized rows are not loaded before authorization is established; outsider failures should remain neutral and must not trigger dependent sensitive reads.
 
 ## Money and webhooks
 
