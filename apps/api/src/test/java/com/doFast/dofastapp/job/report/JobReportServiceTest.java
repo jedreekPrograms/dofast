@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,6 +64,44 @@ class JobReportServiceTest {
         verify(reportRepository).saveAndFlush(captor.capture());
         assertEquals(JobReportReason.FRAUD, captor.getValue().getReason());
         assertEquals(null, captor.getValue().getDetails());
+    }
+
+    @Test
+    void rejectsMissingIdentityBeforeReportPersistenceAccess() {
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.report(11L, new JobReportRequest(JobReportReason.FRAUD, "private"), null)
+        );
+
+        verifyNoInteractions(jobRepository, reportRepository);
+    }
+
+    @Test
+    void rejectsTransientIdentityBeforeReportPersistenceAccess() {
+        User transientReporter = new User("transient@example.com", "Transient");
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.report(11L, new JobReportRequest(JobReportReason.FRAUD, "private"), transientReporter)
+        );
+
+        verifyNoInteractions(jobRepository, reportRepository);
+    }
+
+    @Test
+    void rejectsMissingIdentityBeforeWithdrawalPersistenceAccess() {
+        assertThrows(ForbiddenOperationException.class, () -> service.withdraw(31L, null));
+
+        verifyNoInteractions(jobRepository, reportRepository);
+    }
+
+    @Test
+    void rejectsTransientIdentityBeforePrivateHistoryPersistenceAccess() {
+        User transientReporter = new User("transient@example.com", "Transient");
+
+        assertThrows(ForbiddenOperationException.class, () -> service.mine(transientReporter));
+
+        verifyNoInteractions(jobRepository, reportRepository);
     }
 
     @Test
