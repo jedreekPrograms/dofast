@@ -41,39 +41,44 @@ public class SavedJobService {
 
     @Transactional
     public void save(Long jobId, User user) {
+        Long userId = requireUserId(user);
         Job job = jobRepository.findByIdAndStatus(jobId, JobStatus.OPEN)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
-        if (sameUser(job.getCreatedBy(), user)) {
+        if (sameUser(job.getCreatedBy(), userId)) {
             throw new ForbiddenOperationException("Nie możesz zapisać własnego zlecenia");
         }
         if (userBlockService.isInteractionBlocked(job.getCreatedBy(), user)) {
             throw new ForbiddenOperationException("Nie możesz zapisać tego zlecenia");
         }
-        if (!savedJobRepository.existsByUser_IdAndJob_Id(user.getId(), jobId)) {
+        if (!savedJobRepository.existsByUser_IdAndJob_Id(userId, jobId)) {
             savedJobRepository.save(new SavedJob(user, job));
         }
     }
 
     @Transactional
     public void remove(Long jobId, User user) {
-        savedJobRepository.deleteByUser_IdAndJob_Id(user.getId(), jobId);
+        Long userId = requireUserId(user);
+        savedJobRepository.deleteByUser_IdAndJob_Id(userId, jobId);
     }
 
     public SavedJobStatusResponse status(Long jobId, User user) {
-        return new SavedJobStatusResponse(savedJobRepository.existsByUser_IdAndJob_Id(user.getId(), jobId));
+        Long userId = requireUserId(user);
+        return new SavedJobStatusResponse(savedJobRepository.existsByUser_IdAndJob_Id(userId, jobId));
     }
 
     public SavedJobBatchStatusResponse statuses(List<Long> jobIds, User user) {
+        Long userId = requireUserId(user);
         List<Long> uniqueIds = jobIds.stream().distinct().toList();
-        List<Long> savedIds = savedJobRepository.findSavedJobIds(user.getId(), uniqueIds);
+        List<Long> savedIds = savedJobRepository.findSavedJobIds(userId, uniqueIds);
         return new SavedJobBatchStatusResponse(new LinkedHashSet<>(savedIds));
     }
 
     @Transactional
     public PageResponse<JobResponse> list(User user, int page, int size) {
-        savedJobRepository.deleteByUserAndJobStatusNot(user.getId(), JobStatus.OPEN);
+        Long userId = requireUserId(user);
+        savedJobRepository.deleteByUserAndJobStatusNot(userId, JobStatus.OPEN);
         Page<SavedJob> saved = savedJobRepository.findByUserAndJobStatus(
-                user.getId(),
+                userId,
                 JobStatus.OPEN,
                 PageRequest.of(page, size)
         );
@@ -85,10 +90,16 @@ public class SavedJobService {
         );
     }
 
-    private boolean sameUser(User first, User second) {
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać zapisanymi zleceniami");
+        }
+        return user.getId();
+    }
+
+    private boolean sameUser(User first, Long secondUserId) {
         return first != null
-                && second != null
                 && first.getId() != null
-                && first.getId().equals(second.getId());
+                && first.getId().equals(secondUserId);
     }
 }
