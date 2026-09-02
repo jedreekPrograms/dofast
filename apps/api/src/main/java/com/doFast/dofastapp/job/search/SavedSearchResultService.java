@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.search;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
@@ -29,6 +30,8 @@ public class SavedSearchResultService {
     }
 
     public List<NearbyJobResponse> getRadiusResults(Long id, User user, int limit) {
+        Long actorId = requireActorId(user);
+
         SavedSearch savedSearch = savedSearchRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Zapisane wyszukiwanie nie istnieje"));
 
@@ -36,9 +39,6 @@ public class SavedSearchResultService {
         Integer radiusMeters = savedSearch.getRadiusMeters();
         if (center == null || radiusMeters == null) {
             throw new BusinessException("To zapisane wyszukiwanie nie ma prywatnego filtra promienia");
-        }
-        if (user == null || user.getId() == null) {
-            throw new ResourceNotFoundException("Zapisane wyszukiwanie nie istnieje");
         }
 
         JobCategory category = savedSearch.getCategory();
@@ -50,12 +50,19 @@ public class SavedSearchResultService {
                         category != null ? category.getSlug() : null,
                         savedSearch.getMinPrice(),
                         savedSearch.getMaxPrice(),
-                        user.getId(),
+                        actorId,
                         limit
                 )
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    private Long requireActorId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Brak uwierzytelnionego użytkownika");
+        }
+        return user.getId();
     }
 
     private NearbyJobResponse toResponse(NearbyJobProjection match) {
