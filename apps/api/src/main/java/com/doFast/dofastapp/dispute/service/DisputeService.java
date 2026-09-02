@@ -87,8 +87,9 @@ public class DisputeService {
     }
 
     public DisputeDetailResponse getDispute(Long disputeId, User currentUser) {
-        Dispute dispute = getForRead(disputeId);
-        assertParticipantOrAdminForRead(dispute, currentUser);
+        Dispute dispute = currentUser != null && currentUser.getRole() == UserRole.ADMIN
+                ? getForRead(disputeId)
+                : getForParticipantRead(disputeId, currentUser);
         return toDetail(dispute);
     }
 
@@ -212,15 +213,17 @@ public class DisputeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje"));
     }
 
+    private Dispute getForParticipantRead(Long id, User user) {
+        Long userId = user == null ? null : user.getId();
+        if (userId == null) {
+            throw new ResourceNotFoundException("Spór nie istnieje");
+        }
+        return disputeRepository.findParticipantById(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje"));
+    }
+
     private Dispute getForRead(Long id) { return disputeRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje")); }
     private Dispute getForUpdate(Long id) { return disputeRepository.findByIdForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje")); }
-    private void assertParticipantOrAdminForRead(Dispute dispute, User user) {
-        if (user != null && user.getRole() == UserRole.ADMIN) return;
-        Job job = dispute.getJob();
-        if (sameUser(job.getCreatedBy(), user) || sameUser(job.getTakenBy(), user)) return;
-        // A neutral 404 keeps authenticated outsiders from confirming that a sensitive dispute ID exists.
-        throw new ResourceNotFoundException("Spór nie istnieje");
-    }
     private void assertAdmin(User user) {
         if (user == null || user.getRole() != UserRole.ADMIN) throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
     }
