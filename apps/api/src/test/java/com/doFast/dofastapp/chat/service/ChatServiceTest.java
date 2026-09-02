@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,6 +71,23 @@ class ChatServiceTest {
         owner = user(1L, "owner", "owner@example.com");
         worker = user(2L, "worker", "worker@example.com");
         job = job(10L, JobStatus.IN_PROGRESS, owner, worker);
+    }
+
+    @Test
+    void userChatOperationsFailClosedBeforeAnyDependencyAccessWithoutPersistentIdentity() {
+        assertUserChatOperationsFailClosed(null);
+        assertUserChatOperationsFailClosed(new User());
+
+        verifyNoInteractions(
+                chatMessageRepository,
+                chatReadStateRepository,
+                jobRepository,
+                userRepository,
+                chatAccessService,
+                notificationService,
+                realtimePublisher,
+                userBlockService
+        );
     }
 
     @Test
@@ -203,6 +221,25 @@ class ChatServiceTest {
         assertEquals(3L, conversations.getFirst().unreadCount());
         assertEquals("worker", conversations.getFirst().otherUserNickname());
         assertFalse(conversations.getFirst().lastMessage().content().isBlank());
+    }
+
+    private void assertUserChatOperationsFailClosed(User actor) {
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> chatService.sendMessage(10L, actor, "wiadomość", UUID.randomUUID())
+        );
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> chatService.getHistory(10L, actor, null, 50)
+        );
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> chatService.getConversations(actor)
+        );
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> chatService.markRead(10L, 20L, actor)
+        );
     }
 
     private User user(Long id, String nickname, String email) {
