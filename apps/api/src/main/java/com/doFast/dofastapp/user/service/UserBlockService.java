@@ -26,14 +26,15 @@ public class UserBlockService {
 
     @Transactional
     public UserBlockResponse block(Long targetUserId, User blocker) {
-        if (blocker.getId().equals(targetUserId)) {
+        Long blockerId = requireUserId(blocker);
+        if (blockerId.equals(targetUserId)) {
             throw new ForbiddenOperationException("Nie możesz zablokować własnego konta");
         }
 
         User target = userRepository.findByIdAndStatus(targetUserId, UserStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
 
-        return userBlockRepository.findByBlocker_IdAndBlockedUser_Id(blocker.getId(), targetUserId)
+        return userBlockRepository.findByBlocker_IdAndBlockedUser_Id(blockerId, targetUserId)
                 .map(UserBlockResponse::from)
                 .orElseGet(() -> UserBlockResponse.from(
                         userBlockRepository.save(new UserBlock(blocker, target))
@@ -42,12 +43,14 @@ public class UserBlockService {
 
     @Transactional
     public void unblock(Long targetUserId, User blocker) {
-        userBlockRepository.deleteByBlocker_IdAndBlockedUser_Id(blocker.getId(), targetUserId);
+        Long blockerId = requireUserId(blocker);
+        userBlockRepository.deleteByBlocker_IdAndBlockedUser_Id(blockerId, targetUserId);
     }
 
     @Transactional(readOnly = true)
     public List<UserBlockResponse> mine(User blocker) {
-        return userBlockRepository.findAllByBlocker_IdOrderByCreatedAtDesc(blocker.getId())
+        Long blockerId = requireUserId(blocker);
+        return userBlockRepository.findAllByBlocker_IdOrderByCreatedAtDesc(blockerId)
                 .stream()
                 .map(UserBlockResponse::from)
                 .toList();
@@ -55,11 +58,20 @@ public class UserBlockService {
 
     @Transactional(readOnly = true)
     public boolean isInteractionBlocked(User first, User second) {
+        Long firstId = requireUserId(first);
+        Long secondId = requireUserId(second);
         return userBlockRepository.existsByBlocker_IdAndBlockedUser_IdOrBlocker_IdAndBlockedUser_Id(
-                first.getId(),
-                second.getId(),
-                second.getId(),
-                first.getId()
+                firstId,
+                secondId,
+                secondId,
+                firstId
         );
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby korzystać z blokowania użytkowników");
+        }
+        return user.getId();
     }
 }
