@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.user.service;
 
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.user.dto.UpdateUserServiceAreaRequest;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.entity.UserServiceArea;
@@ -14,8 +15,10 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,5 +71,30 @@ class UserServiceAreaServiceTest {
         service.clear(user);
 
         verify(userServiceAreaRepository).deleteByUser_Id(11L);
+    }
+
+    @Test
+    void rejectsMissingIdentityBeforeAnyRepositoryAccess() {
+        UserServiceAreaService service = new UserServiceAreaService(userServiceAreaRepository);
+        UpdateUserServiceAreaRequest request = new UpdateUserServiceAreaRequest(51.1079, 17.0385, 30);
+
+        assertThrows(ForbiddenOperationException.class, () -> service.getForUser(null));
+        assertThrows(ForbiddenOperationException.class, () -> service.update(null, request));
+        assertThrows(ForbiddenOperationException.class, () -> service.clear(null));
+
+        verifyNoInteractions(userServiceAreaRepository);
+    }
+
+    @Test
+    void rejectsTransientIdentityBeforeAnyRepositoryAccess() {
+        when(user.getId()).thenReturn(null);
+        UserServiceAreaService service = new UserServiceAreaService(userServiceAreaRepository);
+        UpdateUserServiceAreaRequest request = new UpdateUserServiceAreaRequest(51.1079, 17.0385, 30);
+
+        assertThrows(ForbiddenOperationException.class, () -> service.getForUser(user));
+        assertThrows(ForbiddenOperationException.class, () -> service.update(user, request));
+        assertThrows(ForbiddenOperationException.class, () -> service.clear(user));
+
+        verifyNoInteractions(userServiceAreaRepository);
     }
 }

@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.service;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.user.dto.UpdateUserServiceAreaRequest;
 import com.doFast.dofastapp.user.dto.UserServiceAreaResponse;
 import com.doFast.dofastapp.user.entity.User;
@@ -26,16 +27,18 @@ public class UserServiceAreaService {
     }
 
     public UserServiceAreaResponse getForUser(User user) {
-        return userServiceAreaRepository.findByUser_Id(user.getId())
+        Long userId = requireUserId(user);
+        return userServiceAreaRepository.findByUser_Id(userId)
                 .map(this::toResponse)
                 .orElseGet(UserServiceAreaResponse::notConfigured);
     }
 
     @Transactional
     public UserServiceAreaResponse update(User user, UpdateUserServiceAreaRequest request) {
+        Long userId = requireUserId(user);
         validateFiniteCoordinates(request.latitude(), request.longitude());
 
-        UserServiceArea area = userServiceAreaRepository.findByUser_Id(user.getId())
+        UserServiceArea area = userServiceAreaRepository.findByUser_Id(userId)
                 .orElseGet(() -> new UserServiceArea(user));
         Point center = GEOMETRY_FACTORY.createPoint(new Coordinate(request.longitude(), request.latitude()));
         area.setCenterLocation(center);
@@ -46,7 +49,15 @@ public class UserServiceAreaService {
 
     @Transactional
     public void clear(User user) {
-        userServiceAreaRepository.deleteByUser_Id(user.getId());
+        Long userId = requireUserId(user);
+        userServiceAreaRepository.deleteByUser_Id(userId);
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać obszarem działania");
+        }
+        return user.getId();
     }
 
     private void validateFiniteCoordinates(Double latitude, Double longitude) {
