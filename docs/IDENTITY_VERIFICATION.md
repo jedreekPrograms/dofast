@@ -45,8 +45,8 @@ A repeated request while `PENDING` is idempotent. A `VERIFIED` case cannot be re
 
 ## Authorization and concurrency
 
-- `/verification/**` requires an authenticated user.
-- `/admin/verifications/**` is covered by the existing `ROLE_ADMIN` rule for `/admin/**`.
+- `/verification/**` requires an authenticated user, and the service rejects a missing or transient principal before any case/user repository access.
+- `/admin/verifications/**` is covered by the existing `ROLE_ADMIN` rule for `/admin/**`; the service independently requires a persisted `ADMIN` principal before reading the queue or audit events and before locking a case for decision.
 - an administrator cannot decide their own verification case;
 - the user row is pessimistically locked while a verification request is created/resubmitted, preventing duplicate cases under concurrent requests;
 - the verification case is pessimistically locked while an administrator makes a decision;

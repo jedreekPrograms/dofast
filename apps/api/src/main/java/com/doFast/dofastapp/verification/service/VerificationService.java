@@ -8,6 +8,7 @@ import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.repository.UserRepository;
 import com.doFast.dofastapp.verification.dto.AdminVerificationEventResponse;
 import com.doFast.dofastapp.verification.dto.AdminVerificationResponse;
@@ -55,7 +56,8 @@ public class VerificationService {
     }
 
     public VerificationResponse getCurrent(User user) {
-        return verificationCaseRepository.findByUser_Id(user.getId())
+        Long userId = requireUserId(user);
+        return verificationCaseRepository.findByUser_Id(userId)
                 .map(this::toResponse)
                 .orElseGet(VerificationResponse::notStarted);
     }
@@ -64,13 +66,15 @@ public class VerificationService {
         return verificationCaseRepository.existsByUser_IdAndStatus(userId, VerificationStatus.VERIFIED);
     }
 
-    public long countPending() {
+    public long countPending(User admin) {
+        assertAdmin(admin);
         return verificationCaseRepository.countByStatus(VerificationStatus.PENDING);
     }
 
     @Transactional
     public VerificationResponse requestVerification(User principal) {
-        User user = userRepository.findByIdForUpdate(principal.getId())
+        Long principalId = requireUserId(principal);
+        User user = userRepository.findByIdForUpdate(principalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
 
         LocalDateTime now = LocalDateTime.now();
@@ -132,8 +136,10 @@ public class VerificationService {
     public PageResponse<AdminVerificationResponse> getAdminVerifications(
             VerificationStatus status,
             int page,
-            int size
+            int size,
+            User admin
     ) {
+        assertAdmin(admin);
         if (status == VerificationStatus.NOT_STARTED) {
             throw new BusinessException("Status NOT_STARTED nie jest zapisanym zgłoszeniem weryfikacyjnym");
         }
@@ -154,7 +160,8 @@ public class VerificationService {
         return PageResponse.from(verifications, content);
     }
 
-    public List<AdminVerificationEventResponse> getEvents(Long verificationId) {
+    public List<AdminVerificationEventResponse> getEvents(Long verificationId, User admin) {
+        assertAdmin(admin);
         if (!verificationCaseRepository.existsById(verificationId)) {
             throw new ResourceNotFoundException("Weryfikacja nie istnieje");
         }
@@ -171,6 +178,7 @@ public class VerificationService {
             String reason,
             User admin
     ) {
+        assertAdmin(admin);
         VerificationCase verification = verificationCaseRepository.findByIdForUpdate(verificationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Weryfikacja nie istnieje"));
 
@@ -287,6 +295,19 @@ public class VerificationService {
                 null,
                 null
         );
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać weryfikacją tożsamości");
+        }
+        return user.getId();
+    }
+
+    private void assertAdmin(User user) {
+        if (user == null || user.getId() == null || user.getRole() != UserRole.ADMIN) {
+            throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
+        }
     }
 
     private void requireStatus(VerificationCase verification, VerificationStatus required, String message) {

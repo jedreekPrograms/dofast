@@ -37,14 +37,18 @@ public class AdminVerificationController {
     public PageResponse<AdminVerificationResponse> list(
             @RequestParam(required = false) VerificationStatus status,
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @AuthenticationPrincipal User admin
     ) {
-        return verificationService.getAdminVerifications(status, page, size);
+        return verificationService.getAdminVerifications(status, page, size, admin);
     }
 
     @GetMapping("/{verificationId}/events")
-    public List<AdminVerificationEventResponse> events(@PathVariable Long verificationId) {
-        return verificationService.getEvents(verificationId);
+    public List<AdminVerificationEventResponse> events(
+            @PathVariable Long verificationId,
+            @AuthenticationPrincipal User admin
+    ) {
+        return verificationService.getEvents(verificationId, admin);
     }
 
     @PatchMapping("/{verificationId}")
