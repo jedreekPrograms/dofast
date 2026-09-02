@@ -16,6 +16,7 @@ This document defines minimum engineering rules for doFast while the product is 
 - Authentication failures must not reveal whether an account exists.
 - Authorization is enforced server-side for every mutating resource operation.
 - Sensitive resource reads must be scoped to the authenticated actor in the repository/query whenever practical, so unauthorized rows are not loaded before authorization is established; outsider failures should remain neutral and must not trigger dependent sensitive reads.
+- Admin-only service operations that expose sensitive queues, evidence or financial state must validate the admin principal themselves and must not rely solely on URL-level security matchers.
 
 ## Money and webhooks
 
