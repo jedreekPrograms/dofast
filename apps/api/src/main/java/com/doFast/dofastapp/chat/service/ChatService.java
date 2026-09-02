@@ -70,6 +70,7 @@ public class ChatService {
             String content,
             UUID clientMessageId
     ) {
+        requireActorId(sender);
         String normalizedContent = normalizeContent(content);
 
         Optional<ChatMessage> duplicate = chatMessageRepository.findBySenderAndClientMessageId(
@@ -130,6 +131,7 @@ public class ChatService {
             Long beforeId,
             int limit
     ) {
+        requireActorId(user);
         Job job = chatAccessService.requireParticipant(jobId, user);
         PageRequest page = PageRequest.of(0, limit + 1);
         List<ChatMessage> newestFirst = beforeId == null
@@ -153,6 +155,7 @@ public class ChatService {
     }
 
     public List<ChatConversationResponse> getConversations(User user) {
+        requireActorId(user);
         List<ConversationEntry> entries = jobRepository
                 .findByCreatedByOrTakenByOrderByCreatedAtDesc(user, user)
                 .stream()
@@ -169,6 +172,7 @@ public class ChatService {
 
     @Transactional
     public void markRead(Long jobId, Long lastMessageId, User user) {
+        requireActorId(user);
         Job job = chatAccessService.requireParticipant(jobId, user);
         ChatMessage message = chatMessageRepository.findByIdAndJob(lastMessageId, job)
                 .orElseThrow(() -> new ResourceNotFoundException("Wiadomość nie istnieje w tym czacie"));
@@ -214,6 +218,13 @@ public class ChatService {
                 ),
                 sortAt
         );
+    }
+
+    private Long requireActorId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby korzystać z czatu");
+        }
+        return user.getId();
     }
 
     private void requireInteractionAllowed(User first, User second) {
