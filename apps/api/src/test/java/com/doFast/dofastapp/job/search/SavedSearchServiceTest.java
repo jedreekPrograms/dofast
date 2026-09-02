@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.search;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.user.entity.User;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,6 +43,33 @@ class SavedSearchServiceTest {
         service = new SavedSearchService(savedSearchRepository, jobCategoryRepository);
         user = new User("user@example.com", "User");
         ReflectionTestUtils.setField(user, "id", 7L);
+    }
+
+    @Test
+    void operationsRejectMissingOrTransientIdentityBeforePersistenceAccess() {
+        User transientUser = new User("transient@example.com", "Transient");
+        SavedSearchRequest request = new SavedSearchRequest(
+                "Paczki",
+                "paczka",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                false
+        );
+
+        assertThrows(ForbiddenOperationException.class, () -> service.list(null));
+        assertThrows(ForbiddenOperationException.class, () -> service.list(transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.create(request, null));
+        assertThrows(ForbiddenOperationException.class, () -> service.create(request, transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.update(1L, request, null));
+        assertThrows(ForbiddenOperationException.class, () -> service.update(1L, request, transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.delete(1L, null));
+        assertThrows(ForbiddenOperationException.class, () -> service.delete(1L, transientUser));
+
+        verifyNoInteractions(savedSearchRepository, jobCategoryRepository);
     }
 
     @Test
