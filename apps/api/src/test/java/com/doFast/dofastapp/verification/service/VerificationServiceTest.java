@@ -23,9 +23,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -211,6 +215,50 @@ class VerificationServiceTest {
                 eq(null),
                 eq(null)
         );
+    }
+
+    @Test
+    void userAndAdminFlowsFailClosedBeforePersistenceWithoutAuthorizedIdentity() {
+        User transientUser = new User("transient@example.com", "transient");
+        User ordinaryUser = user(7L, "user@example.com", "user");
+        User transientAdmin = new User("transient-admin@example.com", "transientAdmin");
+        transientAdmin.setRole(UserRole.ADMIN);
+
+        assertThrows(ForbiddenOperationException.class, () -> verificationService.getCurrent(null));
+        assertThrows(ForbiddenOperationException.class,
+                () -> verificationService.requestVerification(transientUser));
+        assertThrows(ForbiddenOperationException.class,
+                () -> verificationService.getAdminVerifications(null, 0, 20, ordinaryUser));
+        assertThrows(ForbiddenOperationException.class,
+                () -> verificationService.countPending(ordinaryUser));
+        assertThrows(ForbiddenOperationException.class,
+                () -> verificationService.getEvents(12L, transientAdmin));
+        assertThrows(ForbiddenOperationException.class,
+                () -> verificationService.decide(12L, VerificationDecision.APPROVE, null, ordinaryUser));
+
+        verifyNoInteractions(
+                verificationCaseRepository,
+                verificationEventRepository,
+                userRepository,
+                notificationService
+        );
+    }
+
+    @Test
+    void adminCanReadVerificationQueueAndEventsThroughServiceAuthorizationBoundary() {
+        User admin = user(99L, "admin@example.com", "admin");
+        when(verificationCaseRepository.findAll(any(Pageable.class))).thenReturn(Page.empty());
+        when(verificationCaseRepository.countByStatus(VerificationStatus.PENDING)).thenReturn(3L);
+        when(verificationCaseRepository.existsById(12L)).thenReturn(true);
+        when(verificationEventRepository.findByVerification_IdOrderByCreatedAtAscIdAsc(12L))
+                .thenReturn(List.of());
+
+        verificationService.getAdminVerifications(null, 0, 20, admin);
+        assertEquals(3L, verificationService.countPending(admin));
+        assertEquals(0, verificationService.getEvents(12L, admin).size());
+
+        verify(verificationCaseRepository).findAll(any(Pageable.class));
+        verify(verificationEventRepository).findByVerification_IdOrderByCreatedAtAscIdAsc(12L);
     }
 
     private VerificationCase pendingCase(Long id, User user) {
