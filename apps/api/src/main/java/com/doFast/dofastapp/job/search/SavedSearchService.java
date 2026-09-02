@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.search;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
@@ -35,6 +36,7 @@ public class SavedSearchService {
     }
 
     public List<SavedSearchResponse> list(User user) {
+        requireUserId(user);
         return savedSearchRepository.findAllByUserOrderByUpdatedAtDescIdDesc(user)
                 .stream()
                 .map(this::toResponse)
@@ -43,6 +45,7 @@ public class SavedSearchService {
 
     @Transactional
     public SavedSearchResponse create(SavedSearchRequest request, User user) {
+        requireUserId(user);
         if (savedSearchRepository.countByUser(user) >= MAX_SAVED_SEARCHES_PER_USER) {
             throw new ConflictException("Możesz mieć maksymalnie 20 zapisanych wyszukiwań");
         }
@@ -59,6 +62,7 @@ public class SavedSearchService {
 
     @Transactional
     public SavedSearchResponse update(Long id, SavedSearchRequest request, User user) {
+        requireUserId(user);
         SavedSearch savedSearch = savedSearchRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Zapisane wyszukiwanie nie istnieje"));
 
@@ -73,9 +77,17 @@ public class SavedSearchService {
 
     @Transactional
     public void delete(Long id, User user) {
+        requireUserId(user);
         SavedSearch savedSearch = savedSearchRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Zapisane wyszukiwanie nie istnieje"));
         savedSearchRepository.delete(savedSearch);
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać zapisanymi wyszukiwaniami");
+        }
+        return user.getId();
     }
 
     private void apply(SavedSearch savedSearch, SavedSearchRequest request, String normalizedName) {
