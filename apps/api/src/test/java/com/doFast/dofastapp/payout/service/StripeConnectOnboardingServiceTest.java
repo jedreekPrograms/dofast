@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -116,6 +117,28 @@ class StripeConnectOnboardingServiceTest {
         assertTrue(response.transfersEnabled());
         assertFalse(response.requirementsDue());
         verify(repository).save(account);
+    }
+
+    @Test
+    void missingPrincipalFailsClosedBeforeFinancialStateAccess() {
+        assertThrows(ForbiddenOperationException.class, () -> service.cachedStatus(null));
+        assertThrows(ForbiddenOperationException.class, () -> service.refreshStatus(null));
+        assertThrows(ForbiddenOperationException.class, () -> service.refreshAndIsRecipientReady(null));
+        assertThrows(ForbiddenOperationException.class, () -> service.createOnboardingLink(null));
+
+        verifyNoInteractions(repository, gateway, verificationRepository, userRepository);
+    }
+
+    @Test
+    void transientPrincipalFailsClosedBeforeFinancialStateAccess() {
+        User transientUser = user(null, UserStatus.ACTIVE);
+
+        assertThrows(ForbiddenOperationException.class, () -> service.cachedStatus(transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.refreshStatus(transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.refreshAndIsRecipientReady(transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.createOnboardingLink(transientUser));
+
+        verifyNoInteractions(repository, gateway, verificationRepository, userRepository);
     }
 
     private User user(Long id, UserStatus status) {
