@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -135,5 +136,18 @@ class SavedJobServiceTest {
         assertEquals(List.of(response), result.content());
         assertEquals(1, result.totalElements());
         assertEquals(0, result.page());
+    }
+
+    @Test
+    void savedJobOperationsFailClosedBeforeRepositoryAccessWithoutAuthenticatedIdentity() {
+        User transientUser = new User("transient@example.com", "Transient");
+
+        assertThrows(ForbiddenOperationException.class, () -> service.save(11L, null));
+        assertThrows(ForbiddenOperationException.class, () -> service.remove(11L, transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.status(11L, null));
+        assertThrows(ForbiddenOperationException.class, () -> service.statuses(List.of(11L, 12L), transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.list(null, 0, 20));
+
+        verifyNoInteractions(savedJobRepository, jobRepository, jobService, userBlockService);
     }
 }
