@@ -47,33 +47,34 @@ public class StripeConnectOnboardingService {
 
     @Transactional(readOnly = true)
     public PayoutOnboardingStatusResponse cachedStatus(User user) {
+        Long userId = requireUserId(user);
         if (!properties.enabled()) return unavailable();
-        return repository.findByUser_IdAndProviderCode(user.getId(), PROVIDER_CODE)
+        return repository.findByUser_IdAndProviderCode(userId, PROVIDER_CODE)
                 .map(this::toResponse)
                 .orElseGet(this::emptyAvailable);
     }
 
     @Transactional
     public PayoutOnboardingStatusResponse refreshStatus(User user) {
+        Long userId = requireUserId(user);
         requireEnabled();
-        PayoutRecipientAccount account = refreshAccount(user.getId());
+        PayoutRecipientAccount account = refreshAccount(userId);
         return account == null ? emptyAvailable() : toResponse(account);
     }
 
     @Transactional
     public boolean refreshAndIsRecipientReady(User user) {
+        Long userId = requireUserId(user);
         requireEnabled();
-        PayoutRecipientAccount account = refreshAccount(user.getId());
+        PayoutRecipientAccount account = refreshAccount(userId);
         return account != null && account.readyForPayout();
     }
 
     @Transactional
     public PayoutOnboardingLinkResponse createOnboardingLink(User user) {
+        Long userId = requireUserId(user);
         requireEnabled();
-        if (user == null || user.getId() == null) {
-            throw new ForbiddenOperationException("Konfiguracja wypłat nie jest dostępna dla tego konta");
-        }
-        User lockedUser = userRepository.findByIdForUpdate(user.getId())
+        User lockedUser = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
         requireEligibleForProvisioning(lockedUser);
 
@@ -105,6 +106,13 @@ public class StripeConnectOnboardingService {
 
     public boolean setupAvailable() {
         return properties.enabled();
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Konfiguracja wypłat nie jest dostępna dla tego konta");
+        }
+        return user.getId();
     }
 
     private PayoutRecipientAccount refreshAccount(Long userId) {
