@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -119,6 +120,24 @@ class UserBlockServiceTest {
         )).thenReturn(true);
 
         assertTrue(service.isInteractionBlocked(blocker, target));
+    }
+
+    @Test
+    void userScopedOperationsRejectMissingOrTransientIdentityBeforePersistenceAccess() {
+        User transientUser = new User("transient@example.com", "transient");
+
+        assertThrows(ForbiddenOperationException.class, () -> service.block(2L, null));
+        assertThrows(ForbiddenOperationException.class, () -> service.block(2L, transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.unblock(2L, null));
+        assertThrows(ForbiddenOperationException.class, () -> service.unblock(2L, transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.mine(null));
+        assertThrows(ForbiddenOperationException.class, () -> service.mine(transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> service.isInteractionBlocked(null, target));
+        assertThrows(ForbiddenOperationException.class, () -> service.isInteractionBlocked(transientUser, target));
+        assertThrows(ForbiddenOperationException.class, () -> service.isInteractionBlocked(blocker, null));
+        assertThrows(ForbiddenOperationException.class, () -> service.isInteractionBlocked(blocker, transientUser));
+
+        verifyNoInteractions(userRepository, userBlockRepository);
     }
 
     private User user(Long id, String nickname) {
