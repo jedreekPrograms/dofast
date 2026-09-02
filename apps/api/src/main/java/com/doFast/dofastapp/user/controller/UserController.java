@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.user.controller;
 
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.user.auth.session.AuthSessionCookieService;
 import com.doFast.dofastapp.user.auth.session.AuthSessionGrant;
 import com.doFast.dofastapp.user.auth.session.AuthSessionService;
@@ -66,6 +67,7 @@ public class UserController {
 
     @GetMapping("/me")
     public UserResponse me(@AuthenticationPrincipal User user) {
+        requireUserId(user);
         return userService.getCurrentUser(user);
     }
 
@@ -74,6 +76,7 @@ public class UserController {
             @AuthenticationPrincipal User user,
             @RequestBody @Valid UpdateProfileRequest request
     ) {
+        requireUserId(user);
         return userService.updateProfile(user, request);
     }
 
@@ -83,6 +86,7 @@ public class UserController {
             @AuthenticationPrincipal User user,
             @RequestBody @Valid ChangePasswordRequest request
     ) {
+        requireUserId(user);
         userService.changePassword(user, request);
     }
 
@@ -90,5 +94,12 @@ public class UserController {
         AuthSessionGrant grant = sessionService.issue(authResponse);
         cookieService.write(response, grant);
         return grant.response();
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać kontem");
+        }
+        return user.getId();
     }
 }
