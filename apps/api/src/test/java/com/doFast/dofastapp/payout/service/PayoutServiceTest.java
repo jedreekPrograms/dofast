@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -211,6 +212,27 @@ class PayoutServiceTest {
         assertEquals(new BigDecimal("19.50"), response.availableBalance());
         assertEquals("LIVE", response.providerMode());
         verify(walletService, never()).getMyWallet(7L);
+    }
+
+    @Test
+    void payoutOperationsFailClosedBeforeFinancialStateAccessWithoutAuthenticatedIdentity() {
+        User transientUser = new User();
+
+        assertThrows(ForbiddenOperationException.class, () -> payoutService.eligibility(null));
+        assertThrows(ForbiddenOperationException.class, () -> payoutService.myPayouts(transientUser));
+        assertThrows(ForbiddenOperationException.class,
+                () -> payoutService.request(new CreatePayoutRequest(new BigDecimal("25.00"), "req-12345"), transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> payoutService.cancel(41L, null));
+
+        verifyNoInteractions(
+                payoutRepository,
+                eventRepository,
+                userRepository,
+                verificationRepository,
+                walletService,
+                providerRegistry,
+                onboardingService
+        );
     }
 
     private PayoutRequest payout(Long id, User user, BigDecimal amount) {
