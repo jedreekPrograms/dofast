@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.wallet.controller;
 
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.wallet.dto.WalletResponse;
 import com.doFast.dofastapp.wallet.dto.WalletTransactionResponse;
@@ -26,11 +27,20 @@ public class WalletController {
 
     @GetMapping
     public WalletResponse getMyWallet(@AuthenticationPrincipal User user) {
-        return walletService.getMyWallet(user.getId());
+        Long userId = requireActorId(user);
+        return walletService.getMyWallet(userId);
     }
 
     @GetMapping("/transactions")
     public List<WalletTransactionResponse> history(@AuthenticationPrincipal User user) {
+        requireActorId(user);
         return walletHistoryService.getHistory(user);
+    }
+
+    private Long requireActorId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby wyświetlić portfel");
+        }
+        return user.getId();
     }
 }
