@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.service;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.user.dto.UpdateUserServiceCategoriesRequest;
@@ -37,7 +38,8 @@ public class UserServiceCategoryService {
     }
 
     public List<UserServiceCategoryResponse> getForUser(Long userId) {
-        return userServiceCategoryRepository.findForUser(userId)
+        Long verifiedUserId = requireUserId(userId);
+        return userServiceCategoryRepository.findForUser(verifiedUserId)
                 .stream()
                 .filter(relation -> isSelectableLeaf(relation.getCategory()))
                 .map(this::toResponse)
@@ -49,6 +51,7 @@ public class UserServiceCategoryService {
             User user,
             UpdateUserServiceCategoriesRequest request
     ) {
+        Long userId = requireUserId(user);
         Set<Long> requestedIds = new LinkedHashSet<>(request.categoryIds());
         if (requestedIds.size() > MAX_SPECIALIZATIONS) {
             throw new BusinessException("Możesz wybrać maksymalnie 10 specjalizacji");
@@ -68,7 +71,7 @@ public class UserServiceCategoryService {
 
         Map<Long, JobCategory> categoriesById = requestedCategories.stream()
                 .collect(Collectors.toMap(JobCategory::getId, Function.identity()));
-        List<UserServiceCategory> existing = userServiceCategoryRepository.findForUser(user.getId());
+        List<UserServiceCategory> existing = userServiceCategoryRepository.findForUser(userId);
         Set<Long> existingIds = existing.stream()
                 .map(relation -> relation.getCategory().getId())
                 .collect(Collectors.toSet());
@@ -90,7 +93,21 @@ public class UserServiceCategoryService {
             userServiceCategoryRepository.saveAll(added);
         }
 
-        return getForUser(user.getId());
+        return getForUser(userId);
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać specjalizacjami");
+        }
+        return requireUserId(user.getId());
+    }
+
+    private Long requireUserId(Long userId) {
+        if (userId == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać specjalizacjami");
+        }
+        return userId;
     }
 
     private boolean isSelectableLeaf(JobCategory category) {
