@@ -68,11 +68,8 @@ public class StripeRefundRequestService {
             return validateIdempotentRequest(existing, paymentIntentId, input.amount());
         }
 
-        PaymentTransaction payment = paymentRepository.findByStripePaymentIntentIdForUpdate(paymentIntentId)
+        PaymentTransaction payment = paymentRepository.findOwnedByStripePaymentIntentIdForUpdate(paymentIntentId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Płatność Stripe nie istnieje"));
-        if (!userId.equals(payment.getUserId())) {
-            throw new ForbiddenOperationException("Ta płatność Stripe należy do innego użytkownika");
-        }
         if (!CURRENCY.equalsIgnoreCase(payment.getCurrency())) {
             throw new BusinessException("Zwroty do oryginalnej metody są obsługiwane tylko dla PLN");
         }
@@ -116,11 +113,8 @@ public class StripeRefundRequestService {
     }
 
     public StripeRefundResponse get(Long refundRequestId, Long userId) {
-        StripeRefundRequest request = refundRepository.findById(refundRequestId)
+        StripeRefundRequest request = refundRepository.findByIdAndUserId(refundRequestId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zwrot nie istnieje"));
-        if (!request.getUserId().equals(userId)) {
-            throw new ForbiddenOperationException("Ten zwrot należy do innego użytkownika");
-        }
         return toResponse(request);
     }
 

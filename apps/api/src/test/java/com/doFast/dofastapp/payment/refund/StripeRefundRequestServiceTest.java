@@ -42,7 +42,7 @@ class StripeRefundRequestServiceTest {
 
         PaymentTransaction payment = mock(PaymentTransaction.class);
         when(refunds.findByUserIdAndRequestKey(7L, "refund-1")).thenReturn(Optional.empty());
-        when(payments.findByStripePaymentIntentIdForUpdate("pi_test")).thenReturn(Optional.of(payment));
+        when(payments.findOwnedByStripePaymentIntentIdForUpdate("pi_test", 7L)).thenReturn(Optional.of(payment));
         when(payment.getUserId()).thenReturn(7L);
         when(payment.getCurrency()).thenReturn("PLN");
         when(payment.getSettlementPurpose()).thenReturn("TOP_UP");

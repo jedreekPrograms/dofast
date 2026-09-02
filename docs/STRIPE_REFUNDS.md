@@ -11,6 +11,10 @@ Endpoints:
 
 A client `requestId` is unique per user. Reusing it with different payment or amount data is rejected.
 
+## Privacy boundary
+
+Both refund creation and refund-state reads resolve records through owner-scoped database lookups. A foreign PaymentIntent or refund id is indistinguishable from a missing one and returns the same neutral not-found response. The service does not load another user's financial record before checking ownership, so private payment and refund identifiers cannot be used as an existence oracle.
+
 ## Solvency boundary
 
 A refund is never created at Stripe first. doFast first locks the original `PaymentTransaction`, verifies ownership/currency/purpose/refund capacity, persists the refund request, and debits the requested amount from free wallet balance as `STRIPE_REFUND_RESERVE`.

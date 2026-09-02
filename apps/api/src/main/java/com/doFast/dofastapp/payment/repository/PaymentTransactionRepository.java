@@ -19,8 +19,16 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     Optional<PaymentTransaction> findByStripeEventId(String stripeEventId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from PaymentTransaction p where p.stripePaymentIntentId = :paymentIntentId")
-    Optional<PaymentTransaction> findByStripePaymentIntentIdForUpdate(@Param("paymentIntentId") String paymentIntentId);
+    @Query("""
+            select p
+            from PaymentTransaction p
+            where p.stripePaymentIntentId = :paymentIntentId
+              and p.userId = :userId
+            """)
+    Optional<PaymentTransaction> findOwnedByStripePaymentIntentIdForUpdate(
+            @Param("paymentIntentId") String paymentIntentId,
+            @Param("userId") Long userId
+    );
 
     @Modifying
     @Query(value = """

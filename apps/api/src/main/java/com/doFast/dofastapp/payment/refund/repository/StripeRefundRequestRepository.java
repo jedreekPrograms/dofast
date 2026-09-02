@@ -16,6 +16,8 @@ public interface StripeRefundRequestRepository extends JpaRepository<StripeRefun
 
     Optional<StripeRefundRequest> findByUserIdAndRequestKey(Long userId, String requestKey);
 
+    Optional<StripeRefundRequest> findByIdAndUserId(Long id, Long userId);
+
     Optional<StripeRefundRequest> findByStripeRefundId(String stripeRefundId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
