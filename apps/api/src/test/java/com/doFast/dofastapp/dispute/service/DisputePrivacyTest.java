@@ -27,6 +27,9 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -71,28 +74,49 @@ class DisputePrivacyTest {
         dispute.setStatus(DisputeStatus.OPEN);
         dispute.setPreviousJobStatus(JobStatus.IN_PROGRESS);
         dispute.setOpenedAt(LocalDateTime.now());
-
-        when(disputeRepository.findById(100L)).thenReturn(Optional.of(dispute));
     }
 
     @Test
-    void outsiderGetsNeutralNotFoundForExistingDispute() {
+    void outsiderGetsNeutralNotFoundWithoutGlobalDisputeLoad() {
+        when(disputeRepository.findParticipantById(100L, outsider.getId())).thenReturn(Optional.empty());
+
         assertThrows(ResourceNotFoundException.class, () -> service.getDispute(100L, outsider));
+
+        verify(disputeRepository, never()).findById(100L);
+        verify(eventRepository, never()).findByDispute_IdOrderByCreatedAtAsc(anyLong());
     }
 
     @Test
-    void participantStillReadsOwnDispute() {
+    void participantStillReadsOwnDisputeThroughScopedLookup() {
+        when(disputeRepository.findParticipantById(100L, owner.getId())).thenReturn(Optional.of(dispute));
+        when(disputeRepository.findParticipantById(100L, worker.getId())).thenReturn(Optional.of(dispute));
         when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(100L)).thenReturn(List.of());
 
         assertEquals(100L, service.getDispute(100L, owner).dispute().id());
         assertEquals(100L, service.getDispute(100L, worker).dispute().id());
+
+        verify(disputeRepository, never()).findById(100L);
     }
 
     @Test
-    void adminStillReadsDisputeThroughParticipantEndpoint() {
+    void missingIdentityFailsClosedBeforeAnyDisputeLookup() {
+        User transientUser = new User("transient@example.com", "transient");
+
+        assertThrows(ResourceNotFoundException.class, () -> service.getDispute(100L, transientUser));
+
+        verify(disputeRepository, never()).findParticipantById(anyLong(), anyLong());
+        verify(disputeRepository, never()).findById(anyLong());
+        verify(eventRepository, never()).findByDispute_IdOrderByCreatedAtAsc(anyLong());
+    }
+
+    @Test
+    void adminStillReadsDisputeThroughAdministrativeGlobalPath() {
+        when(disputeRepository.findById(100L)).thenReturn(Optional.of(dispute));
         when(eventRepository.findByDispute_IdOrderByCreatedAtAsc(100L)).thenReturn(List.of());
 
         assertEquals(100L, service.getDispute(100L, admin).dispute().id());
+
+        verify(disputeRepository, never()).findParticipantById(anyLong(), anyLong());
     }
 
     private User user(Long id, UserRole role, String nickname) {
