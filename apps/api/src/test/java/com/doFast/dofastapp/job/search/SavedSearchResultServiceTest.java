@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.search;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.dto.NearbyJobResponse;
 import com.doFast.dofastapp.job.repository.NearbyJobProjection;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -121,5 +123,21 @@ class SavedSearchResultServiceTest {
                 org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.anyInt()
         );
+    }
+
+    @Test
+    void rejectsMissingIdentityBeforeReadingPrivateSavedSearchState() {
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.getRadiusResults(9L, null, 50)
+        );
+
+        User transientUser = new User("transient@example.com", "Transient");
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.getRadiusResults(9L, transientUser, 50)
+        );
+
+        verifyNoInteractions(savedSearchRepository, savedSearchResultRepository);
     }
 }
