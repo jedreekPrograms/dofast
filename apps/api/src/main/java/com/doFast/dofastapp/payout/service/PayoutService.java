@@ -65,15 +65,16 @@ public class PayoutService {
     }
 
     public PayoutEligibilityResponse eligibility(User currentUser) {
+        Long userId = requireActorId(currentUser);
         boolean active = currentUser.getStatus() == UserStatus.ACTIVE;
-        boolean verified = verificationRepository.existsByUser_IdAndStatus(currentUser.getId(), VerificationStatus.VERIFIED);
+        boolean verified = verificationRepository.existsByUser_IdAndStatus(userId, VerificationStatus.VERIFIED);
         boolean providerAvailable = providerRegistry.isConfiguredProviderAvailable();
         String configuredProvider = providerRegistry.configuredProviderCode();
         boolean recipientSetupAvailable = onboardingService.setupAvailable();
-        boolean recipientReady = recipientSetupAvailable && onboardingService.isRecipientReady(currentUser.getId());
+        boolean recipientReady = recipientSetupAvailable && onboardingService.isRecipientReady(userId);
         boolean recipientRequired = StripeConnectOnboardingService.PROVIDER_CODE.equals(configuredProvider);
         boolean recipientRequirementSatisfied = !recipientRequired || recipientReady;
-        BigDecimal balance = walletService.getWithdrawableBalance(currentUser.getId());
+        BigDecimal balance = walletService.getWithdrawableBalance(userId);
         return new PayoutEligibilityResponse(
                 verified,
                 providerAvailable,
@@ -89,7 +90,8 @@ public class PayoutService {
     }
 
     public List<PayoutResponse> myPayouts(User currentUser) {
-        return payoutRepository.findByUser_IdOrderByRequestedAtDescIdDesc(currentUser.getId())
+        Long userId = requireActorId(currentUser);
+        return payoutRepository.findByUser_IdOrderByRequestedAtDescIdDesc(userId)
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -97,8 +99,9 @@ public class PayoutService {
 
     @Transactional
     public PayoutResponse request(CreatePayoutRequest request, User currentUser) {
+        Long actorId = requireActorId(currentUser);
         BigDecimal amount = properties.normalizeRequestedAmount(request.amount());
-        User lockedUser = userRepository.findByIdForUpdate(currentUser.getId())
+        User lockedUser = userRepository.findByIdForUpdate(actorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
         String requestKey = requestKey(lockedUser.getId(), request.requestId());
 
@@ -146,10 +149,7 @@ public class PayoutService {
 
     @Transactional
     public PayoutResponse cancel(Long payoutId, User currentUser) {
-        Long ownerId = currentUser == null ? null : currentUser.getId();
-        if (ownerId == null) {
-            throw new ResourceNotFoundException("Wypłata nie istnieje");
-        }
+        Long ownerId = requireActorId(currentUser);
         PayoutRequest payout = payoutRepository.findOwnedByIdForUpdate(payoutId, ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Wypłata nie istnieje"));
         if (payout.getStatus() != PayoutStatus.REQUESTED) {
@@ -213,6 +213,13 @@ public class PayoutService {
                 payout.getResolvedAt(),
                 payout.getStatus() == PayoutStatus.REQUESTED
         );
+    }
+
+    private Long requireActorId(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać wypłatami");
+        }
+        return currentUser.getId();
     }
 
     private String requestKey(Long userId, String clientRequestId) {
