@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.payment.controller;
 
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.payment.dto.CreatePaymentIntentRequest;
 import com.doFast.dofastapp.payment.dto.CreatePaymentIntentResponse;
 import com.doFast.dofastapp.payment.dto.PlatformFeePolicyResponse;
@@ -57,7 +58,7 @@ public class PaymentController {
     ) {
         return stripePaymentService.createPaymentIntent(
                 request.amount(),
-                user.getId(),
+                requireActorId(user),
                 request.requestId()
         );
     }
@@ -67,7 +68,7 @@ public class PaymentController {
             @RequestBody @Valid CreateStripeRefundRequest request,
             @AuthenticationPrincipal User user
     ) {
-        return refundCoordinator.request(user.getId(), request);
+        return refundCoordinator.request(requireActorId(user), request);
     }
 
     @GetMapping("/refunds/{refundRequestId}")
@@ -75,7 +76,7 @@ public class PaymentController {
             @PathVariable @Min(1) Long refundRequestId,
             @AuthenticationPrincipal User user
     ) {
-        return refundCoordinator.get(refundRequestId, user.getId());
+        return refundCoordinator.get(refundRequestId, requireActorId(user));
     }
 
     @GetMapping("/platform-fee-policy")
@@ -105,5 +106,12 @@ public class PaymentController {
                 quote.basisPoints(),
                 BigDecimal.valueOf(quote.basisPoints()).movePointLeft(2)
         );
+    }
+
+    private Long requireActorId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać płatnościami");
+        }
+        return user.getId();
     }
 }
