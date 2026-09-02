@@ -109,7 +109,8 @@ public class DisputeService {
         return toDetail(saved);
     }
 
-    public PageResponse<DisputeResponse> getAdminDisputes(DisputeStatus status, int page, int size) {
+    public PageResponse<DisputeResponse> getAdminDisputes(DisputeStatus status, int page, int size, User admin) {
+        assertAdmin(admin);
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Order.asc("openedAt"), Sort.Order.asc("id")));
         Page<Dispute> result = status == null ? disputeRepository.findAll(pageable) : disputeRepository.findByStatus(status, pageable);
         return PageResponse.from(result, result.getContent().stream().map(this::toResponse).toList());
