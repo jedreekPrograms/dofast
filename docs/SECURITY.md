@@ -26,7 +26,7 @@ This document defines minimum engineering rules for doFast while the product is 
 - Provider event IDs/payment intent IDs must be idempotent in storage.
 - Wallet changes require an auditable ledger entry and transactional consistency.
 - A domain state transition that depends on a wallet mutation must verify that the corresponding idempotent ledger operation was newly applied; an already-applied/mismatched operation is a fail-closed conflict, not permission to advance authoritative escrow, publication, payout or refund state.
-- User payout eligibility, history, request and cancellation paths must reject missing or transient actor identities before querying payout, verification, wallet, provider or user state.
+- User payout eligibility, history, request, cancellation and Stripe Connect recipient-onboarding paths must reject missing or transient actor identities before querying payout, verification, wallet, provider or user state or provisioning external payout accounts.
 - Monetary values use decimal types; floating-point types are prohibited.
 
 ## Application surface
