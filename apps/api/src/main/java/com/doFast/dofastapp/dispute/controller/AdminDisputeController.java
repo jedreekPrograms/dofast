@@ -42,9 +42,10 @@ public class AdminDisputeController {
     public PageResponse<DisputeResponse> getDisputes(
             @RequestParam(required = false) DisputeStatus status,
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @AuthenticationPrincipal User admin
     ) {
-        return disputeService.getAdminDisputes(status, page, size);
+        return disputeService.getAdminDisputes(status, page, size, admin);
     }
 
     @GetMapping("/{id}")
