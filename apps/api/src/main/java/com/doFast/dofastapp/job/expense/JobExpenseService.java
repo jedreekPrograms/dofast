@@ -138,7 +138,7 @@ public class JobExpenseService {
     }
 
     public JobExpenseSummaryResponse getSummaryForAdmin(Long jobId, User admin) {
-        if (admin == null || admin.getRole() != UserRole.ADMIN) {
+        if (admin == null || admin.getId() == null || admin.getRole() != UserRole.ADMIN) {
             throw new ForbiddenOperationException("Tylko administrator może przeglądać wydatki jako dowody w sporze");
         }
         if (!jobRepository.existsById(jobId)) {

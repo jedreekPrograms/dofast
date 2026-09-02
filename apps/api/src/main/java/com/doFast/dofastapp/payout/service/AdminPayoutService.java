@@ -180,7 +180,7 @@ public class AdminPayoutService {
     }
 
     private void assertAdmin(User user) {
-        if (user == null || user.getRole() != UserRole.ADMIN) {
+        if (user == null || user.getId() == null || user.getRole() != UserRole.ADMIN) {
             throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
         }
     }

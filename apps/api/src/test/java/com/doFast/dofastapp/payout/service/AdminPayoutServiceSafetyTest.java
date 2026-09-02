@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.payout.service;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.payout.entity.PayoutRequest;
 import com.doFast.dofastapp.payout.enums.PayoutStatus;
 import com.doFast.dofastapp.payout.provider.PayoutProviderRegistry;
@@ -43,6 +44,20 @@ class AdminPayoutServiceSafetyTest {
         service = new AdminPayoutService(payoutRepository, eventRepository, walletService, providerRegistry);
         admin = user(99L);
         admin.setRole(UserRole.ADMIN);
+    }
+
+    @Test
+    void transientAdminFailsClosedBeforePayoutPersistenceOrProviders() {
+        User transientAdmin = new User("transient-admin@example.com", "transient-admin");
+        transientAdmin.setRole(UserRole.ADMIN);
+
+        assertThrows(ForbiddenOperationException.class, () -> service.list(null, 0, 20, transientAdmin));
+        assertThrows(ForbiddenOperationException.class, () -> service.events(41L, transientAdmin));
+        assertThrows(ForbiddenOperationException.class, () -> service.retry(41L, transientAdmin));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.failAndRestore(41L, "declined", transientAdmin));
+
+        verifyNoInteractions(payoutRepository, eventRepository, walletService, providerRegistry);
     }
 
     @Test

@@ -39,7 +39,7 @@ public class AdminDisputeEvidenceService {
             int limit,
             User admin
     ) {
-        if (admin == null || admin.getRole() != UserRole.ADMIN) {
+        if (admin == null || admin.getId() == null || admin.getRole() != UserRole.ADMIN) {
             throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
         }
 

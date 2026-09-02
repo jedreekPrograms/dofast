@@ -32,7 +32,8 @@ public class AdminUserService {
         this.reactivationAuditRepository = reactivationAuditRepository;
     }
 
-    public AdminOverviewResponse getOverview() {
+    public AdminOverviewResponse getOverview(User admin) {
+        assertAdmin(admin);
         return new AdminOverviewResponse(
                 userRepository.count(),
                 userRepository.countByStatus(UserStatus.ACTIVE),
@@ -40,14 +41,16 @@ public class AdminUserService {
         );
     }
 
-    public List<AdminUserResponse> getUsers() {
+    public List<AdminUserResponse> getUsers(User admin) {
+        assertAdmin(admin);
         return userRepository.findAll(Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")))
                 .stream()
                 .map(this::toResponse)
                 .toList();
     }
 
-    public List<AdminUserReactivationAuditResponse> getReactivationHistory(Long userId) {
+    public List<AdminUserReactivationAuditResponse> getReactivationHistory(Long userId, User admin) {
+        assertAdmin(admin);
         if (!userRepository.existsById(userId)) {
             throw new ResourceNotFoundException("Użytkownik nie istnieje");
         }
@@ -59,6 +62,7 @@ public class AdminUserService {
 
     @Transactional
     public AdminUserResponse updateStatus(Long userId, UserStatus status, String reason, User currentAdmin) {
+        assertAdmin(currentAdmin);
         User target = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
 
@@ -79,6 +83,12 @@ public class AdminUserService {
         User saved = userRepository.save(target);
         reactivationAuditRepository.save(new AdminUserReactivationAudit(saved, currentAdmin, normalizedReason));
         return toResponse(saved);
+    }
+
+    private void assertAdmin(User user) {
+        if (user == null || user.getId() == null || user.getRole() != UserRole.ADMIN) {
+            throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
+        }
     }
 
     private AdminUserResponse toResponse(User user) {

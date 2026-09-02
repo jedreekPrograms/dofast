@@ -22,6 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AdminUserServiceTest {
@@ -34,7 +35,7 @@ class AdminUserServiceTest {
     @Test
     void genericStatusEndpointCannotSuspendUser() {
         User target = mock(User.class);
-        User admin = mock(User.class);
+        User admin = persistedAdmin();
         when(userRepository.findById(7L)).thenReturn(Optional.of(target));
 
         assertThrows(
@@ -50,7 +51,7 @@ class AdminUserServiceTest {
     @Test
     void suspendedUserCanBeReactivatedAndAuditedWithNormalizedReason() {
         User target = mock(User.class);
-        User admin = mock(User.class);
+        User admin = persistedAdmin();
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 27, 12, 0);
 
         when(userRepository.findById(8L)).thenReturn(Optional.of(target));
@@ -81,7 +82,7 @@ class AdminUserServiceTest {
     @Test
     void reactivationHistoryIsReturnedNewestFirstWithActorIdentityAndReason() {
         User target = mock(User.class);
-        User admin = mock(User.class);
+        User admin = persistedAdmin();
         AdminUserReactivationAudit audit = mock(AdminUserReactivationAudit.class);
         LocalDateTime createdAt = LocalDateTime.of(2026, 8, 27, 14, 30);
 
@@ -96,11 +97,10 @@ class AdminUserServiceTest {
         when(audit.getReason()).thenReturn("Manual review passed");
         when(audit.getCreatedAt()).thenReturn(createdAt);
         when(target.getId()).thenReturn(8L);
-        when(admin.getId()).thenReturn(2L);
         when(admin.getEmail()).thenReturn("admin@example.com");
         when(admin.getNickname()).thenReturn("moderator");
 
-        List<AdminUserReactivationAuditResponse> response = service.getReactivationHistory(8L);
+        List<AdminUserReactivationAuditResponse> response = service.getReactivationHistory(8L, admin);
 
         assertEquals(1, response.size());
         assertEquals(12L, response.getFirst().id());
@@ -114,9 +114,29 @@ class AdminUserServiceTest {
     }
 
     @Test
+    void adminOperationsFailClosedBeforePersistenceForTransientIdentity() {
+        User transientAdmin = new User("transient-admin@example.com", "transient-admin");
+        transientAdmin.setRole(UserRole.ADMIN);
+
+        assertThrows(ForbiddenOperationException.class, () -> service.getOverview(transientAdmin));
+        assertThrows(ForbiddenOperationException.class, () -> service.getUsers(transientAdmin));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.getReactivationHistory(8L, transientAdmin));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.updateStatus(
+                        8L,
+                        UserStatus.ACTIVE,
+                        "manual review",
+                        transientAdmin
+                ));
+
+        verifyNoInteractions(userRepository, reactivationAuditRepository);
+    }
+
+    @Test
     void activeUserCannotUseReactivationEndpointAsNoOp() {
         User target = mock(User.class);
-        User admin = mock(User.class);
+        User admin = persistedAdmin();
         when(userRepository.findById(9L)).thenReturn(Optional.of(target));
         when(target.getRole()).thenReturn(UserRole.USER);
         when(target.getStatus()).thenReturn(UserStatus.ACTIVE);
@@ -128,5 +148,12 @@ class AdminUserServiceTest {
 
         verify(userRepository, never()).save(target);
         verify(reactivationAuditRepository, never()).save(any());
+    }
+
+    private User persistedAdmin() {
+        User admin = mock(User.class);
+        when(admin.getId()).thenReturn(2L);
+        when(admin.getRole()).thenReturn(UserRole.ADMIN);
+        return admin;
     }
 }

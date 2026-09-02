@@ -990,7 +990,7 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 954.  🔴 **Następny finansowy blocker: real Stripe Connect E2E.** 
 955.  🟡 **Backup + restore — DB/attachment restore drills działają; off-host/encryption/schedule/retention/production DR nadal otwarte.** 
 956.  🔴 **Branch protection/ruleset — zweryfikowane 2026-09-02: `master protected=false`, required checks wyłączone, `rulesets=[]`.**
-957.  🟡 **TERAZ: pełny authorization/privacy/IDOR audit — PR-y #178–#230 są zmerge’owane i zielone; następnym potwierdzonym kandydatem jest service-level authorization w module identity verification.**
+957.  🟡 **TERAZ: pełny authorization/privacy/IDOR audit — PR-y #178–#232 są zmerge’owane i zielone; identity verification oraz persisted-admin service boundaries są domknięte, audyt trwa na pozostałych prywatnych zasobach.**
 958.  🔴 **Następnie: admin MFA.** 
 959.  🟡 **Następnie: monitoring/alerting.** 
 960.  🔴 **Następnie: disaster/release runbook.** 

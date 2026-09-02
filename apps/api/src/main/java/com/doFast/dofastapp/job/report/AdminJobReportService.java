@@ -3,6 +3,7 @@ package com.doFast.dofastapp.job.report;
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.expense.JobExpenseService;
@@ -63,7 +64,13 @@ public class AdminJobReportService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<AdminJobReportResponse> list(JobReportStatus status, int page, int size) {
+    public PageResponse<AdminJobReportResponse> list(
+            JobReportStatus status,
+            int page,
+            int size,
+            User admin
+    ) {
+        assertAdmin(admin);
         PageRequest pageable = PageRequest.of(page, size);
         Page<JobReport> reports = status == null
                 ? repository.findAllByOrderByCreatedAtAsc(pageable)
@@ -72,19 +79,22 @@ public class AdminJobReportService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<JobReportEnforcementResponse> enforcement(Long reportId) {
+    public Optional<JobReportEnforcementResponse> enforcement(Long reportId, User admin) {
+        assertAdmin(admin);
         return enforcementRepository.findByReport_Id(reportId)
                 .map(JobReportEnforcementResponse::from);
     }
 
     @Transactional(readOnly = true)
-    public Optional<JobReportAccountEnforcementResponse> accountEnforcement(Long reportId) {
+    public Optional<JobReportAccountEnforcementResponse> accountEnforcement(Long reportId, User admin) {
+        assertAdmin(admin);
         return accountEnforcementRepository.findByReport_Id(reportId)
                 .map(JobReportAccountEnforcementResponse::from);
     }
 
     @Transactional
     public AdminJobReportResponse moderate(Long id, ModerateJobReportRequest request, User moderator) {
+        assertAdmin(moderator);
         if (request.status() != JobReportStatus.REVIEWED && request.status() != JobReportStatus.DISMISSED) {
             throw new ConflictException("Moderation decision must be REVIEWED or DISMISSED");
         }
@@ -103,6 +113,7 @@ public class AdminJobReportService {
 
     @Transactional
     public JobReportEnforcementResponse enforce(Long id, EnforceJobReportRequest request, User moderator) {
+        assertAdmin(moderator);
         JobReport report = reviewedReport(id);
 
         if (enforcementRepository.existsByReport_Id(id)) {
@@ -135,6 +146,7 @@ public class AdminJobReportService {
             EnforceJobReportAccountRequest request,
             User moderator
     ) {
+        assertAdmin(moderator);
         JobReport report = reviewedReport(id);
         if (accountEnforcementRepository.existsByReport_Id(id)) {
             throw new ConflictException("Dla tego zgłoszenia wykonano już sankcję na koncie");
@@ -180,6 +192,12 @@ public class AdminJobReportService {
                 now
         );
         return response;
+    }
+
+    private void assertAdmin(User user) {
+        if (user == null || user.getId() == null || user.getRole() != UserRole.ADMIN) {
+            throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
+        }
     }
 
     private void cancelOpenJobWithRefund(Job job, LocalDateTime now) {

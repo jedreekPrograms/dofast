@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.report;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
@@ -10,6 +11,7 @@ import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.auth.session.AuthRefreshSessionRepository;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.user.enums.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -69,12 +72,58 @@ class AdminJobReportServiceTest {
         ReflectionTestUtils.setField(reporter, "id", 7L);
         ReflectionTestUtils.setField(owner, "id", 8L);
         ReflectionTestUtils.setField(admin, "id", 9L);
+        admin.setRole(UserRole.ADMIN);
         job = new Job();
         ReflectionTestUtils.setField(job, "id", 11L);
         job.setCreatedBy(owner);
         job.setStatus(JobStatus.OPEN);
         report = new JobReport(job, reporter, JobReportReason.FRAUD, "suspicious");
         ReflectionTestUtils.setField(report, "id", 15L);
+    }
+
+    @Test
+    void adminOperationsFailClosedBeforePersistenceForTransientIdentity() {
+        User transientAdmin = new User("transient-admin@example.com", "transient-admin");
+        transientAdmin.setRole(UserRole.ADMIN);
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.list(null, 0, 20, transientAdmin));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.enforcement(15L, transientAdmin));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.accountEnforcement(15L, transientAdmin));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.moderate(
+                        15L,
+                        new ModerateJobReportRequest(JobReportStatus.REVIEWED, "confirmed"),
+                        transientAdmin
+                ));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.enforce(
+                        15L,
+                        new EnforceJobReportRequest(JobReportEnforcementAction.CANCEL_OPEN_JOB, "violation"),
+                        transientAdmin
+                ));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.enforceAccount(
+                        15L,
+                        new EnforceJobReportAccountRequest(
+                                JobReportAccountEnforcementAction.SUSPEND_JOB_OWNER,
+                                "violation"
+                        ),
+                        transientAdmin
+                ));
+
+        verifyNoInteractions(
+                repository,
+                enforcementRepository,
+                accountEnforcementRepository,
+                jobRepository,
+                notificationService,
+                transactionService,
+                expenseService,
+                refreshSessionRepository
+        );
     }
 
     @Test
@@ -136,7 +185,7 @@ class AdminJobReportServiceTest {
         ReflectionTestUtils.setField(enforcement, "createdAt", java.time.LocalDateTime.now());
         when(enforcementRepository.findByReport_Id(15L)).thenReturn(Optional.of(enforcement));
 
-        Optional<JobReportEnforcementResponse> response = service.enforcement(15L);
+        Optional<JobReportEnforcementResponse> response = service.enforcement(15L, admin);
 
         assertTrue(response.isPresent());
         assertEquals(21L, response.orElseThrow().id());

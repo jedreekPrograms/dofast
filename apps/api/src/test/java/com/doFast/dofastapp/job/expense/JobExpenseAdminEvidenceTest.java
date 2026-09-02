@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -55,6 +56,23 @@ class JobExpenseAdminEvidenceTest {
         assertEquals(new BigDecimal("0.00"), summary.budgetAmount());
         assertEquals(new BigDecimal("0.00"), summary.claimedAmount());
         assertEquals(0, summary.claims().size());
+    }
+
+    @Test
+    void transientAdminCannotUseAdminEvidencePath() {
+        User transientAdmin = new User("transient-admin@example.com", "transient-admin");
+        transientAdmin.setRole(UserRole.ADMIN);
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.getSummaryForAdmin(50L, transientAdmin));
+
+        verifyNoInteractions(
+                jobRepository,
+                escrowRepository,
+                claimRepository,
+                attachmentRepository,
+                walletService
+        );
     }
 
     @Test

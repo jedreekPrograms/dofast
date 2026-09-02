@@ -1,11 +1,14 @@
 package com.doFast.dofastapp.payment.service;
 
 import com.doFast.dofastapp.common.enums.TransactionStatus;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.payment.dto.FinanceReconciliationResponse;
 import com.doFast.dofastapp.payment.fee.PlatformRevenueEntryRepository;
 import com.doFast.dofastapp.payment.fee.PlatformRevenueType;
 import com.doFast.dofastapp.payment.repository.PaymentTransactionRepository;
 import com.doFast.dofastapp.payment.repository.TransactionRepository;
+import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.enums.UserRole;
 import com.doFast.dofastapp.wallet.repository.WalletTransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,7 +37,8 @@ public class FinanceReconciliationService {
         this.platformRevenueEntryRepository = platformRevenueEntryRepository;
     }
 
-    public FinanceReconciliationResponse reconcile() {
+    public FinanceReconciliationResponse reconcile(User admin) {
+        assertAdmin(admin);
         long walletBalanceMismatches = walletTransactionRepository.countWalletBalanceMismatches();
         long ledgerSequenceMismatches = walletTransactionRepository.countLedgerSequenceMismatches();
         long stripeLedgerMismatches = paymentTransactionRepository.countStripeLedgerMismatches();
@@ -59,5 +63,11 @@ public class FinanceReconciliationService {
                 processedStripePayments,
                 LocalDateTime.now()
         );
+    }
+
+    private void assertAdmin(User user) {
+        if (user == null || user.getId() == null || user.getRole() != UserRole.ADMIN) {
+            throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
+        }
     }
 }

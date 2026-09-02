@@ -32,21 +32,28 @@ public class AdminJobReportController {
     public PageResponse<AdminJobReportResponse> list(
             @RequestParam(required = false) JobReportStatus status,
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @AuthenticationPrincipal User admin
     ) {
-        return service.list(status, page, size);
+        return service.list(status, page, size, admin);
     }
 
     @GetMapping("/{id}/enforcement")
-    public ResponseEntity<JobReportEnforcementResponse> enforcement(@PathVariable Long id) {
-        return service.enforcement(id)
+    public ResponseEntity<JobReportEnforcementResponse> enforcement(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User admin
+    ) {
+        return service.enforcement(id, admin)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @GetMapping("/{id}/account-enforcement")
-    public ResponseEntity<JobReportAccountEnforcementResponse> accountEnforcement(@PathVariable Long id) {
-        return service.accountEnforcement(id)
+    public ResponseEntity<JobReportAccountEnforcementResponse> accountEnforcement(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User admin
+    ) {
+        return service.accountEnforcement(id, admin)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

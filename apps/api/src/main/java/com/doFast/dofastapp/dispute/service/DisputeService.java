@@ -83,11 +83,16 @@ public class DisputeService {
     }
 
     public List<DisputeResponse> getMyDisputes(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new ResourceNotFoundException("Spór nie istnieje");
+        }
         return disputeRepository.findAllForParticipant(currentUser).stream().map(this::toResponse).toList();
     }
 
     public DisputeDetailResponse getDispute(Long disputeId, User currentUser) {
-        Dispute dispute = currentUser != null && currentUser.getRole() == UserRole.ADMIN
+        Dispute dispute = currentUser != null
+                && currentUser.getId() != null
+                && currentUser.getRole() == UserRole.ADMIN
                 ? getForRead(disputeId)
                 : getForParticipantRead(disputeId, currentUser);
         return toDetail(dispute);
@@ -226,7 +231,7 @@ public class DisputeService {
     private Dispute getForRead(Long id) { return disputeRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje")); }
     private Dispute getForUpdate(Long id) { return disputeRepository.findByIdForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("Spór nie istnieje")); }
     private void assertAdmin(User user) {
-        if (user == null || user.getRole() != UserRole.ADMIN) throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
+        if (user == null || user.getId() == null || user.getRole() != UserRole.ADMIN) throw new ForbiddenOperationException("Ta operacja wymaga uprawnień administratora");
     }
     private void assertJobIsDisputed(Job job) {
         if (job.getStatus() != JobStatus.DISPUTED) throw new ConflictException("Zlecenie nie jest aktualnie objęte sporem");

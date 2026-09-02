@@ -28,18 +28,21 @@ public class AdminUserController {
     }
 
     @GetMapping("/overview")
-    public AdminOverviewResponse overview() {
-        return adminUserService.getOverview();
+    public AdminOverviewResponse overview(@AuthenticationPrincipal User admin) {
+        return adminUserService.getOverview(admin);
     }
 
     @GetMapping("/users")
-    public List<AdminUserResponse> users() {
-        return adminUserService.getUsers();
+    public List<AdminUserResponse> users(@AuthenticationPrincipal User admin) {
+        return adminUserService.getUsers(admin);
     }
 
     @GetMapping("/users/{id}/reactivation-audits")
-    public List<AdminUserReactivationAuditResponse> reactivationAudits(@PathVariable Long id) {
-        return adminUserService.getReactivationHistory(id);
+    public List<AdminUserReactivationAuditResponse> reactivationAudits(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User admin
+    ) {
+        return adminUserService.getReactivationHistory(id, admin);
     }
 
     @PatchMapping("/users/{id}/status")
