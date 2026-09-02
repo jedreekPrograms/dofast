@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.user.controller;
 
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.user.dto.UpdateUserServiceCategoriesRequest;
 import com.doFast.dofastapp.user.dto.UserProfileResponse;
 import com.doFast.dofastapp.user.dto.UserServiceCategoryResponse;
@@ -39,7 +40,7 @@ public class UserProfileController {
 
     @GetMapping("/me/service-categories")
     public List<UserServiceCategoryResponse> getMyServiceCategories(@AuthenticationPrincipal User user) {
-        return userServiceCategoryService.getForUser(user.getId());
+        return userServiceCategoryService.getForUser(requireUserId(user));
     }
 
     @PutMapping("/me/service-categories")
@@ -47,6 +48,14 @@ public class UserProfileController {
             @AuthenticationPrincipal User user,
             @RequestBody @Valid UpdateUserServiceCategoriesRequest request
     ) {
+        requireUserId(user);
         return userServiceCategoryService.replaceForUser(user, request);
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać specjalizacjami");
+        }
+        return user.getId();
     }
 }

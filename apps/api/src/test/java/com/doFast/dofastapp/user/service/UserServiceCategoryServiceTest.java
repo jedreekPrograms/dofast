@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.user.service;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.category.FulfillmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -100,6 +102,22 @@ class UserServiceCategoryServiceTest {
                 new UpdateUserServiceCategoriesRequest(List.of(99L))
         ));
         verify(userServiceCategoryRepository, never()).findForUser(9L);
+    }
+
+    @Test
+    void rejectsMissingIdentityBeforeAnyRepositoryAccess() {
+        UserServiceCategoryService service = new UserServiceCategoryService(
+                userServiceCategoryRepository,
+                jobCategoryRepository
+        );
+        User transientUser = user(null);
+        UpdateUserServiceCategoriesRequest request = new UpdateUserServiceCategoriesRequest(List.of(2L));
+
+        assertThrows(ForbiddenOperationException.class, () -> service.getForUser(null));
+        assertThrows(ForbiddenOperationException.class, () -> service.replaceForUser(null, request));
+        assertThrows(ForbiddenOperationException.class, () -> service.replaceForUser(transientUser, request));
+
+        verifyNoInteractions(userServiceCategoryRepository, jobCategoryRepository);
     }
 
     private User user(Long id) {
