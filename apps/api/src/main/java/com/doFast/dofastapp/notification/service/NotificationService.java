@@ -3,6 +3,7 @@ package com.doFast.dofastapp.notification.service;
 import com.doFast.dofastapp.chat.service.RealtimePublisher;
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.dispute.entity.Dispute;
 import com.doFast.dofastapp.job.entity.Job;
@@ -53,6 +54,7 @@ public class NotificationService {
     }
 
     public PageResponse<NotificationResponse> getNotifications(User user, boolean unreadOnly, int page, int size) {
+        requireAuthenticatedUser(user);
         PageRequest pageable = PageRequest.of(page, size);
         Page<Notification> notifications = unreadOnly
                 ? notificationRepository.findByRecipientAndReadAtIsNullOrderByCreatedAtDesc(user, pageable)
@@ -62,10 +64,12 @@ public class NotificationService {
     }
 
     public UnreadNotificationCountResponse getUnreadCount(User user) {
+        requireAuthenticatedUser(user);
         return new UnreadNotificationCountResponse(notificationRepository.countByRecipientAndReadAtIsNull(user));
     }
 
     public NotificationPreferencesResponse getPreferences(User user) {
+        requireAuthenticatedUser(user);
         Set<NotificationType> muted = notificationPreferenceRepository.findAllByUser(user).stream()
                 .map(NotificationPreference::getNotificationType)
                 .collect(Collectors.toUnmodifiableSet());
@@ -74,6 +78,7 @@ public class NotificationService {
 
     @Transactional
     public NotificationPreferencesResponse updatePreferences(User user, Set<NotificationType> mutedTypes) {
+        requireAuthenticatedUser(user);
         if (!MUTABLE_REALTIME_TYPES.containsAll(mutedTypes)) {
             throw new BusinessException("Można wyciszyć wyłącznie mniej krytyczne powiadomienia czasu rzeczywistego");
         }
@@ -86,6 +91,7 @@ public class NotificationService {
 
     @Transactional
     public NotificationResponse markRead(Long notificationId, User user) {
+        requireAuthenticatedUser(user);
         Notification notification = notificationRepository.findByIdAndRecipient(notificationId, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Powiadomienie nie istnieje"));
         notification.markRead(LocalDateTime.now());
@@ -94,6 +100,7 @@ public class NotificationService {
 
     @Transactional
     public int markAllRead(User user) {
+        requireAuthenticatedUser(user);
         return notificationRepository.markAllRead(user, LocalDateTime.now());
     }
 
@@ -118,6 +125,12 @@ public class NotificationService {
             realtimePublisher.publishNotification(recipient.getEmail(), response);
         }
         return response;
+    }
+
+    private void requireAuthenticatedUser(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby korzystać z powiadomień");
+        }
     }
 
     private NotificationResponse toResponse(Notification notification) {

@@ -2,6 +2,7 @@ package com.doFast.dofastapp.notification.service;
 
 import com.doFast.dofastapp.chat.service.RealtimePublisher;
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.notification.entity.Notification;
 import com.doFast.dofastapp.notification.enums.NotificationType;
 import com.doFast.dofastapp.notification.repository.NotificationPreferenceRepository;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -106,5 +108,25 @@ class NotificationServiceTest {
     void unreadCountComesFromRecipientScopedQuery() {
         when(notificationRepository.countByRecipientAndReadAtIsNull(user)).thenReturn(7L);
         assertEquals(7L, notificationService.getUnreadCount(user).unreadCount());
+    }
+
+    @Test
+    void userFacingOperationsFailClosedBeforePersistenceWithoutAuthenticatedIdentity() {
+        User transientUser = new User("transient@example.com", "transient");
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> notificationService.getNotifications(null, false, 0, 30));
+        assertThrows(ForbiddenOperationException.class,
+                () -> notificationService.getUnreadCount(transientUser));
+        assertThrows(ForbiddenOperationException.class,
+                () -> notificationService.getPreferences(null));
+        assertThrows(ForbiddenOperationException.class,
+                () -> notificationService.updatePreferences(transientUser, Set.of()));
+        assertThrows(ForbiddenOperationException.class,
+                () -> notificationService.markRead(10L, null));
+        assertThrows(ForbiddenOperationException.class,
+                () -> notificationService.markAllRead(transientUser));
+
+        verifyNoInteractions(notificationRepository, notificationPreferenceRepository, realtimePublisher);
     }
 }
