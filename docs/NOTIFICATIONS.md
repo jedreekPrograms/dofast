@@ -14,6 +14,7 @@ The first configurable types are:
 
 - `CHAT_MESSAGE`
 - `REVIEW_RECEIVED`
+- `SAVED_SEARCH_MATCH`
 
 Muting one of these types suppresses only the realtime WebSocket popup. The event is still persisted and remains visible in the notification centre, so the user cannot silently lose history.
 
@@ -22,6 +23,8 @@ Transactional and safety-sensitive types are intentionally not configurable. Job
 ## Persistence and privacy
 
 Flyway migration `V20__notification_preferences.sql` stores muted realtime types in `notification_preferences`. Rows are scoped by `user_id` and constrained to one row per `(user_id, notification_type)`. The user foreign key cascades on account deletion.
+
+Every user-facing inbox, unread-count, read-state and preference operation requires an authenticated principal with a persisted user id before any notification repository is accessed. Missing or transient identities fail closed without reading or mutating private notification state.
 
 Preference reads and writes use the authenticated principal only. There is no endpoint for reading or modifying another user's settings.
 
