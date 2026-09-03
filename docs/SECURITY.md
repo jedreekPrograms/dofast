@@ -18,6 +18,7 @@ This document defines minimum engineering rules for doFast while the product is 
 - User-scoped private state operations must establish a persisted authenticated actor identity before loading or mutating dependent resources; missing or transient identities fail closed before persistence access.
 - Account reads/profile/password changes, personal job creation/list/recommendations/publications, job-attachment reads and wallet history enforce that persisted identity again inside their service boundary.
 - Private route-quote creation must establish a persisted owner identity before request processing, repository access or spending external routing-provider budget.
+- Top-up PaymentIntent creation and refund orchestration must establish a persisted payment actor at the service boundary before persistence, wallet state or provider dispatch can be reached; raw user IDs remain internal to the scoped payment workflow.
 - Saved-search list/create/update/delete operations and private saved-search result reads must reject missing or transient actor identities before accessing saved-search, category or result persistence.
 - Private chat conversation lists, message history, sends and read-state mutations must reject missing or transient actor identities before accessing jobs, messages, read state, block state, notifications or realtime delivery.
 - User blocking/unblocking, private block-list reads and symmetric interaction-block checks must reject missing or transient identities before accessing user or block persistence.

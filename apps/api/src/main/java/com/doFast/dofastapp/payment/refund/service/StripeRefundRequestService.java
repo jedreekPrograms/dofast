@@ -113,6 +113,9 @@ public class StripeRefundRequestService {
     }
 
     public StripeRefundResponse get(Long refundRequestId, Long userId) {
+        if (userId == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby wyświetlić zwrot");
+        }
         StripeRefundRequest request = refundRepository.findByIdAndUserId(refundRequestId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zwrot nie istnieje"));
         return toResponse(request);
