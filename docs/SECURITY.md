@@ -2,6 +2,8 @@
 
 This document defines minimum engineering rules for doFast while the product is developed toward handling real users and money.
 
+The reviewed HTTP actor and ownership rules are maintained in [AUTHORIZATION_MATRIX.md](AUTHORIZATION_MATRIX.md).
+
 ## Secrets
 
 - Never commit API keys, JWT secrets, passwords or webhook secrets.
