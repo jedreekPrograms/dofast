@@ -58,7 +58,7 @@ public class PaymentController {
     ) {
         return stripePaymentService.createPaymentIntent(
                 request.amount(),
-                requireActorId(user),
+                requireActor(user),
                 request.requestId()
         );
     }
@@ -68,7 +68,7 @@ public class PaymentController {
             @RequestBody @Valid CreateStripeRefundRequest request,
             @AuthenticationPrincipal User user
     ) {
-        return refundCoordinator.request(requireActorId(user), request);
+        return refundCoordinator.request(requireActor(user), request);
     }
 
     @GetMapping("/refunds/{refundRequestId}")
@@ -76,7 +76,7 @@ public class PaymentController {
             @PathVariable @Min(1) Long refundRequestId,
             @AuthenticationPrincipal User user
     ) {
-        return refundCoordinator.get(refundRequestId, requireActorId(user));
+        return refundCoordinator.get(refundRequestId, requireActor(user));
     }
 
     @GetMapping("/platform-fee-policy")
@@ -108,10 +108,10 @@ public class PaymentController {
         );
     }
 
-    private Long requireActorId(User user) {
+    private User requireActor(User user) {
         if (user == null || user.getId() == null) {
             throw new ForbiddenOperationException("Zaloguj się, aby zarządzać płatnościami");
         }
-        return user.getId();
+        return user;
     }
 }

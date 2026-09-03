@@ -2,8 +2,10 @@ package com.doFast.dofastapp.payment.service;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.payment.entity.PaymentTransaction;
 import com.doFast.dofastapp.payment.repository.PaymentTransactionRepository;
+import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import com.stripe.model.PaymentIntent;
@@ -26,6 +28,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,14 +46,28 @@ class StripePaymentServiceTest {
 
     @Test
     void paymentIntentCreationRejectsAmountsOutsideSupportedTopUpRange() {
+        User user = user(7L);
+
         assertThrows(
                 BusinessException.class,
-                () -> stripePaymentService.createPaymentIntent(new BigDecimal("0.99"), 7L, "req_low")
+                () -> stripePaymentService.createPaymentIntent(new BigDecimal("0.99"), user, "req_low")
         );
         assertThrows(
                 BusinessException.class,
-                () -> stripePaymentService.createPaymentIntent(new BigDecimal("10000.01"), 7L, "req_high")
+                () -> stripePaymentService.createPaymentIntent(new BigDecimal("10000.01"), user, "req_high")
         );
+    }
+
+    @Test
+    void paymentIntentCreationRejectsMissingOrTransientIdentityBeforeProviderWork() {
+        User transientUser = new User("transient@example.com", "transient");
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> stripePaymentService.createPaymentIntent(new BigDecimal("10.00"), null, "req_null"));
+        assertThrows(ForbiddenOperationException.class,
+                () -> stripePaymentService.createPaymentIntent(new BigDecimal("10.00"), transientUser, "req_transient"));
+
+        verifyNoInteractions(walletService, paymentTransactionRepository);
     }
 
     @Test
@@ -239,6 +256,12 @@ class StripePaymentServiceTest {
         when(payment.getSettlementPurpose()).thenReturn(settlementPurpose);
         when(payment.getBusinessReference()).thenReturn(businessReference);
         return payment;
+    }
+
+    private User user(Long id) {
+        User user = mock(User.class);
+        when(user.getId()).thenReturn(id);
+        return user;
     }
 
     private PaymentIntent succeededIntent(String id, long amount, String currency, String userId) {

@@ -1,5 +1,6 @@
 package com.doFast.dofastapp.payment.refund;
 
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.payment.refund.dto.CreateStripeRefundRequest;
 import com.doFast.dofastapp.payment.refund.entity.StripeRefundRequest;
@@ -64,6 +65,20 @@ class StripeRefundRequestPrivacyTest {
         assertEquals("Płatność Stripe nie istnieje", error.getMessage());
         verify(paymentRepository).findOwnedByStripePaymentIntentIdForUpdate("pi_private", 8L);
         verifyNoInteractions(disputeRepository, walletService);
+    }
+
+    @Test
+    void missingActorCannotReachRefundPersistenceOrWalletState() {
+        CreateStripeRefundRequest request = new CreateStripeRefundRequest(
+                "missing-actor",
+                "pi_private",
+                new BigDecimal("5.00")
+        );
+
+        assertThrows(ForbiddenOperationException.class, () -> service.create(null, request));
+        assertThrows(ForbiddenOperationException.class, () -> service.get(101L, null));
+
+        verifyNoInteractions(refundRepository, paymentRepository, disputeRepository, walletService);
     }
 
     @Test

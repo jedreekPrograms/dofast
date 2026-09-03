@@ -2,10 +2,12 @@ package com.doFast.dofastapp.payment.service;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.payment.dto.CreatePaymentIntentResponse;
 import com.doFast.dofastapp.payment.entity.PaymentTransaction;
 import com.doFast.dofastapp.payment.exception.PaymentProviderException;
 import com.doFast.dofastapp.payment.repository.PaymentTransactionRepository;
+import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.wallet.enums.WalletTransactionType;
 import com.doFast.dofastapp.wallet.service.WalletService;
 import com.stripe.exception.StripeException;
@@ -48,7 +50,8 @@ public class StripePaymentService {
                 .build();
     }
 
-    public CreatePaymentIntentResponse createPaymentIntent(BigDecimal amount, Long userId, String requestId) {
+    public CreatePaymentIntentResponse createPaymentIntent(BigDecimal amount, User currentUser, String requestId) {
+        Long userId = requireUserId(currentUser);
         BigDecimal normalizedAmount = normalizeAmount(amount);
         String normalizedRequestId = normalizeRequestId(requestId);
         long amountInCents = normalizedAmount.movePointRight(2).longValueExact();
@@ -81,6 +84,13 @@ public class StripePaymentService {
         } catch (StripeException ex) {
             throw new PaymentProviderException("Nie udało się utworzyć płatności Stripe", ex);
         }
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby utworzyć płatność");
+        }
+        return user.getId();
     }
 
     @Transactional
