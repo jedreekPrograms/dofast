@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.publication;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.category.FulfillmentMode;
 import com.doFast.dofastapp.job.category.JobCategory;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
@@ -33,6 +34,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,6 +65,24 @@ class JobPublicationServiceTest {
         );
         user = user(7L);
         category = onSiteLeafCategory(42L);
+    }
+
+    @Test
+    void publicationCreationFailsClosedBeforeLocksOrSerializationWithoutIdentity() {
+        User transientUser = new User("transient@example.com", "transient");
+        CreateJobPublicationRequest request = new CreateJobPublicationRequest("req-transient", onSiteJob("70.00"));
+
+        assertThrows(ForbiddenOperationException.class, () -> service.create(request, transientUser));
+
+        verifyNoInteractions(
+                publicationRepository,
+                userRepository,
+                categoryRepository,
+                routeQuoteService,
+                walletService,
+                jobService,
+                objectMapper
+        );
     }
 
     @Test

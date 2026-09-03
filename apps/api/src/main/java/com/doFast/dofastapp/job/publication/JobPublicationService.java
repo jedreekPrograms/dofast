@@ -62,7 +62,8 @@ public class JobPublicationService {
 
     @Transactional
     public JobPublicationResponse create(CreateJobPublicationRequest request, User currentUser) {
-        User lockedUser = userRepository.findByIdForUpdate(currentUser.getId())
+        Long currentUserId = requireUserId(currentUser);
+        User lockedUser = userRepository.findByIdForUpdate(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Użytkownik nie istnieje"));
         String requestKey = requestKey(lockedUser.getId(), request.requestId());
         String payload = serialize(request.job());
@@ -135,9 +136,9 @@ public class JobPublicationService {
     }
 
     public List<JobPublicationResponse> getRecoverable(User currentUser) {
-        if (currentUser == null || currentUser.getId() == null) throw new ForbiddenOperationException("Zaloguj się, aby wznowić publikację");
+        Long currentUserId = requireUserId(currentUser);
         return publicationRepository.findAllByUser_IdAndStatusAndExpiresAtAfterOrderByCreatedAtDescIdDesc(
-                        currentUser.getId(), JobPublicationStatus.PAYMENT_REQUIRED, LocalDateTime.now())
+                        currentUserId, JobPublicationStatus.PAYMENT_REQUIRED, LocalDateTime.now())
                 .stream().map(this::toResponse).toList();
     }
 
@@ -228,6 +229,13 @@ public class JobPublicationService {
         }
         return publicationRepository.findOwnedByIdForUpdate(publicationId, currentUser.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Publikacja nie istnieje"));
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać publikacją zlecenia");
+        }
+        return user.getId();
     }
 
     private BigDecimal money(BigDecimal amount) {

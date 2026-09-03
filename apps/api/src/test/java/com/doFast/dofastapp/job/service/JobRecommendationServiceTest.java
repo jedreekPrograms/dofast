@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.service;
 
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.repository.JobDiscoveryRepository;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.entity.UserServiceArea;
@@ -21,6 +22,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -35,6 +37,23 @@ class JobRecommendationServiceTest {
     @Mock private UserServiceCategoryRepository userServiceCategoryRepository;
     @Mock private UserServiceAreaRepository userServiceAreaRepository;
     @Mock private User viewer;
+
+    @Test
+    void recommendationsFailClosedBeforePrivatePreferenceReadsWithoutIdentity() {
+        User transientUser = new User("transient@example.com", "transient");
+        JobRecommendationService service = service();
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.getRecommendedJobs(null, 0, 6));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.getRecommendedJobs(transientUser, 0, 6));
+
+        verifyNoInteractions(
+                jobDiscoveryRepository,
+                userServiceCategoryRepository,
+                userServiceAreaRepository
+        );
+    }
 
     @Test
     void returnsEmptyWithoutQueryingJobsWhenUserHasNoActiveSpecializations() {

@@ -49,6 +49,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -79,6 +80,25 @@ class JobServiceTest {
         );
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
+    }
+
+    @Test
+    void personalizedJobOperationsFailClosedBeforePersistenceForTransientIdentity() {
+        User transientUser = new User("transient@example.com", "transient");
+        JobRequest request = request(UUID.randomUUID());
+
+        assertThrows(ResourceNotFoundException.class, () -> jobService.createJob(request, transientUser));
+        assertThrows(ResourceNotFoundException.class, () -> jobService.getMyJobs(transientUser));
+
+        verifyNoInteractions(
+                jobRepository,
+                jobCategoryRepository,
+                transactionService,
+                notificationService,
+                routeQuoteService,
+                liveTrackingService,
+                jobPublicationOutboxRepository
+        );
     }
 
     @Test

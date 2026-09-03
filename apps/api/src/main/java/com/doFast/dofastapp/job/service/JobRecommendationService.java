@@ -2,6 +2,7 @@ package com.doFast.dofastapp.job.service;
 
 import com.doFast.dofastapp.common.dto.PageResponse;
 import com.doFast.dofastapp.common.enums.JobStatus;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.RecommendedJobsResponse;
 import com.doFast.dofastapp.job.entity.Job;
@@ -38,7 +39,7 @@ public class JobRecommendationService {
     }
 
     public RecommendedJobsResponse getRecommendedJobs(User viewer, int page, int size) {
-        Long viewerId = viewer.getId();
+        Long viewerId = requireViewerId(viewer);
         List<Long> categoryIds = userServiceCategoryRepository.findActiveCategoryIdsForUser(viewerId);
         Optional<UserServiceArea> serviceArea = userServiceAreaRepository.findByUser_Id(viewerId);
         Integer serviceAreaRadiusKm = serviceArea.map(area -> area.getRadiusMeters() / 1000).orElse(null);
@@ -70,6 +71,13 @@ public class JobRecommendationService {
                 categoryIds.size(),
                 serviceAreaRadiusKm
         );
+    }
+
+    private Long requireViewerId(User viewer) {
+        if (viewer == null || viewer.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby wyświetlić rekomendowane zlecenia");
+        }
+        return viewer.getId();
     }
 
     private Page<Job> findInServiceArea(
