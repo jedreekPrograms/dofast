@@ -1,6 +1,8 @@
 package com.doFast.dofastapp.location.routing.service;
 
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
+import com.doFast.dofastapp.location.routing.dto.RoutePointRequest;
+import com.doFast.dofastapp.location.routing.dto.RouteQuoteRequest;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
 import com.doFast.dofastapp.location.routing.provider.RouteProvider;
 import com.doFast.dofastapp.location.routing.provider.RouteProviderResult;
@@ -16,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -57,6 +60,21 @@ class RouteQuotePrivacyTest {
         assertEquals("Wycena trasy nie istnieje", error.getMessage());
         verify(routeQuoteRepository, never()).findById(quoteId);
         verify(routeQuoteRepository, never()).findByIdForUpdate(quoteId);
+    }
+
+    @Test
+    void missingOrTransientOwnerCannotCreateQuoteOrSpendRoutingBudget() {
+        RouteQuoteRequest request = new RouteQuoteRequest(
+                point("51.1128", "17.0601", "Wrocław, Śródmieście"),
+                List.of(),
+                point("51.1090", "17.0320", "Wrocław, Stare Miasto")
+        );
+        User transientUser = new User("transient@example.com", "transient");
+
+        assertThrows(ResourceNotFoundException.class, () -> service.createQuote(request, null));
+        assertThrows(ResourceNotFoundException.class, () -> service.createQuote(request, transientUser));
+
+        verifyNoInteractions(routeProvider, routeQuoteRepository);
     }
 
     @Test
@@ -124,6 +142,16 @@ class RouteQuotePrivacyTest {
                 now.plusMinutes(15)
         );
         return quote;
+    }
+
+    private RoutePointRequest point(String latitude, String longitude, String label) {
+        return new RoutePointRequest(
+                new BigDecimal(latitude),
+                new BigDecimal(longitude),
+                label,
+                label,
+                null
+        );
     }
 
     private User user(Long id) {

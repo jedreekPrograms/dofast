@@ -648,7 +648,7 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 612.  ✅ Brak stack trace'ów w publicznych errorach. 
 613.  ✅ Authentication server-side. 
 614.  ✅ Authorization server-side. 
-615.  🟡 **Pełny endpoint-by-endpoint authorization audit — aktywnie trwa; PR-y #178–#230 domknęły kolejne IDOR-y, scoped lookups i fail-closed identity boundaries.**
+615.  🟡 **Pełny endpoint-by-endpoint authorization audit — aktywnie trwa; PR-y #178–#234 domknęły kolejne IDOR-y, scoped lookups i fail-closed identity boundaries.**
 616.  🟡 Authorization matrix anonymous/user/requester/worker/admin. 
 617.  🟡 Blocked-user matrix audit. 
 618.  🟡 **Historical-resource privacy audit — RouteQuote, payout, expense, attachments, chat, tracking, exact location, proposals, disputes, publications i refundy mają kolejne scoped/neutral-not-found granice; końcowy sweep nadal trwa.**
@@ -990,7 +990,7 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 954.  🔴 **Następny finansowy blocker: real Stripe Connect E2E.** 
 955.  🟡 **Backup + restore — DB/attachment restore drills działają; off-host/encryption/schedule/retention/production DR nadal otwarte.** 
 956.  🔴 **Branch protection/ruleset — zweryfikowane 2026-09-02: `master protected=false`, required checks wyłączone, `rulesets=[]`.**
-957.  🟡 **TERAZ: pełny authorization/privacy/IDOR audit — PR-y #178–#233 są zmerge’owane i zielone; identity verification i persisted-admin są domknięte, a ten pakiet domyka core account/job personalized service boundaries; audyt trwa na pozostałych prywatnych zasobach.**
+957.  🟡 **TERAZ: pełny authorization/privacy/IDOR audit — PR-y #178–#234 są zmerge’owane i zielone; ten pakiet domyka fail-closed identity boundary przed utworzeniem prywatnej wyceny i wywołaniem providera tras; audyt trwa na pozostałych prywatnych zasobach.**
 958.  🔴 **Następnie: admin MFA.** 
 959.  🟡 **Następnie: monitoring/alerting.** 
 960.  🔴 **Następnie: disaster/release runbook.** 
