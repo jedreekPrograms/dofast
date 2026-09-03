@@ -48,6 +48,7 @@ public class RouteQuoteService {
 
     @Transactional
     public RouteQuoteResponse createQuote(RouteQuoteRequest request, User user) {
+        ownerIdOrNotFound(user);
         RoutePointRequest origin = request.origin();
         List<RoutePointRequest> stops = request.stops();
         RoutePointRequest destination = request.destination();
