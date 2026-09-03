@@ -109,6 +109,7 @@ public class JobService {
 
     @Transactional
     public JobResponse createJob(JobRequest request, User user) {
+        requireActorId(user);
         JobCategory category = jobCategoryRepository.findByIdAndActiveTrue(request.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Wybrana kategoria zlecenia nie istnieje lub jest nieaktywna"));
         if (category.getParent() == null || category.getFulfillmentMode() == null) {
@@ -247,6 +248,7 @@ public class JobService {
     }
 
     public List<JobResponse> getMyJobs(User user) {
+        requireActorId(user);
         return jobRepository.findByCreatedByOrTakenByOrderByCreatedAtDesc(user, user).stream().map(this::toResponse).toList();
     }
 

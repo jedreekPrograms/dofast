@@ -13,6 +13,7 @@ import com.doFast.dofastapp.user.dto.AuthResponse;
 import com.doFast.dofastapp.user.dto.ChangePasswordRequest;
 import com.doFast.dofastapp.user.dto.GoogleLoginRequest;
 import com.doFast.dofastapp.user.dto.LoginRequest;
+import com.doFast.dofastapp.user.dto.UpdateProfileRequest;
 import com.doFast.dofastapp.user.dto.UserRequest;
 import com.doFast.dofastapp.user.dto.UserResponse;
 import com.doFast.dofastapp.user.entity.User;
@@ -44,6 +45,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,6 +65,29 @@ class UserServiceTest {
     @BeforeEach
     void setUp() {
         userService = new UserService(
+                userRepository,
+                passwordEncoder,
+                jwtUtil,
+                walletService,
+                authIdentityRepository,
+                googleIdentityVerifier,
+                refreshSessionRepository,
+                emailVerificationService
+        );
+    }
+
+    @Test
+    void accountOperationsFailClosedBeforePersistenceForTransientIdentity() {
+        User transientUser = new User("transient@example.com", "transient");
+        UpdateProfileRequest profile = new UpdateProfileRequest("nickname", null, null);
+        ChangePasswordRequest password = new ChangePasswordRequest("OldPass123!", "NewPass456!");
+
+        assertThrows(ForbiddenOperationException.class, () -> userService.getCurrentUser(null));
+        assertThrows(ForbiddenOperationException.class, () -> userService.getCurrentUser(transientUser));
+        assertThrows(ForbiddenOperationException.class, () -> userService.updateProfile(transientUser, profile));
+        assertThrows(ForbiddenOperationException.class, () -> userService.changePassword(transientUser, password));
+
+        verifyNoInteractions(
                 userRepository,
                 passwordEncoder,
                 jwtUtil,

@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.attachment;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.expense.JobExpenseClaimRepository;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,6 +40,27 @@ class JobAttachmentServiceTest {
     @Mock private Job job;
     @Mock private User creator;
     @Mock private JobAttachment attachment;
+
+    @Test
+    void attachmentReadsFailClosedBeforeVisibilityOrPersistenceWithoutIdentity() {
+        JobAttachmentService service = service();
+        User transientUser = new User("transient@example.com", "transient");
+
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.listVisible(50L, transientUser));
+        assertThrows(ForbiddenOperationException.class,
+                () -> service.download(50L, 90L, transientUser));
+
+        verifyNoInteractions(
+                jobRepository,
+                attachmentRepository,
+                accessPolicy,
+                filePolicy,
+                storage,
+                jobVisibilityService,
+                expenseClaimRepository
+        );
+    }
 
     @Test
     void uploadStoresOpaqueObjectAndPersistsOnlyValidatedMetadata() {

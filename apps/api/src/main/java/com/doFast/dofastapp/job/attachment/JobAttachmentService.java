@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.job.attachment;
 
 import com.doFast.dofastapp.common.exception.ConflictException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.common.exception.ResourceNotFoundException;
 import com.doFast.dofastapp.job.entity.Job;
 import com.doFast.dofastapp.job.expense.JobExpenseClaimRepository;
@@ -85,6 +86,7 @@ public class JobAttachmentService {
     }
 
     public List<JobAttachmentResponse> listVisible(Long jobId, User user) {
+        requireUserId(user);
         jobVisibilityService.assertCanViewPublicDetail(jobId, user);
         return attachmentRepository.findAllByJob_IdAndDeletedAtIsNullOrderByCreatedAtAscIdAsc(jobId)
                 .stream()
@@ -94,6 +96,7 @@ public class JobAttachmentService {
     }
 
     public JobAttachmentContent download(Long jobId, Long attachmentId, User user) {
+        requireUserId(user);
         JobAttachment attachment = getAttachment(jobId, attachmentId);
         accessPolicy.assertCanRead(attachment, user);
         return new JobAttachmentContent(toResponse(attachment), storage.read(attachment.getStorageKey()));
@@ -119,6 +122,13 @@ public class JobAttachmentService {
         }
         return jobRepository.findParticipantByIdForUpdate(jobId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zlecenie nie istnieje"));
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby przeglądać załączniki zlecenia");
+        }
+        return user.getId();
     }
 
     private JobAttachment getAttachment(Long jobId, Long attachmentId) {

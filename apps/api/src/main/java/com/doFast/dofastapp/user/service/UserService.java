@@ -148,12 +148,14 @@ public class UserService {
     }
 
     public UserResponse getCurrentUser(User principal) {
+        requireUserId(principal);
         return toResponse(principal);
     }
 
     @Transactional
     public UserResponse updateProfile(User principal, UpdateProfileRequest request) {
-        User user = userRepository.findById(principal.getId())
+        Long principalId = requireUserId(principal);
+        User user = userRepository.findById(principalId)
                 .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
         user.setNickname(request.nickname().trim());
         user.setBio(normalizePublicProfileField(request.bio()));
@@ -163,7 +165,8 @@ public class UserService {
 
     @Transactional
     public void changePassword(User principal, ChangePasswordRequest request) {
-        User user = userRepository.findByIdForUpdate(principal.getId())
+        Long principalId = requireUserId(principal);
+        User user = userRepository.findByIdForUpdate(principalId)
                 .orElseThrow(() -> new BusinessException("Użytkownik nie istnieje"));
 
         if (!user.isPasswordLoginEnabled()) {
@@ -226,6 +229,13 @@ public class UserService {
                 user.isEmailVerified(),
                 user.getCreatedAt()
         );
+    }
+
+    private Long requireUserId(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby zarządzać kontem");
+        }
+        return user.getId();
     }
 
     private User linkOrCreateGoogleUser(GoogleIdentity googleIdentity) {

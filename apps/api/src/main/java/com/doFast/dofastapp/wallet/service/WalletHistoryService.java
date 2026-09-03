@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.wallet.service;
 
 import com.doFast.dofastapp.common.exception.BusinessException;
+import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.wallet.dto.WalletTransactionResponse;
 import com.doFast.dofastapp.wallet.entity.Wallet;
@@ -27,6 +28,9 @@ public class WalletHistoryService {
     }
 
     public List<WalletTransactionResponse> getHistory(User user) {
+        if (user == null || user.getId() == null) {
+            throw new ForbiddenOperationException("Zaloguj się, aby wyświetlić historię portfela");
+        }
         Wallet wallet = walletRepository.findByUser(user)
                 .orElseThrow(() -> new BusinessException("Wallet nie istnieje"));
 
