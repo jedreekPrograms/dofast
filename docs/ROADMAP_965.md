@@ -1,19 +1,19 @@
 # doFast — roadmapa 965 punktów
 
-Stan roboczy: 2026-09-02. Bazowy snapshot listy został porównany z aktualnym kodem i historią GitHuba. Ten dokument zachowuje wszystkie punkty 1–965 dokładnie raz i nie oznacza jako ukończonych elementów wymagających prawdziwego Stripe, środowiska staging/production, decyzji prawnych ani dostępu do ustawień repozytorium.
+Stan roboczy: 2026-09-03. Bazowy snapshot listy został porównany z aktualnym kodem i historią GitHuba. Ten dokument zachowuje wszystkie punkty 1–965 dokładnie raz i nie oznacza jako ukończonych elementów wymagających prawdziwego Stripe, środowiska staging/production, decyzji prawnych ani dostępu do ustawień repozytorium.
 
-- Audytowany code baseline: `837cbe7769842e9007b9088f8255a03febadada2` (merge PR #230).
-- Najnowszy pakiet: [PR #230](https://github.com/jedreekPrograms/dofast/pull/230) — scalony merge commitem po zielonym exact-head gate; post-merge gate zweryfikowany przed publikacją tego dokumentu.
+- Audytowany code baseline: `071b5d4e5ac10b048e40a50b5a7ee0f8b3f68126` (merge PR #236).
+- Najnowszy pakiet bazowy: [PR #236](https://github.com/jedreekPrograms/dofast/pull/236) — scalony merge commitem po zielonym exact-head gate; bieżący pakiet koduje wynik audytu HTTP jako wykonywalny kontrakt.
 - Ochrona gałęzi: `master protected=false`, required checks wyłączone, brak rulesetów.
-- Otwarty techniczny priorytet: końcowy authorization/privacy/IDOR sweep (#615, #618, #620, #957).
+- Otwarty techniczny priorytet: blocked-user matrix (#617), mass-assignment/DTO (#621–#622), limity kosztownych endpointów (#623) i admin MFA (#958).
 
 ## Legenda i liczby
 
 | Status | Znaczenie | Liczba |
 |---|---|---:|
-| ✅ | zaimplementowane / zweryfikowane w repo | 612 |
+| ✅ | zaimplementowane / zweryfikowane w repo | 617 |
 | 🟢 | główna część domknięta, jawnie opisany zewnętrzny blocker | 2 |
-| 🟡 | częściowe albo aktywnie audytowane | 86 |
+| 🟡 | częściowe albo aktywnie audytowane | 81 |
 | 🔴 | niewykonane, przyszłościowe lub zależne od zewnętrznego dostępu/decyzji | 265 |
 | **Razem** |  | **965** |
 
@@ -24,7 +24,7 @@ Stan roboczy: 2026-09-02. Bazowy snapshot listy został porównany z aktualnym k
 | Neutralne odpowiedzi i scoped lookups dla prywatnych zasobów | #182–#197, #205–#206, #209–#210, #214–#217 |
 | Realtime, auth-version, expiry/rotation tokenów i revocation sesji | #198–#199, #203–#204 |
 | Finansowe fail-closed i race safety | #201–#202, #207, #211, #213 |
-| Persisted-identity gates w prywatnych usługach | #215, #218–#230 |
+| Persisted-identity gates w prywatnych usługach | #215, #218–#236 |
 
 PR-y #181, #186, #190, #208 i #212 zostały zamknięte bez merge jako duplikaty/superseded i nie są liczone jako dostarczone zmiany.
 
@@ -177,7 +177,7 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 141.  ✅ Trust cards w job details. 
 142.  ✅ Trust cards w chat. 
 143.  🟡 Zdjęcie/avatar profilu. 
-144.  🟡 Finalny public-profile privacy audit — ekspozycja kont zawieszonych i publicznych recenzji domknięta przez #196, #197 i #205; końcowy sweep nadal trwa.
+144.  🟡 Finalny public-profile privacy audit — ekspozycja kont zawieszonych i publicznych recenzji domknięta przez #196, #197 i #205; widoczność między zablokowanymi kontami pozostaje w #617.
 145.  ✅ Kategorie zleceń. 
 146.  ✅ Parent categories. 
 147.  ✅ Leaf categories. 
@@ -648,12 +648,12 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 612.  ✅ Brak stack trace'ów w publicznych errorach. 
 613.  ✅ Authentication server-side. 
 614.  ✅ Authorization server-side. 
-615.  🟡 **Pełny endpoint-by-endpoint authorization audit — aktywnie trwa; PR-y #178–#235 domknęły kolejne IDOR-y, scoped lookups i fail-closed identity boundaries.**
-616.  🟡 Authorization matrix anonymous/user/requester/worker/admin. 
+615.  ✅ **Pełny endpoint-by-endpoint authorization audit — domknięty po pakietach #178–#236; zamknięta allowlista, prywatny aktor i prefiks admina mają automatyczną regresję.**
+616.  ✅ Authorization matrix anonymous/user/requester/worker/admin w `docs/AUTHORIZATION_MATRIX.md`, powiązana z `HttpAuthorizationPolicyTest`.
 617.  🟡 Blocked-user matrix audit. 
-618.  🟡 **Historical-resource privacy audit — RouteQuote, payout, expense, attachments, chat, tracking, exact location, proposals, disputes, publications i refundy mają kolejne scoped/neutral-not-found granice; końcowy sweep nadal trwa.**
-619.  🟡 Admin-data exposure audit — kolejka dispute wymusza autoryzację ADMIN również w serwisie (#216); pozostałe powierzchnie admina wymagają końcowego sweepu.
-620.  🟡 **IDOR audit — szeroki pakiet #178–#230 zmerge’owany; nadal nie oznacza finalnego sign-off całego API.**
+618.  ✅ **Historical-resource privacy audit — RouteQuote, payout, expense, attachments, chat, tracking, exact location, proposals, disputes, publications i refundy mają scoped/neutral-not-found granice oraz regresje.**
+619.  ✅ Admin-data exposure audit — wszystkie `/admin/**` powierzchnie wymagają utrwalonego ID i roli `ADMIN` ponownie w serwisie przed repozytorium/providerem.
+620.  ✅ **IDOR audit — pakiety #178–#236 oraz wykonywalna macierz zamknęły endpointy HTTP, prywatne zasoby historyczne i service boundaries.**
 621.  🟡 Mass-assignment audit. 
 622.  🟡 DTO sensitive-field audit. 
 623.  🟡 Rate-limit wszystkich kosztownych authenticated endpointów. 
@@ -866,9 +866,9 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 830.  🔴 Personalized notification alerts. 
 831.  🔴 Automatic saved-search push. 
 832.  🔴 Geofenced new-job alerts. 
-833.  🟡 Final security review — aktywny authorization/privacy sweep doszedł do PR #230; branch protection i zewnętrzne testy nadal blokują sign-off.
-834.  🟡 Final privacy review — szeroki historical-resource/IDOR sweep jest mocno zaawansowany, lecz niezamknięty.
-835.  🟡 Final authorization review — repozytoryjne scoped lookups i fail-closed identity są systematycznie rozszerzane; końcowa macierz endpointów nadal otwarta.
+833.  🟡 Final security review — audyt authorization/privacy HTTP domknięty po PR #236 i skodyfikowany bieżącym pakietem; branch protection i zewnętrzne testy nadal blokują sign-off.
+834.  🟡 Final privacy review — historical-resource/IDOR sweep HTTP jest domknięty; blocked-user visibility oraz zewnętrzny przegląd nadal pozostają otwarte.
+835.  🟡 Final authorization review — scoped lookups, fail-closed identity i macierz endpointów są domknięte; pozostają blocked-user matrix, mass assignment i kosztowne operacje.
 836.  🟢 Final financial review — crash-window część zakończona; real Stripe E2E nadal blockerem. 
 837.  🟡 Final abuse review. 
 838.  🔴 External penetration test — idealnie przed większym launch. 
@@ -989,8 +989,8 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 953.  ✅ **Final financial crash-window audit — główne outbound/provider/DB boundaries domknięte przez #151, #153–#177 wraz z rollback/recovery proofs.** 
 954.  🔴 **Następny finansowy blocker: real Stripe Connect E2E.** 
 955.  🟡 **Backup + restore — DB/attachment restore drills działają; off-host/encryption/schedule/retention/production DR nadal otwarte.** 
-956.  🔴 **Branch protection/ruleset — zweryfikowane 2026-09-02: `master protected=false`, required checks wyłączone, `rulesets=[]`.**
-957.  🟡 **TERAZ: pełny authorization/privacy/IDOR audit — PR-y #178–#235 są zmerge’owane i zielone; ten pakiet przenosi top-up PaymentIntent i refund orchestration na utrwalonego aktora oraz zatrzymuje brakującą tożsamość przed persistence, wallet i provider dispatch; audyt trwa na pozostałych prywatnych zasobach.**
+956.  🔴 **Branch protection/ruleset — zweryfikowane 2026-09-03: `master protected=false`, required checks wyłączone, `rulesets=[]`.**
+957.  🟡 **TERAZ: authorization/privacy hardening — endpoint-by-endpoint HTTP/IDOR sweep jest domknięty; kolejne pakiety obejmują blocked-user matrix, mass assignment i kosztowne operacje przed finalnym sign-off.**
 958.  🔴 **Następnie: admin MFA.** 
 959.  🟡 **Następnie: monitoring/alerting.** 
 960.  🔴 **Następnie: disaster/release runbook.** 

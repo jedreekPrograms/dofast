@@ -71,25 +71,11 @@ public class SecurityConfig {
                                 writeSecurityError(response, HttpServletResponse.SC_FORBIDDEN, "Forbidden"))
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST,
-                                "/users",
-                                "/users/login",
-                                "/users/login/google",
-                                "/users/login/apple",
-                                "/users/login/apple/challenge",
-                                "/users/session/refresh",
-                                "/users/session/logout",
-                                "/users/password/forgot",
-                                "/users/password/reset",
-                                "/users/email-verification/resend",
-                                "/users/email-verification/verify"
-                        ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/jobs", "/jobs/nearby", "/job-categories").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/users/*/profile", "/reviews/users/*").permitAll()
-                        .requestMatchers("/ws", "/ws/**", "/ws-sockjs/**").permitAll()
-                        .requestMatchers("/webhooks/stripe").permitAll()
-                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, HttpAuthorizationPolicy.PUBLIC_POST_PATHS).permitAll()
+                        .requestMatchers(HttpMethod.GET, HttpAuthorizationPolicy.PUBLIC_GET_PATHS).permitAll()
+                        .requestMatchers(HttpAuthorizationPolicy.PUBLIC_TRANSPORT_PATHS).permitAll()
+                        .requestMatchers(HttpAuthorizationPolicy.PUBLIC_HEALTH_PATHS).permitAll()
+                        .requestMatchers(HttpAuthorizationPolicy.ADMIN_PATHS).hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(publicJobDiscoveryRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
