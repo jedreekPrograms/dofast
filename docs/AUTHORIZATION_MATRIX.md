@@ -62,6 +62,8 @@ The allowlist is method-specific. A path listed for `GET` is not automatically p
 | `/verification/**` | Verification subject | Current status and requests apply only to the actor. |
 | `/reviews`, `/reviews/jobs/{jobId}/eligibility` | Completed-job participant | Eligibility and submission derive reviewer/reviewee from the completed job, not request-supplied identities. |
 
+The complete symmetric block behavior for discovery, new contact, historical evidence and existing commercial relationships is maintained in [USER_BLOCKING.md](USER_BLOCKING.md).
+
 `GET /payments/platform-fee-policy` is the only authenticated HTTP endpoint that intentionally does not carry a `User` parameter. It returns one global, non-user-specific policy value. `GET /payments/platform-fee-quote` does carry the actor because it accepts request data and belongs to the authenticated payment flow.
 
 ## Administrator surface

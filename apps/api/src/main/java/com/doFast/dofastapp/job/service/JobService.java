@@ -33,7 +33,6 @@ import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
 import com.doFast.dofastapp.user.service.UserBlockService;
 import org.locationtech.jts.geom.Point;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -43,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @Transactional(readOnly = true)
@@ -62,7 +62,6 @@ public class JobService {
     private final UserBlockService userBlockService;
     private final JobExpenseService expenseService;
 
-    @Autowired
     public JobService(
             JobRepository jobRepository,
             JobCategoryRepository jobCategoryRepository,
@@ -81,30 +80,8 @@ public class JobService {
         this.routeQuoteService = routeQuoteService;
         this.liveTrackingService = liveTrackingService;
         this.jobPublicationOutboxRepository = jobPublicationOutboxRepository;
-        this.userBlockService = userBlockService;
-        this.expenseService = expenseService;
-    }
-
-    JobService(
-            JobRepository jobRepository,
-            JobCategoryRepository jobCategoryRepository,
-            TransactionService transactionService,
-            NotificationService notificationService,
-            RouteQuoteService routeQuoteService,
-            LiveTrackingService liveTrackingService,
-            JobPublicationOutboxRepository jobPublicationOutboxRepository
-    ) {
-        this(
-                jobRepository,
-                jobCategoryRepository,
-                transactionService,
-                notificationService,
-                routeQuoteService,
-                liveTrackingService,
-                jobPublicationOutboxRepository,
-                null,
-                null
-        );
+        this.userBlockService = Objects.requireNonNull(userBlockService, "userBlockService");
+        this.expenseService = Objects.requireNonNull(expenseService, "expenseService");
     }
 
     @Transactional
@@ -137,9 +114,7 @@ public class JobService {
 
         Job saved = jobRepository.save(job);
         transactionService.holdMoney(saved);
-        if (expenseService != null) {
-            expenseService.holdBudget(saved);
-        }
+        expenseService.holdBudget(saved);
         jobPublicationOutboxRepository.save(new JobPublicationOutbox(saved));
         return toResponse(saved);
     }
@@ -234,7 +209,7 @@ public class JobService {
         if (sameUser(job.getCreatedBy(), currentUser)) {
             throw new ForbiddenOperationException("Nie możesz przyjąć własnego zlecenia");
         }
-        if (userBlockService != null && userBlockService.isInteractionBlocked(job.getCreatedBy(), currentUser)) {
+        if (userBlockService.isInteractionBlocked(job.getCreatedBy(), currentUser)) {
             throw new ForbiddenOperationException("Nie możesz przyjąć tego zlecenia");
         }
         job.assignTo(currentUser, LocalDateTime.now());
@@ -282,9 +257,7 @@ public class JobService {
         jobRepository.flush();
         liveTrackingService.stopAndClear(saved.getId());
         transactionService.releaseMoney(saved, saved.getTakenBy());
-        if (expenseService != null) {
-            expenseService.settleOnCompletion(saved);
-        }
+        expenseService.settleOnCompletion(saved);
         notificationService.notify(saved.getTakenBy(), NotificationType.JOB_COMPLETED, "Zlecenie potwierdzone",
                 "Zlecenie „" + saved.getTitle() + "” zostało zakończone, a środki zwolnione.", saved, null);
         return toResponse(saved);
@@ -301,9 +274,7 @@ public class JobService {
         job.cancel(LocalDateTime.now());
         Job saved = jobRepository.save(job);
         transactionService.refundMoney(saved);
-        if (expenseService != null) {
-            expenseService.refundAll(saved);
-        }
+        expenseService.refundAll(saved);
         return toResponse(saved);
     }
 
