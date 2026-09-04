@@ -54,6 +54,9 @@ export PAYOUT_STRIPE_CONNECT_REFRESH_URL='https://app.example.test/wallet?stripe
 export PAYOUT_STRIPE_CONNECT_RETURN_URL='https://app.example.test/wallet?stripe-connect=return'
 export ROUTING_PROVIDER=google
 export GOOGLE_MAPS_ROUTES_API_KEY='prod-contract-routes-key'
+export AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_COST_UNITS=360
+export AUTHENTICATED_OPERATION_RATE_LIMIT_WINDOW_SECONDS=90
+export AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_ENTRIES=12000
 export TRACKING_CHECKPOINT_ARRIVAL_RADIUS_METERS=75
 export JOB_EXACT_LOCATION_RETENTION_DAYS=45
 export JOB_EXACT_LOCATION_CLEANUP_INTERVAL_MS=1800000
@@ -124,6 +127,9 @@ expected = {
     'PAYOUT_STRIPE_CONNECT_COUNTRY': 'PL',
     'PAYOUT_STRIPE_CONNECT_REFRESH_URL': 'https://app.example.test/wallet?stripe-connect=refresh',
     'PAYOUT_STRIPE_CONNECT_RETURN_URL': 'https://app.example.test/wallet?stripe-connect=return',
+    'AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_COST_UNITS': '360',
+    'AUTHENTICATED_OPERATION_RATE_LIMIT_WINDOW_SECONDS': '90',
+    'AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_ENTRIES': '12000',
     'TRACKING_CHECKPOINT_ARRIVAL_RADIUS_METERS': '75',
     'JOB_EXACT_LOCATION_RETENTION_DAYS': '45',
     'JOB_EXACT_LOCATION_CLEANUP_INTERVAL_MS': '1800000',
@@ -169,6 +175,9 @@ assert 'email-verification:' in text, 'production email verification block missi
 assert 'required: true' in text, 'production email verification must be mandatory'
 assert 'verify-base-url: ${EMAIL_VERIFICATION_BASE_URL}' in text, 'production email verification URL is not required'
 assert 'from-address: ${EMAIL_VERIFICATION_FROM_ADDRESS}' in text, 'production email verification sender is not required'
+assert 'max-cost-units: ${AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_COST_UNITS:240}' in text, 'authenticated operation budget missing'
+assert 'window-seconds: ${AUTHENTICATED_OPERATION_RATE_LIMIT_WINDOW_SECONDS:60}' in text, 'authenticated operation window missing'
+assert 'max-entries: ${AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_ENTRIES:10000}' in text, 'authenticated operation capacity missing'
 assert 'retention-days: ${JOB_EXACT_LOCATION_RETENTION_DAYS}' in text, 'production exact-location retention must be explicit'
 PY
 
@@ -181,4 +190,4 @@ for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_UR
 done
 rm -f /tmp/dofast-prod-compose-missing-secret.log
 
-echo 'Production Compose forwards finance/payout/auth/recovery/email-verification/tracking/privacy settings, enforces explicit exact-location retention and Secure refresh cookies, and persists encrypted attachments: OK'
+echo 'Production Compose forwards finance/payout/auth/rate-limit/recovery/email-verification/tracking/privacy settings, enforces explicit exact-location retention and Secure refresh cookies, and persists encrypted attachments: OK'
