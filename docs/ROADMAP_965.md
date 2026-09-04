@@ -2,18 +2,18 @@
 
 Stan roboczy: 2026-09-04. Bazowy snapshot listy został porównany z aktualnym kodem i historią GitHuba. Ten dokument zachowuje wszystkie punkty 1–965 dokładnie raz i nie oznacza jako ukończonych elementów wymagających prawdziwego Stripe, środowiska staging/production, decyzji prawnych ani dostępu do ustawień repozytorium.
 
-- Audytowany code baseline: `16fad47c52b96d255872d1231901181b90e6c539` (merge PR #237).
-- Najnowszy pakiet bazowy: [PR #237](https://github.com/jedreekPrograms/dofast/pull/237) — scalony merge commitem po zielonym exact-head gate; bieżący pakiet domyka bilateralną macierz blokad użytkowników.
+- Audytowany code baseline: `45f0b9d5a884a8d985b6024b1e03ec73bafa3ee8` (merge PR #238).
+- Najnowszy pakiet bazowy: [PR #238](https://github.com/jedreekPrograms/dofast/pull/238) — scalony merge commitem po zielonym exact-head gate; bieżący pakiet koduje wynik audytu mass-assignment i pól DTO jako wykonywalny kontrakt.
 - Ochrona gałęzi: `master protected=false`, required checks wyłączone, brak rulesetów.
-- Otwarty techniczny priorytet: mass-assignment/DTO (#621–#622), limity kosztownych endpointów (#623) i admin MFA (#958).
+- Otwarty techniczny priorytet: limity kosztownych endpointów (#623), distributed/shared rate limiting (#624–#625) i admin MFA (#958).
 
 ## Legenda i liczby
 
 | Status | Znaczenie | Liczba |
 |---|---|---:|
-| ✅ | zaimplementowane / zweryfikowane w repo | 619 |
+| ✅ | zaimplementowane / zweryfikowane w repo | 621 |
 | 🟢 | główna część domknięta, jawnie opisany zewnętrzny blocker | 2 |
-| 🟡 | częściowe albo aktywnie audytowane | 79 |
+| 🟡 | częściowe albo aktywnie audytowane | 77 |
 | 🔴 | niewykonane, przyszłościowe lub zależne od zewnętrznego dostępu/decyzji | 265 |
 | **Razem** |  | **965** |
 
@@ -26,6 +26,7 @@ Stan roboczy: 2026-09-04. Bazowy snapshot listy został porównany z aktualnym k
 | Finansowe fail-closed i race safety | #201–#202, #207, #211, #213 |
 | Persisted-identity gates w prywatnych usługach | #215, #218–#236 |
 | Wykonywalna macierz HTTP i zamknięta anonymous allowlista | #237 |
+| Bilateralna macierz blokad i aktualizacja Tomcata po krytycznych CVE | #238 |
 
 PR-y #181, #186, #190, #208 i #212 zostały zamknięte bez merge jako duplikaty/superseded i nie są liczone jako dostarczone zmiany.
 
@@ -649,14 +650,14 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 612.  ✅ Brak stack trace'ów w publicznych errorach. 
 613.  ✅ Authentication server-side. 
 614.  ✅ Authorization server-side. 
-615.  ✅ **Pełny endpoint-by-endpoint authorization audit — domknięty po pakietach #178–#237; zamknięta allowlista, prywatny aktor i prefiks admina mają automatyczną regresję.**
+615.  ✅ **Pełny endpoint-by-endpoint authorization audit — domknięty po pakietach #178–#238; zamknięta allowlista, prywatny aktor i prefiks admina mają automatyczną regresję.**
 616.  ✅ Authorization matrix anonymous/user/requester/worker/admin w `docs/AUTHORIZATION_MATRIX.md`, powiązana z `HttpAuthorizationPolicyTest`.
 617.  ✅ Blocked-user matrix audit — nowe interakcje są bilateralnie blokowane, dane publiczne pozostają jawne, a historia i istniejące zobowiązania zachowują osobne granice bezpieczeństwa.
 618.  ✅ **Historical-resource privacy audit — RouteQuote, payout, expense, attachments, chat, tracking, exact location, proposals, disputes, publications i refundy mają scoped/neutral-not-found granice oraz regresje.**
 619.  ✅ Admin-data exposure audit — wszystkie `/admin/**` powierzchnie wymagają utrwalonego ID i roli `ADMIN` ponownie w serwisie przed repozytorium/providerem.
-620.  ✅ **IDOR audit — pakiety #178–#237 oraz wykonywalna macierz zamknęły endpointy HTTP, prywatne zasoby historyczne i service boundaries.**
-621.  🟡 Mass-assignment audit. 
-622.  🟡 DTO sensitive-field audit. 
+620.  ✅ **IDOR audit — pakiety #178–#238 oraz wykonywalna macierz zamknęły endpointy HTTP, prywatne zasoby historyczne i service boundaries.**
+621.  ✅ Mass-assignment audit — 39 payloadów REST/STOMP wiąże wyłącznie audytowane DTO; jedyny surowy body to weryfikowany podpisem webhook Stripe, a encje/Map/Object/JSON tree są zakazane testem architektury.
+622.  ✅ DTO sensitive-field audit — jawna allowlista 38 bezpośrednich lub zagnieżdżonych request DTO, strict unknown-property `400` i rekurencyjny zakaz encji w odpowiedziach kontrolerów.
 623.  🟡 Rate-limit wszystkich kosztownych authenticated endpointów. 
 624.  🟡 Distributed/shared rate limiting. 
 625.  🔴 Redis/shared limiter przy multi-node. 
@@ -867,9 +868,9 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 830.  🔴 Personalized notification alerts. 
 831.  🔴 Automatic saved-search push. 
 832.  🔴 Geofenced new-job alerts. 
-833.  🟡 Final security review — audyt authorization/privacy HTTP domknięty po PR #237; branch protection i zewnętrzne testy nadal blokują sign-off.
+833.  🟡 Final security review — HTTP/IDOR, blokady i granice DTO są domknięte po PR #238 oraz bieżącym pakiecie; branch protection i zewnętrzne testy nadal blokują sign-off.
 834.  🟡 Final privacy review — historical-resource/IDOR i blocked-user sweep HTTP są domknięte; zewnętrzny przegląd nadal pozostaje otwarty.
-835.  🟡 Final authorization review — scoped lookups, fail-closed identity oraz macierze endpointów i blokad są domknięte; pozostają mass assignment i kosztowne operacje.
+835.  🟡 Final authorization review — scoped lookups, fail-closed identity oraz macierze endpointów, blokad i DTO są domknięte; pozostają limity kosztownych operacji.
 836.  🟢 Final financial review — crash-window część zakończona; real Stripe E2E nadal blockerem. 
 837.  🟡 Final abuse review. 
 838.  🔴 External penetration test — idealnie przed większym launch. 
@@ -991,7 +992,7 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 954.  🔴 **Następny finansowy blocker: real Stripe Connect E2E.** 
 955.  🟡 **Backup + restore — DB/attachment restore drills działają; off-host/encryption/schedule/retention/production DR nadal otwarte.** 
 956.  🔴 **Branch protection/ruleset — zweryfikowane 2026-09-04: `master protected=false`, required checks wyłączone, `rulesets=[]`.**
-957.  🟡 **TERAZ: authorization/privacy hardening — HTTP/IDOR i blocked-user matrix są domknięte; kolejne pakiety obejmują mass assignment i kosztowne operacje przed finalnym sign-off.**
+957.  🟡 **TERAZ: authorization/privacy hardening — HTTP/IDOR, blocked-user i DTO/mass-assignment matrix są domknięte; kolejny pakiet obejmuje kosztowne operacje przed finalnym sign-off.**
 958.  🔴 **Następnie: admin MFA.** 
 959.  🟡 **Następnie: monitoring/alerting.** 
 960.  🔴 **Następnie: disaster/release runbook.** 
