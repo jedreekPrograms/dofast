@@ -1,6 +1,9 @@
 spring:
   application:
     name: dofast-api
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   profiles:
     default: local
   datasource:
