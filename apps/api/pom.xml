@@ -22,6 +22,7 @@
         <jjwt.version>0.11.5</jjwt.version>
         <stripe.version>33.3.0</stripe.version>
         <google-api-client.version>2.9.0</google-api-client.version>
+        <tomcat.version>11.0.25</tomcat.version>
     </properties>
 
     <dependencies>
