@@ -7,6 +7,7 @@ import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.routing.entity.RouteQuote;
@@ -17,6 +18,7 @@ import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +47,8 @@ class JobMultiStopRouteTest {
     @Mock private RouteQuoteService routeQuoteService;
     @Mock private LiveTrackingService liveTrackingService;
     @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
+    @Mock private UserBlockService userBlockService;
+    @Mock private JobExpenseService expenseService;
 
     private JobService service;
     private User owner;
@@ -59,7 +63,9 @@ class JobMultiStopRouteTest {
                 notificationService,
                 routeQuoteService,
                 liveTrackingService,
-                jobPublicationOutboxRepository
+                jobPublicationOutboxRepository,
+                userBlockService,
+                expenseService
         );
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");

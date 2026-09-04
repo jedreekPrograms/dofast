@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -96,6 +97,29 @@ class JobProposalServiceTest {
 
         verify(jobProposalRepository, never()).save(any(JobProposal.class));
         verify(notificationService, never()).notify(any(), any(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void blockedRelationshipCannotSubmitProposalOrTriggerSideEffects() {
+        JobProposalService service = service();
+        when(worker.getId()).thenReturn(22L);
+        when(requester.getId()).thenReturn(11L);
+        when(jobRepository.findByIdAndStatusAndAssignmentModeForUpdate(
+                101L,
+                JobStatus.OPEN,
+                JobAssignmentMode.PROPOSALS
+        )).thenReturn(Optional.of(job));
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(true);
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.submit(101L, new CreateJobProposalRequest(null, null), worker)
+        );
+
+        verify(jobProposalRepository, never()).findByJob_IdAndProposer_Id(101L, 22L);
+        verify(jobProposalRepository, never()).save(any(JobProposal.class));
+        verifyNoInteractions(transactionService, walletService, notificationService, liveTrackingService);
     }
 
     @Test
@@ -241,6 +265,28 @@ class JobProposalServiceTest {
     }
 
     @Test
+    void blockedProposalCannotReachFundingOrWalletReads() {
+        JobProposalService service = service();
+        when(requester.getId()).thenReturn(11L);
+        when(jobRepository.findByIdAndCreatedBy_Id(101L, 11L)).thenReturn(Optional.of(job));
+        when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(job.getStatus()).thenReturn(JobStatus.OPEN);
+        when(jobProposalRepository.findByIdAndJob_Id(55L, 101L)).thenReturn(Optional.of(proposal));
+        when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
+        when(proposal.getProposer()).thenReturn(worker);
+        when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(true);
+
+        assertThrows(
+                ForbiddenOperationException.class,
+                () -> service.getAcceptanceFunding(101L, 55L, requester)
+        );
+
+        verify(transactionService, never()).getHeldAmount(any(Job.class));
+        verifyNoInteractions(walletService);
+    }
+
+    @Test
     void ownerGetsLifecycleConflictOnlyAfterOwnerScopedFundingLookup() {
         JobProposalService service = service();
         when(requester.getId()).thenReturn(11L);
@@ -306,6 +352,31 @@ class JobProposalServiceTest {
         verify(jobRepository, never()).findByIdForUpdate(101L);
         verify(jobProposalRepository, never()).findByIdAndJob_Id(55L, 101L);
         verify(transactionService, never()).adjustHeldAmount(any(), any(), any());
+    }
+
+    @Test
+    void blockedProposalCannotBeAcceptedOrTriggerCommercialSideEffects() {
+        JobProposalService service = service();
+        when(requester.getId()).thenReturn(11L);
+        when(jobRepository.findByIdAndCreatedByIdForUpdate(101L, 11L)).thenReturn(Optional.of(job));
+        when(job.getAssignmentMode()).thenReturn(JobAssignmentMode.PROPOSALS);
+        when(job.getStatus()).thenReturn(JobStatus.OPEN);
+        when(job.getCreatedBy()).thenReturn(requester);
+        when(jobProposalRepository.findByIdAndJob_Id(55L, 101L)).thenReturn(Optional.of(proposal));
+        when(proposal.getStatus()).thenReturn(JobProposalStatus.SUBMITTED);
+        when(proposal.getProposer()).thenReturn(worker);
+        when(userBlockService.isInteractionBlocked(requester, worker)).thenReturn(true);
+
+        assertThrows(ForbiddenOperationException.class, () -> service.accept(101L, 55L, requester));
+
+        verify(transactionService, never()).adjustHeldAmount(any(), any(), any());
+        verify(job, never()).setPrice(any());
+        verify(job, never()).assignTo(any(), any());
+        verify(proposal, never()).accept(any());
+        verify(jobRepository, never()).save(job);
+        verify(jobProposalRepository, never()).save(any(JobProposal.class));
+        verify(jobProposalRepository, never()).saveAll(any());
+        verifyNoInteractions(notificationService, liveTrackingService);
     }
 
     @Test

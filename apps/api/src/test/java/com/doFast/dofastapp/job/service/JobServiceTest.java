@@ -14,6 +14,7 @@ import com.doFast.dofastapp.job.dto.JobRequest;
 import com.doFast.dofastapp.job.dto.JobResponse;
 import com.doFast.dofastapp.job.dto.JobRouteResponse;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.search.alert.JobPublicationOutbox;
 import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
@@ -26,6 +27,7 @@ import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -62,6 +64,8 @@ class JobServiceTest {
     @Mock private RouteQuoteService routeQuoteService;
     @Mock private LiveTrackingService liveTrackingService;
     @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
+    @Mock private UserBlockService userBlockService;
+    @Mock private JobExpenseService expenseService;
 
     private JobService jobService;
     private User owner;
@@ -76,7 +80,9 @@ class JobServiceTest {
                 notificationService,
                 routeQuoteService,
                 liveTrackingService,
-                jobPublicationOutboxRepository
+                jobPublicationOutboxRepository,
+                userBlockService,
+                expenseService
         );
         owner = user(1L, "owner@example.com");
         worker = user(2L, "worker@example.com");
@@ -97,7 +103,9 @@ class JobServiceTest {
                 notificationService,
                 routeQuoteService,
                 liveTrackingService,
-                jobPublicationOutboxRepository
+                jobPublicationOutboxRepository,
+                userBlockService,
+                expenseService
         );
     }
 
@@ -122,6 +130,7 @@ class JobServiceTest {
         assertEquals(4200, response.routeDistanceMeters());
         assertEquals(720, response.routeDurationSeconds());
         verify(transactionService).holdMoney(any(Job.class));
+        verify(expenseService).holdBudget(any(Job.class));
         verify(jobPublicationOutboxRepository).save(any(JobPublicationOutbox.class));
     }
 
@@ -250,6 +259,7 @@ class JobServiceTest {
 
         assertEquals(JobStatus.DONE, jobService.confirmCompletion(10L, owner).status());
         verify(transactionService).releaseMoney(job, worker);
+        verify(expenseService).settleOnCompletion(job);
         verify(liveTrackingService).stopAndClear(10L);
         verify(jobRepository, never()).findByIdForUpdate(10L);
     }
@@ -263,7 +273,20 @@ class JobServiceTest {
         verify(jobRepository, never()).findByIdForUpdate(10L);
         verify(jobRepository, never()).save(any(Job.class));
         verify(transactionService, never()).releaseMoney(any(Job.class), any(User.class));
+        verify(expenseService, never()).settleOnCompletion(any(Job.class));
         verify(liveTrackingService, never()).stopAndClear(any());
+    }
+
+    @Test
+    void ownerCancellingOpenJobRefundsPaymentAndExpenseEscrows() {
+        when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        Job job = job(JobStatus.OPEN, owner, null);
+        when(jobRepository.findByIdAndCreatedByIdForUpdate(10L, owner.getId())).thenReturn(Optional.of(job));
+
+        assertEquals(JobStatus.CANCELLED, jobService.cancelJob(10L, owner).status());
+        verify(transactionService).refundMoney(job);
+        verify(expenseService).refundAll(job);
+        verify(jobRepository, never()).findByIdForUpdate(10L);
     }
 
     @Test
@@ -284,6 +307,7 @@ class JobServiceTest {
         verify(jobRepository, never()).findByIdForUpdate(10L);
         verify(jobRepository, never()).save(any(Job.class));
         verify(transactionService, never()).refundMoney(any(Job.class));
+        verify(expenseService, never()).refundAll(any(Job.class));
     }
 
     @Test

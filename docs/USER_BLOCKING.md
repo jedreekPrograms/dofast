@@ -22,6 +22,26 @@ Flyway `V31__user_blocks.sql` creates `user_blocks` with foreign keys to `users`
 
 `UserBlockService.isInteractionBlocked(first, second)` is a symmetric, server-side policy primitive: interaction is considered blocked if either side has blocked the other.
 
+The audited behavior is intentionally different for new contact, public data and an existing commercial relationship:
+
+| Surface | Result after a block in either direction | Enforcement boundary |
+|---|---|---|
+| Authenticated job lists, nearby search, recommendations and saved-search results | The other account's open jobs are excluded before pagination/limits. | Block-aware repository queries receive the persisted viewer ID. |
+| Direct open-job detail, viewer attachments and job-based fee quote | A non-participant receives the same neutral not-found result as for a missing resource. | `JobVisibilityService` and `JobAttachmentAccessPolicy`. |
+| Save job | A new bookmark is rejected before bookmark lookup/insert. | `SavedJobService`. |
+| Instant acceptance | Assignment is rejected before job assignment, tracking initialization or notification. | Mandatory `UserBlockService` dependency in `JobService`. |
+| Proposal submit | Submission is rejected before duplicate lookup, insert or notification. | `JobProposalService.submit`. |
+| Proposal funding quote | Quote is rejected before escrow or wallet reads. | `JobProposalService.getAcceptanceFunding`. |
+| Proposal acceptance | Selection is rejected before escrow adjustment, assignment, proposal writes, tracking or notification. | `JobProposalService.accept`. |
+| Chat send, including an idempotent retry | Delivery is rejected before message, notification and realtime side effects. | `ChatService.sendMessage`. |
+| Saved-search alert | Direct alert delivery is suppressed; the outbox item still completes. | `JobPublicationAlertProcessor`. |
+| Review after a completed job | The accountability record remains writable/public, but the direct notification is suppressed. | `ReviewService`. |
+| Existing chat/job/proposal/attachment history | Participant history remains readable. | Existing participant-scoped repository and access policies. |
+| Completion, cancellation, expense, escrow, tracking and dispute/report flows for an existing job | The block does not cancel the job or bypass/disable its financial, safety and accountability lifecycle. | Existing participant, state and ownership policies. |
+| Public profile and received reviews | The same sanitized `ACTIVE`-only projection remains anonymous and public. | Public-profile/review DTOs; a block is not presented as secrecy for data available without an account. |
+
+The matrix is covered by focused tests for the symmetric primitive, database viewer propagation, direct-detail/attachment visibility, instant acceptance, all three proposal gates, saved jobs, chat, alerts and review-notification suppression. `JobService` cannot be constructed without its blocking and expense policy dependencies, preventing a test or alternate wiring path from silently disabling either rule.
+
 Chat message delivery enforces this policy before any message row is inserted, notification is created or realtime event is published. The same check is also applied to retries using an existing `clientMessageId`, so blocking cannot be bypassed through the idempotency path. Existing chat history remains readable for job participants; blocking prevents new direct communication rather than deleting historical evidence or changing job lifecycle state.
 
 Accepting an open job also enforces the symmetric block policy before the worker is assigned. A blocked relationship therefore cannot start a new job relationship, initialize live tracking or create the `JOB_ACCEPTED` notification. The rejection message is intentionally neutral and does not disclose which side created the block.
@@ -44,4 +64,4 @@ If either participant has blocked the other, the review is still persisted norma
 
 Existing active jobs are not cancelled merely because either participant later creates a block. Their escrow, completion/dispute lifecycle and participant-only location authorization continue to follow the dedicated job rules; blocking prevents new interaction surfaces rather than silently mutating financial or safety-critical state.
 
-Future profile and interaction surfaces should reuse the same server-side policy instead of trusting client-side hidden controls. Blocking does not alter escrow, active job state, location access or moderation records by itself; those remain governed by their existing participant and lifecycle authorization rules.
+New private interaction surfaces must reuse the symmetric server-side policy instead of trusting client-side hidden controls. New truly public surfaces must make their anonymous visibility explicit. Blocking does not alter escrow, active job state, location access or moderation records by itself; those remain governed by their existing participant and lifecycle authorization rules.

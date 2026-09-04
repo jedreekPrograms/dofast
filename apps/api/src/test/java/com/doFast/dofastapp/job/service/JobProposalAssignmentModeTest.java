@@ -5,6 +5,7 @@ import com.doFast.dofastapp.common.exception.ConflictException;
 import com.doFast.dofastapp.job.assignment.JobAssignmentMode;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
@@ -12,6 +13,7 @@ import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -36,6 +38,8 @@ class JobProposalAssignmentModeTest {
     @Mock private RouteQuoteService routeQuoteService;
     @Mock private LiveTrackingService liveTrackingService;
     @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
+    @Mock private UserBlockService userBlockService;
+    @Mock private JobExpenseService expenseService;
     @Mock private Job job;
     @Mock private User worker;
 
@@ -55,7 +59,9 @@ class JobProposalAssignmentModeTest {
                 notificationService,
                 routeQuoteService,
                 liveTrackingService,
-                jobPublicationOutboxRepository
+                jobPublicationOutboxRepository,
+                userBlockService,
+                expenseService
         );
 
         assertThrows(ConflictException.class, () -> service.acceptJob(91L, worker));

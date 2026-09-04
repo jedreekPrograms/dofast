@@ -4,6 +4,7 @@ import com.doFast.dofastapp.common.enums.JobStatus;
 import com.doFast.dofastapp.common.exception.ForbiddenOperationException;
 import com.doFast.dofastapp.job.category.JobCategoryRepository;
 import com.doFast.dofastapp.job.entity.Job;
+import com.doFast.dofastapp.job.expense.JobExpenseService;
 import com.doFast.dofastapp.job.repository.JobRepository;
 import com.doFast.dofastapp.job.search.alert.JobPublicationOutboxRepository;
 import com.doFast.dofastapp.location.routing.service.RouteQuoteService;
@@ -12,6 +13,7 @@ import com.doFast.dofastapp.location.tracking.service.LiveTrackingService;
 import com.doFast.dofastapp.notification.service.NotificationService;
 import com.doFast.dofastapp.payment.service.TransactionService;
 import com.doFast.dofastapp.user.entity.User;
+import com.doFast.dofastapp.user.service.UserBlockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +39,8 @@ class JobExactLocationLifecycleAccessTest {
     @Mock private RouteQuoteService routeQuoteService;
     @Mock private LiveTrackingService liveTrackingService;
     @Mock private JobPublicationOutboxRepository jobPublicationOutboxRepository;
+    @Mock private UserBlockService userBlockService;
+    @Mock private JobExpenseService expenseService;
 
     private JobService jobService;
     private User requester;
@@ -51,7 +55,9 @@ class JobExactLocationLifecycleAccessTest {
                 notificationService,
                 routeQuoteService,
                 liveTrackingService,
-                jobPublicationOutboxRepository
+                jobPublicationOutboxRepository,
+                userBlockService,
+                expenseService
         );
         requester = user(1L, "requester@example.com");
         worker = user(2L, "worker@example.com");
