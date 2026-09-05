@@ -10,11 +10,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Clock;
-import java.time.Instant;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
 
@@ -23,12 +20,8 @@ public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
             "/jobs/nearby"
     );
 
-    private final Map<String, Window> windows = new ConcurrentHashMap<>();
-    private final AtomicLong requestsSinceCleanup = new AtomicLong();
     private final Clock clock;
-    private final int maxRequests;
-    private final long windowSeconds;
-    private final int maxEntries;
+    private final InMemoryFixedWindowRateLimiter rateLimiter;
     private final boolean trustForwardedFor;
 
     public PublicJobDiscoveryRateLimitFilter(
@@ -50,11 +43,9 @@ public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
         if (maxRequests < 1 || windowSeconds < 1 || maxEntries < 100) {
             throw new IllegalArgumentException("Invalid public job discovery rate-limit configuration");
         }
-        this.maxRequests = maxRequests;
-        this.windowSeconds = windowSeconds;
-        this.maxEntries = maxEntries;
+        this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxRequests, windowSeconds, maxEntries);
         this.trustForwardedFor = trustForwardedFor;
-        this.clock = clock;
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
@@ -65,9 +56,8 @@ public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        Instant now = clock.instant();
         String key = clientAddress(request) + "|" + request.getRequestURI();
-        Decision decision = register(key, now);
+        InMemoryFixedWindowRateLimiter.Decision decision = rateLimiter.register(key, 1, clock.instant());
 
         if (!decision.allowed()) {
             response.setStatus(429);
@@ -79,37 +69,6 @@ public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    private Decision register(String key, Instant now) {
-        if (requestsSinceCleanup.incrementAndGet() % 256 == 0) {
-            cleanup(now);
-        }
-        if (!windows.containsKey(key) && windows.size() >= maxEntries) {
-            cleanup(now);
-            if (windows.size() >= maxEntries) {
-                return new Decision(false, windowSeconds);
-            }
-        }
-
-        long epochSecond = now.getEpochSecond();
-        Window window = windows.compute(key, (ignored, current) -> {
-            if (current == null || epochSecond - current.startedAtEpochSecond() >= windowSeconds) {
-                return new Window(epochSecond, 1);
-            }
-            return new Window(current.startedAtEpochSecond(), current.count() + 1);
-        });
-
-        if (window.count() <= maxRequests) {
-            return new Decision(true, 0);
-        }
-        long retryAfter = Math.max(1, windowSeconds - (epochSecond - window.startedAtEpochSecond()));
-        return new Decision(false, retryAfter);
-    }
-
-    private void cleanup(Instant now) {
-        long cutoff = now.getEpochSecond() - windowSeconds;
-        windows.entrySet().removeIf(entry -> entry.getValue().startedAtEpochSecond() <= cutoff);
     }
 
     private String clientAddress(HttpServletRequest request) {
@@ -125,7 +84,4 @@ public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
         String remote = request.getRemoteAddr();
         return remote == null || remote.isBlank() ? "unknown" : remote;
     }
-
-    private record Window(long startedAtEpochSecond, int count) {}
-    private record Decision(boolean allowed, long retryAfterSeconds) {}
 }

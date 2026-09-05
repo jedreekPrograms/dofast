@@ -21,6 +21,7 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final PublicAuthRateLimitFilter publicAuthRateLimitFilter;
     private final PublicJobDiscoveryRateLimitFilter publicJobDiscoveryRateLimitFilter;
+    private final AuthenticatedOperationRateLimitFilter authenticatedOperationRateLimitFilter;
     private final AuthenticatedRoutingRateLimitFilter authenticatedRoutingRateLimitFilter;
 
     public SecurityConfig(
@@ -35,7 +36,10 @@ public class SecurityConfig {
             @Value("${dofast.security.public-job-discovery-rate-limit.trust-forwarded-for:false}") boolean discoveryTrustForwardedFor,
             @Value("${dofast.security.authenticated-routing-rate-limit.max-provider-calls:60}") int routingMaxProviderCalls,
             @Value("${dofast.security.authenticated-routing-rate-limit.window-seconds:60}") long routingWindowSeconds,
-            @Value("${dofast.security.authenticated-routing-rate-limit.max-entries:10000}") int routingMaxEntries
+            @Value("${dofast.security.authenticated-routing-rate-limit.max-entries:10000}") int routingMaxEntries,
+            @Value("${dofast.security.authenticated-operation-rate-limit.max-cost-units:240}") int operationMaxCostUnits,
+            @Value("${dofast.security.authenticated-operation-rate-limit.window-seconds:60}") long operationWindowSeconds,
+            @Value("${dofast.security.authenticated-operation-rate-limit.max-entries:10000}") int operationMaxEntries
     ) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.publicAuthRateLimitFilter = new PublicAuthRateLimitFilter(
@@ -49,6 +53,11 @@ public class SecurityConfig {
                 discoveryWindowSeconds,
                 discoveryMaxEntries,
                 discoveryTrustForwardedFor
+        );
+        this.authenticatedOperationRateLimitFilter = new AuthenticatedOperationRateLimitFilter(
+                operationMaxCostUnits,
+                operationWindowSeconds,
+                operationMaxEntries
         );
         this.authenticatedRoutingRateLimitFilter = new AuthenticatedRoutingRateLimitFilter(
                 routingMaxProviderCalls,
@@ -81,7 +90,8 @@ public class SecurityConfig {
                 .addFilterBefore(publicJobDiscoveryRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(publicAuthRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(authenticatedRoutingRateLimitFilter, JwtAuthFilter.class);
+                .addFilterAfter(authenticatedOperationRateLimitFilter, JwtAuthFilter.class)
+                .addFilterAfter(authenticatedRoutingRateLimitFilter, AuthenticatedOperationRateLimitFilter.class);
 
         return http.build();
     }

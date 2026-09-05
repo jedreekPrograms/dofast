@@ -5,7 +5,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -14,60 +13,55 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.time.Clock;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
-public class AuthenticatedRoutingRateLimitFilter extends OncePerRequestFilter {
+public class AuthenticatedOperationRateLimitFilter extends OncePerRequestFilter {
 
-    private static final String CREATE_QUOTE_PATH = "/routing/quotes";
-    private static final Pattern MODE_ESTIMATES_PATH = Pattern.compile(
-            "^/routing/quotes/[^/]+/mode-estimates$"
-    );
-    private static final int CREATE_QUOTE_PROVIDER_CALLS = 1;
-    private static final int MODE_ESTIMATES_PROVIDER_CALLS = 2;
+    private static final String TRANSIENT_ACCOUNT_KEY = "authenticated-without-id";
 
     private final Clock clock;
     private final InMemoryFixedWindowRateLimiter rateLimiter;
 
-    public AuthenticatedRoutingRateLimitFilter(
-            int maxProviderCalls,
+    public AuthenticatedOperationRateLimitFilter(
+            int maxCostUnits,
             long windowSeconds,
             int maxEntries
     ) {
-        this(maxProviderCalls, windowSeconds, maxEntries, Clock.systemUTC());
+        this(maxCostUnits, windowSeconds, maxEntries, Clock.systemUTC());
     }
 
-    AuthenticatedRoutingRateLimitFilter(
-            int maxProviderCalls,
+    AuthenticatedOperationRateLimitFilter(
+            int maxCostUnits,
             long windowSeconds,
             int maxEntries,
             Clock clock
     ) {
-        if (maxProviderCalls < MODE_ESTIMATES_PROVIDER_CALLS || windowSeconds < 1 || maxEntries < 100) {
-            throw new IllegalArgumentException("Invalid authenticated routing rate-limit configuration");
+        if (maxCostUnits < AuthenticatedOperationRateLimitPolicy.MAX_SINGLE_REQUEST_COST
+                || windowSeconds < 1 || maxEntries < 100) {
+            throw new IllegalArgumentException("Invalid authenticated operation rate-limit configuration");
         }
-        this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxProviderCalls, windowSeconds, maxEntries);
+        this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxCostUnits, windowSeconds, maxEntries);
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return providerCallCost(request) == 0;
+        return costUnits(request) == 0;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof User user)) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || !(authentication.getPrincipal() instanceof User user)) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        int providerCallCost = providerCallCost(request);
-        String accountKey = user.getId() == null ? "authenticated-without-id" : user.getId().toString();
+        String accountKey = user.getId() == null ? TRANSIENT_ACCOUNT_KEY : user.getId().toString();
         InMemoryFixedWindowRateLimiter.Decision decision = rateLimiter.register(
                 accountKey,
-                providerCallCost,
+                costUnits(request),
                 clock.instant()
         );
         if (!decision.allowed()) {
@@ -82,15 +76,7 @@ public class AuthenticatedRoutingRateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private int providerCallCost(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        if (HttpMethod.POST.matches(request.getMethod()) && CREATE_QUOTE_PATH.equals(path)) {
-            return CREATE_QUOTE_PROVIDER_CALLS;
-        }
-        if (HttpMethod.GET.matches(request.getMethod()) && MODE_ESTIMATES_PATH.matcher(path).matches()) {
-            return MODE_ESTIMATES_PROVIDER_CALLS;
-        }
-        return 0;
+    private int costUnits(HttpServletRequest request) {
+        return AuthenticatedOperationRateLimitPolicy.costUnits(request.getMethod(), request.getRequestURI());
     }
-
 }

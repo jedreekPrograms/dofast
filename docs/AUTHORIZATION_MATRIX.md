@@ -62,7 +62,7 @@ The allowlist is method-specific. A path listed for `GET` is not automatically p
 | `/verification/**` | Verification subject | Current status and requests apply only to the actor. |
 | `/reviews`, `/reviews/jobs/{jobId}/eligibility` | Completed-job participant | Eligibility and submission derive reviewer/reviewee from the completed job, not request-supplied identities. |
 
-The complete symmetric block behavior for discovery, new contact, historical evidence and existing commercial relationships is maintained in [USER_BLOCKING.md](USER_BLOCKING.md). Typed transport inputs, their field allowlists and the no-entity response rule are maintained in [DTO_BOUNDARIES.md](DTO_BOUNDARIES.md).
+The complete symmetric block behavior for discovery, new contact, historical evidence and existing commercial relationships is maintained in [USER_BLOCKING.md](USER_BLOCKING.md). Typed transport inputs, their field allowlists and the no-entity response rule are maintained in [DTO_BOUNDARIES.md](DTO_BOUNDARIES.md). Shared per-account budgets for every private mutation and explicitly costly reads are maintained in [AUTHENTICATED_OPERATION_RATE_LIMITING.md](AUTHENTICATED_OPERATION_RATE_LIMITING.md).
 
 `GET /payments/platform-fee-policy` is the only authenticated HTTP endpoint that intentionally does not carry a `User` parameter. It returns one global, non-user-specific policy value. `GET /payments/platform-fee-quote` does carry the actor because it accepts request data and belongs to the authenticated payment flow.
 
@@ -85,7 +85,8 @@ All `/admin/**` endpoints require `ROLE_ADMIN` at the HTTP perimeter and a persi
 - An authenticated outsider receives a neutral not-found response where revealing resource existence would create an IDOR oracle.
 - A known participant attempting an invalid role/state transition receives forbidden or conflict according to the domain contract.
 - Administrator service checks are mandatory even when the URL matcher already requires `ROLE_ADMIN`.
+- A trusted account that exhausts its shared costly-operation budget receives `429` before the controller; anonymous requests still follow their dedicated limits and normal `401`/`403` boundary.
 
 ## Change rule
 
-When adding or changing an endpoint, update `HttpAuthorizationPolicy` only if anonymous access is intentional, add the corresponding ownership/service-boundary tests, and update this matrix. The controller-discovery and DTO-boundary regression tests must remain green; endpoint, payload and field allowlists must change deliberately.
+When adding or changing an endpoint, update `HttpAuthorizationPolicy` only if anonymous access is intentional, add the corresponding ownership/service-boundary tests, and update this matrix. Assign an explicit weight in `AuthenticatedOperationRateLimitPolicy` when the operation performs provider, financial, storage or query-amplifying work; every other private mutation inherits the baseline budget. The controller-discovery, DTO-boundary and authenticated-operation regression tests must remain green; endpoint, payload, field and weighted-operation inventories must change deliberately.
