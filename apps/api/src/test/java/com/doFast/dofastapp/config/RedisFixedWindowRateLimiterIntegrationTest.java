@@ -24,6 +24,8 @@ class RedisFixedWindowRateLimiterIntegrationTest {
 
     private static final String SECRET = "integration-test-rate-limit-secret-32-bytes";
     private static final String PREFIX = "dofast:integration:" + UUID.randomUUID();
+    private static final String SHARED_BUDGET_PREFIX = PREFIX + ":sharing";
+    private static final String CONCURRENCY_PREFIX = PREFIX + ":concurrency";
     private static final Instant NOW = Instant.parse("2026-09-05T12:00:00Z");
 
     private static LettuceConnectionFactory connectionFactory;
@@ -53,9 +55,9 @@ class RedisFixedWindowRateLimiterIntegrationTest {
 
     @Test
     void sharesOneAtomicBudgetAcrossLimiterInstancesAndIsolatesNamespaces() {
-        RedisFixedWindowRateLimiter first = limiter("authenticated-operation", 3);
-        RedisFixedWindowRateLimiter second = limiter("authenticated-operation", 3);
-        RedisFixedWindowRateLimiter otherNamespace = limiter("authenticated-routing", 3);
+        RedisFixedWindowRateLimiter first = limiter(SHARED_BUDGET_PREFIX, "authenticated-operation", 3);
+        RedisFixedWindowRateLimiter second = limiter(SHARED_BUDGET_PREFIX, "authenticated-operation", 3);
+        RedisFixedWindowRateLimiter otherNamespace = limiter(SHARED_BUDGET_PREFIX, "authenticated-routing", 3);
 
         assertThat(first.register("account-42", 2, NOW).allowed()).isTrue();
         FixedWindowRateLimiter.Decision rejected = second.register("account-42", 2, NOW);
@@ -63,15 +65,15 @@ class RedisFixedWindowRateLimiterIntegrationTest {
         assertThat(rejected.retryAfterSeconds()).isBetween(1L, 30L);
         assertThat(otherNamespace.register("account-42", 2, NOW).allowed()).isTrue();
 
-        Set<String> keys = redisTemplate.keys(PREFIX + ":*");
+        Set<String> keys = redisTemplate.keys(SHARED_BUDGET_PREFIX + ":*");
         assertThat(keys).hasSize(2);
         assertThat(keys).allMatch(key -> !key.contains("account-42"));
     }
 
     @Test
     void admitsExactlyTheConfiguredNumberUnderConcurrentRequests() throws Exception {
-        RedisFixedWindowRateLimiter first = limiter("websocket-inbound", 10);
-        RedisFixedWindowRateLimiter second = limiter("websocket-inbound", 10);
+        RedisFixedWindowRateLimiter first = limiter(CONCURRENCY_PREFIX, "websocket-inbound", 10);
+        RedisFixedWindowRateLimiter second = limiter(CONCURRENCY_PREFIX, "websocket-inbound", 10);
         ExecutorService executor = Executors.newFixedThreadPool(8);
         try {
             List<Callable<Boolean>> attempts = new ArrayList<>();
@@ -93,10 +95,10 @@ class RedisFixedWindowRateLimiterIntegrationTest {
         }
     }
 
-    private static RedisFixedWindowRateLimiter limiter(String namespace, int maximum) {
+    private static RedisFixedWindowRateLimiter limiter(String prefix, String namespace, int maximum) {
         return new RedisFixedWindowRateLimiter(
                 redisTemplate,
-                PREFIX,
+                prefix,
                 namespace,
                 maximum,
                 30,
