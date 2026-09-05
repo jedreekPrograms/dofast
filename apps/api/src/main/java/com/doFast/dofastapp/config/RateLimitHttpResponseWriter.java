@@ -1,6 +1,7 @@
 package com.doFast.dofastapp.config;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 
 import java.io.IOException;
@@ -10,7 +11,7 @@ final class RateLimitHttpResponseWriter {
     private RateLimitHttpResponseWriter() {}
 
     static void writeTooManyRequests(HttpServletResponse response, long retryAfterSeconds) throws IOException {
-        response.setStatus(HttpServletResponse.SC_TOO_MANY_REQUESTS);
+        response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setHeader("Retry-After", Long.toString(retryAfterSeconds));
         writeJson(response, "{\"status\":429,\"error\":\"Too Many Requests\"}");
     }
