@@ -47,9 +47,9 @@ The inbound channel runs interceptors in this order:
 
 The client outbound channel independently runs `WebSocketOutboundSecurityInterceptor` before client `MESSAGE` delivery so an existing subscription cannot outlive account suspension or credential invalidation.
 
-The default production budget is 120 inbound frames per 10 seconds per authenticated account. The limit is shared across that account's concurrent WebSocket sessions on a single API instance, so opening additional sockets does not bypass the application-level budget. `CONNECT` and `DISCONNECT` frames are not charged; authentication and authorization still run normally.
+The default production budget is 120 inbound frames per 10 seconds per authenticated account. The limit is shared across that account's concurrent WebSocket sessions and across API replicas through the atomic Redis backend, so opening additional sockets or reaching another node does not create another allowance. `CONNECT` and `DISCONNECT` frames are not charged; authentication and authorization still run normally.
 
-When the budget is exceeded the inbound frame is rejected before application message handlers execute. The limiter uses bounded in-memory state and fails closed for new principals if its configured entry capacity is exhausted. Expired windows are cleaned incrementally.
+When the budget is exceeded the inbound frame is rejected before application message handlers execute. A Redis outage also rejects the frame fail-closed. The plain local/IDE profile retains bounded in-memory state. See [DISTRIBUTED_RATE_LIMITING.md](DISTRIBUTED_RATE_LIMITING.md) for backend atomicity, key privacy and operations.
 
 Production knobs:
 
@@ -59,6 +59,6 @@ Production knobs:
 
 ## Deployment boundary
 
-Gateway connection/handshake limits and the API message limiter protect different stages and are both required. A multi-instance deployment should enforce equivalent connection/request limits at the outermost trusted ingress and should use shared or ingress-level application abuse controls where a per-instance budget could otherwise be multiplied across replicas.
+Gateway connection/handshake limits and the API message limiter protect different stages and are both required. Redis now supplies the shared application-message budget. A multi-instance deployment must still enforce equivalent connection/request limits at the outermost trusted ingress because TCP/WebSocket connection ownership remains node-specific.
 
 Origin restrictions and JWT-based WebSocket authentication remain mandatory and independent of these limits. The connection caps are abuse controls, not user/session authorization decisions.

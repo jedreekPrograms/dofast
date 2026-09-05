@@ -6,7 +6,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -18,6 +17,7 @@ import java.util.regex.Pattern;
 
 public class AuthenticatedRoutingRateLimitFilter extends OncePerRequestFilter {
 
+    private static final String RATE_LIMIT_NAMESPACE = "authenticated-routing";
     private static final String CREATE_QUOTE_PATH = "/routing/quotes";
     private static final Pattern MODE_ESTIMATES_PATH = Pattern.compile(
             "^/routing/quotes/[^/]+/mode-estimates$"
@@ -26,7 +26,7 @@ public class AuthenticatedRoutingRateLimitFilter extends OncePerRequestFilter {
     private static final int MODE_ESTIMATES_PROVIDER_CALLS = 2;
 
     private final Clock clock;
-    private final InMemoryFixedWindowRateLimiter rateLimiter;
+    private final FixedWindowRateLimiter rateLimiter;
 
     public AuthenticatedRoutingRateLimitFilter(
             int maxProviderCalls,
@@ -42,11 +42,27 @@ public class AuthenticatedRoutingRateLimitFilter extends OncePerRequestFilter {
             int maxEntries,
             Clock clock
     ) {
+        validateConfiguration(maxProviderCalls, windowSeconds, maxEntries);
+        this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxProviderCalls, windowSeconds, maxEntries);
+        this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    AuthenticatedRoutingRateLimitFilter(
+            FixedWindowRateLimiterFactory rateLimiterFactory,
+            int maxProviderCalls,
+            long windowSeconds,
+            int maxEntries
+    ) {
+        validateConfiguration(maxProviderCalls, windowSeconds, maxEntries);
+        this.rateLimiter = Objects.requireNonNull(rateLimiterFactory, "rateLimiterFactory")
+                .create(RATE_LIMIT_NAMESPACE, maxProviderCalls, windowSeconds, maxEntries);
+        this.clock = Clock.systemUTC();
+    }
+
+    private static void validateConfiguration(int maxProviderCalls, long windowSeconds, int maxEntries) {
         if (maxProviderCalls < MODE_ESTIMATES_PROVIDER_CALLS || windowSeconds < 1 || maxEntries < 100) {
             throw new IllegalArgumentException("Invalid authenticated routing rate-limit configuration");
         }
-        this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxProviderCalls, windowSeconds, maxEntries);
-        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
@@ -65,17 +81,15 @@ public class AuthenticatedRoutingRateLimitFilter extends OncePerRequestFilter {
 
         int providerCallCost = providerCallCost(request);
         String accountKey = user.getId() == null ? "authenticated-without-id" : user.getId().toString();
-        InMemoryFixedWindowRateLimiter.Decision decision = rateLimiter.register(
-                accountKey,
-                providerCallCost,
-                clock.instant()
-        );
+        FixedWindowRateLimiter.Decision decision;
+        try {
+            decision = rateLimiter.register(accountKey, providerCallCost, clock.instant());
+        } catch (RateLimitBackendUnavailableException exception) {
+            RateLimitHttpResponseWriter.writeBackendUnavailable(response);
+            return;
+        }
         if (!decision.allowed()) {
-            response.setStatus(429);
-            response.setHeader("Retry-After", Long.toString(decision.retryAfterSeconds()));
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setCharacterEncoding("UTF-8");
-            response.getWriter().write("{\"status\":429,\"error\":\"Too Many Requests\"}");
+            RateLimitHttpResponseWriter.writeTooManyRequests(response, decision.retryAfterSeconds());
             return;
         }
 

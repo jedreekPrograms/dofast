@@ -3,6 +3,13 @@ spring:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
+  data:
+    redis:
+      host: ${RATE_LIMIT_REDIS_HOST:redis}
+      port: ${RATE_LIMIT_REDIS_PORT:6379}
+      password: ${RATE_LIMIT_REDIS_PASSWORD}
+      connect-timeout: ${RATE_LIMIT_REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${RATE_LIMIT_REDIS_TIMEOUT:2s}
   jpa:
     show-sql: false
   mail:
@@ -26,6 +33,10 @@ stripe:
 
 dofast:
   security:
+    rate-limit:
+      backend: redis
+      redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:dofast:prod:rate-limit:v1}
+      key-hmac-secret: ${RATE_LIMIT_KEY_HMAC_SECRET}
     jwt:
       secret: ${JWT_SECRET}
       expiration-ms: ${JWT_EXPIRATION_MS:600000}
@@ -95,3 +106,8 @@ dofast:
 logging:
   level:
     com.doFast.dofastapp: INFO
+
+management:
+  health:
+    redis:
+      enabled: true

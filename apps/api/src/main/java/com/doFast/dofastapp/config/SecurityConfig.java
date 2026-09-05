@@ -26,6 +26,7 @@ public class SecurityConfig {
 
     public SecurityConfig(
             JwtAuthFilter jwtAuthFilter,
+            FixedWindowRateLimiterFactory rateLimiterFactory,
             @Value("${dofast.security.public-auth-rate-limit.max-requests:30}") int maxRequests,
             @Value("${dofast.security.public-auth-rate-limit.window-seconds:60}") long windowSeconds,
             @Value("${dofast.security.public-auth-rate-limit.max-entries:10000}") int maxEntries,
@@ -43,23 +44,27 @@ public class SecurityConfig {
     ) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.publicAuthRateLimitFilter = new PublicAuthRateLimitFilter(
+                rateLimiterFactory,
                 maxRequests,
                 windowSeconds,
                 maxEntries,
                 trustForwardedFor
         );
         this.publicJobDiscoveryRateLimitFilter = new PublicJobDiscoveryRateLimitFilter(
+                rateLimiterFactory,
                 discoveryMaxRequests,
                 discoveryWindowSeconds,
                 discoveryMaxEntries,
                 discoveryTrustForwardedFor
         );
         this.authenticatedOperationRateLimitFilter = new AuthenticatedOperationRateLimitFilter(
+                rateLimiterFactory,
                 operationMaxCostUnits,
                 operationWindowSeconds,
                 operationMaxEntries
         );
         this.authenticatedRoutingRateLimitFilter = new AuthenticatedRoutingRateLimitFilter(
+                rateLimiterFactory,
                 routingMaxProviderCalls,
                 routingWindowSeconds,
                 routingMaxEntries
