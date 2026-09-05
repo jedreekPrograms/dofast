@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-final class InMemoryFixedWindowRateLimiter {
+final class InMemoryFixedWindowRateLimiter implements FixedWindowRateLimiter {
 
     private static final long CLEANUP_INTERVAL = 256;
 
@@ -26,7 +26,8 @@ final class InMemoryFixedWindowRateLimiter {
         this.maxEntries = maxEntries;
     }
 
-    Decision register(String key, int costUnits, Instant now) {
+    @Override
+    public Decision register(String key, int costUnits, Instant now) {
         if (key == null || key.isBlank() || costUnits < 1) {
             throw new IllegalArgumentException("Rate-limit key and cost must be present");
         }
@@ -82,6 +83,4 @@ final class InMemoryFixedWindowRateLimiter {
     }
 
     private record Window(long startedAtEpochSecond, long costUnits) {}
-
-    record Decision(boolean allowed, long retryAfterSeconds) {}
 }

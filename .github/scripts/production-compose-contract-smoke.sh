@@ -19,6 +19,9 @@ export AUTH_REFRESH_REUSE_GRACE_SECONDS=20
 export AUTH_SESSION_RETENTION_DAYS=9
 export AUTH_SESSION_CLEANUP_INTERVAL_MS=7200000
 export AUTH_COOKIE_SAME_SITE=Strict
+export RATE_LIMIT_REDIS_PASSWORD='prod-contract-redis-password'
+export RATE_LIMIT_REDIS_KEY_PREFIX='dofast:contract:rate-limit:v1'
+export RATE_LIMIT_KEY_HMAC_SECRET='prod-contract-rate-limit-hmac-secret-32-bytes'
 export SMTP_HOST='smtp.example.test'
 export SMTP_PORT=2525
 export SMTP_USERNAME='dofast-prod-contract'
@@ -85,6 +88,7 @@ with open(sys.argv[1], encoding='utf-8') as handle:
 
 services = config['services']
 api = services['api']
+redis = services['redis']
 web = services['web']
 env = api['environment']
 
@@ -97,6 +101,11 @@ expected = {
     'AUTH_SESSION_RETENTION_DAYS': '9',
     'AUTH_SESSION_CLEANUP_INTERVAL_MS': '7200000',
     'AUTH_COOKIE_SAME_SITE': 'Strict',
+    'RATE_LIMIT_REDIS_HOST': 'redis',
+    'RATE_LIMIT_REDIS_PORT': '6379',
+    'RATE_LIMIT_REDIS_PASSWORD': 'prod-contract-redis-password',
+    'RATE_LIMIT_REDIS_KEY_PREFIX': 'dofast:contract:rate-limit:v1',
+    'RATE_LIMIT_KEY_HMAC_SECRET': 'prod-contract-rate-limit-hmac-secret-32-bytes',
     'SMTP_HOST': 'smtp.example.test',
     'SMTP_PORT': '2525',
     'SMTP_USERNAME': 'dofast-prod-contract',
@@ -157,7 +166,17 @@ assert attachment_mounts[0].get('source'), attachment_mounts[0]
 
 assert api.get('healthcheck', {}).get('test'), 'API healthcheck missing'
 assert web.get('healthcheck', {}).get('test'), 'web healthcheck missing'
+assert redis.get('healthcheck', {}).get('test'), 'Redis healthcheck missing'
+assert not redis.get('ports'), 'rate-limit Redis must not publish a host port'
+assert redis.get('restart') == 'always', redis.get('restart')
+assert redis.get('depends_on') is None, redis.get('depends_on')
+assert api.get('depends_on', {}).get('redis', {}).get('condition') == 'service_healthy', api.get('depends_on')
 assert web.get('depends_on', {}).get('api', {}).get('condition') == 'service_healthy', web.get('depends_on')
+
+redis_command = ' '.join(redis.get('command', []))
+assert '--requirepass' in redis_command, redis_command
+assert '--appendonly no' in redis_command and "--save ''" in redis_command, redis_command
+assert '--maxmemory-policy noeviction' in redis_command, redis_command
 PY
 
 python3 - "$prod_profile" <<'PY'
@@ -178,10 +197,14 @@ assert 'from-address: ${EMAIL_VERIFICATION_FROM_ADDRESS}' in text, 'production e
 assert 'max-cost-units: ${AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_COST_UNITS:240}' in text, 'authenticated operation budget missing'
 assert 'window-seconds: ${AUTHENTICATED_OPERATION_RATE_LIMIT_WINDOW_SECONDS:60}' in text, 'authenticated operation window missing'
 assert 'max-entries: ${AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_ENTRIES:10000}' in text, 'authenticated operation capacity missing'
+assert 'backend: redis' in text, 'production must hard-wire the shared Redis rate-limit backend'
+assert 'password: ${RATE_LIMIT_REDIS_PASSWORD}' in text, 'production Redis password must be required'
+assert 'key-hmac-secret: ${RATE_LIMIT_KEY_HMAC_SECRET}' in text, 'production rate-limit key HMAC secret must be required'
+assert 'enabled: true' in text, 'production Redis health indicator must be enabled'
 assert 'retention-days: ${JOB_EXACT_LOCATION_RETENTION_DAYS}' in text, 'production exact-location retention must be explicit'
 PY
 
-for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_URL PASSWORD_RECOVERY_FROM_ADDRESS EMAIL_VERIFICATION_BASE_URL EMAIL_VERIFICATION_FROM_ADDRESS JOB_EXACT_LOCATION_RETENTION_DAYS; do
+for missing in RATE_LIMIT_REDIS_PASSWORD RATE_LIMIT_KEY_HMAC_SECRET ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_URL PASSWORD_RECOVERY_FROM_ADDRESS EMAIL_VERIFICATION_BASE_URL EMAIL_VERIFICATION_FROM_ADDRESS JOB_EXACT_LOCATION_RETENTION_DAYS; do
   if env -u "$missing" docker compose -f "$compose_file" config >/tmp/dofast-prod-compose-missing-secret.log 2>&1; then
     echo "Production Compose unexpectedly accepted missing $missing"
     cat /tmp/dofast-prod-compose-missing-secret.log
@@ -190,4 +213,4 @@ for missing in ATTACHMENT_ENCRYPTION_KEY_BASE64 SMTP_HOST PASSWORD_RESET_BASE_UR
 done
 rm -f /tmp/dofast-prod-compose-missing-secret.log
 
-echo 'Production Compose forwards finance/payout/auth/rate-limit/recovery/email-verification/tracking/privacy settings, enforces explicit exact-location retention and Secure refresh cookies, and persists encrypted attachments: OK'
+echo 'Production Compose wires private Redis-backed rate limits plus finance/payout/auth/recovery/email-verification/tracking/privacy settings, enforces required secrets and Secure refresh cookies, and persists encrypted attachments: OK'

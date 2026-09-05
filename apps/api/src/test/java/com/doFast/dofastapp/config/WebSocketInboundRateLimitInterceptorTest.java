@@ -64,6 +64,18 @@ class WebSocketInboundRateLimitInterceptorTest {
                 () -> new WebSocketInboundRateLimitInterceptor(10, 10, 99, FIXED_CLOCK));
     }
 
+    @Test
+    void failsClosedWhenSharedBackendIsUnavailable() {
+        FixedWindowRateLimiter unavailable = (key, costUnits, now) -> {
+            throw new RateLimitBackendUnavailableException("Redis unavailable");
+        };
+        WebSocketInboundRateLimitInterceptor interceptor =
+                new WebSocketInboundRateLimitInterceptor(unavailable, FIXED_CLOCK);
+
+        assertThrows(AccessDeniedException.class,
+                () -> interceptor.preSend(message(StompCommand.SEND, "user@example.com"), null));
+    }
+
     private Message<byte[]> message(StompCommand command, String principalName) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
         Principal principal = () -> principalName;

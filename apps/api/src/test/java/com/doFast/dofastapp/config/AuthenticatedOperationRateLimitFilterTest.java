@@ -113,6 +113,23 @@ class AuthenticatedOperationRateLimitFilterTest {
     }
 
     @Test
+    void failsClosedWithoutEnteringControllerWhenSharedBackendIsUnavailable() throws Exception {
+        FixedWindowRateLimiter unavailable = (key, costUnits, now) -> {
+            throw new RateLimitBackendUnavailableException("Redis unavailable");
+        };
+        AuthenticatedOperationRateLimitFilter filter =
+                new AuthenticatedOperationRateLimitFilter(unavailable, FIXED_CLOCK);
+        authenticate(10L);
+
+        MockHttpServletResponse response = invoke(filter, "POST", "/payments/create-intent");
+
+        assertThat(response.getStatus()).isEqualTo(503);
+        assertThat(response.getHeader("Retry-After")).isEqualTo("1");
+        assertThat(response.getContentType()).startsWith("application/json");
+        assertThat(response.getContentAsString()).contains("Service Unavailable");
+    }
+
+    @Test
     void rejectsConfigurationBelowLargestWeightOrStorageBounds() {
         assertThatThrownBy(() -> new AuthenticatedOperationRateLimitFilter(19, 60, 100, FIXED_CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);

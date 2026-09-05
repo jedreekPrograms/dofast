@@ -13,6 +13,13 @@ spring:
       connection-timeout: 30000
       maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
       minimum-idle: ${DB_POOL_MIN_IDLE:2}
+  data:
+    redis:
+      host: ${RATE_LIMIT_REDIS_HOST:localhost}
+      port: ${RATE_LIMIT_REDIS_PORT:6379}
+      password: ${RATE_LIMIT_REDIS_PASSWORD:}
+      connect-timeout: ${RATE_LIMIT_REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${RATE_LIMIT_REDIS_TIMEOUT:2s}
   jpa:
     open-in-view: false
     hibernate:
@@ -52,6 +59,8 @@ management:
         enabled: true
       show-details: never
   health:
+    redis:
+      enabled: ${RATE_LIMIT_REDIS_HEALTH_ENABLED:false}
     # Transactional email delivery is AFTER_COMMIT and external SMTP outages must not take the API
     # out of service. Mail delivery failures are handled/monitored separately from API readiness.
     mail:
@@ -70,6 +79,10 @@ stripe:
 
 dofast:
   security:
+    rate-limit:
+      backend: ${RATE_LIMIT_BACKEND:memory}
+      redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:dofast:rate-limit:v1}
+      key-hmac-secret: ${RATE_LIMIT_KEY_HMAC_SECRET:}
     jwt:
       secret: ${JWT_SECRET:local-only-change-this-jwt-secret-please-32-bytes-minimum}
       expiration-ms: ${JWT_EXPIRATION_MS:600000}

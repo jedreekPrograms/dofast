@@ -19,6 +19,24 @@ services:
     networks:
       - backend
 
+  redis:
+    image: redis:7.4-alpine
+    restart: always
+    environment:
+      RATE_LIMIT_REDIS_PASSWORD: ${RATE_LIMIT_REDIS_PASSWORD:?RATE_LIMIT_REDIS_PASSWORD is required}
+    command:
+      - sh
+      - -c
+      - exec redis-server --save '' --appendonly no --requirepass "$${RATE_LIMIT_REDIS_PASSWORD}" --maxmemory 128mb --maxmemory-policy noeviction
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${RATE_LIMIT_REDIS_PASSWORD}\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - backend
+
   api:
     build:
       context: ../..
@@ -26,6 +44,8 @@ services:
     restart: always
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: prod
@@ -41,6 +61,11 @@ services:
       AUTH_SESSION_RETENTION_DAYS: ${AUTH_SESSION_RETENTION_DAYS:-7}
       AUTH_SESSION_CLEANUP_INTERVAL_MS: ${AUTH_SESSION_CLEANUP_INTERVAL_MS:-3600000}
       AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-Strict}
+      RATE_LIMIT_REDIS_HOST: redis
+      RATE_LIMIT_REDIS_PORT: 6379
+      RATE_LIMIT_REDIS_PASSWORD: ${RATE_LIMIT_REDIS_PASSWORD:?RATE_LIMIT_REDIS_PASSWORD is required}
+      RATE_LIMIT_REDIS_KEY_PREFIX: ${RATE_LIMIT_REDIS_KEY_PREFIX:-dofast:prod:rate-limit:v1}
+      RATE_LIMIT_KEY_HMAC_SECRET: ${RATE_LIMIT_KEY_HMAC_SECRET:?RATE_LIMIT_KEY_HMAC_SECRET is required}
       PUBLIC_JOB_DISCOVERY_RATE_LIMIT_MAX_REQUESTS: ${PUBLIC_JOB_DISCOVERY_RATE_LIMIT_MAX_REQUESTS:-120}
       PUBLIC_JOB_DISCOVERY_RATE_LIMIT_WINDOW_SECONDS: ${PUBLIC_JOB_DISCOVERY_RATE_LIMIT_WINDOW_SECONDS:-60}
       PUBLIC_JOB_DISCOVERY_RATE_LIMIT_MAX_ENTRIES: ${PUBLIC_JOB_DISCOVERY_RATE_LIMIT_MAX_ENTRIES:-10000}

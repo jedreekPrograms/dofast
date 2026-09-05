@@ -5,7 +5,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -15,6 +14,7 @@ import java.util.Set;
 
 public class PublicAuthRateLimitFilter extends OncePerRequestFilter {
 
+    private static final String RATE_LIMIT_NAMESPACE = "public-auth";
     private static final Set<String> LIMITED_PATHS = Set.of(
             "/users",
             "/users/login",
@@ -29,7 +29,7 @@ public class PublicAuthRateLimitFilter extends OncePerRequestFilter {
     );
 
     private final Clock clock;
-    private final InMemoryFixedWindowRateLimiter rateLimiter;
+    private final FixedWindowRateLimiter rateLimiter;
     private final boolean trustForwardedFor;
 
     public PublicAuthRateLimitFilter(int maxRequests, long windowSeconds, int maxEntries, boolean trustForwardedFor) {
@@ -37,12 +37,30 @@ public class PublicAuthRateLimitFilter extends OncePerRequestFilter {
     }
 
     PublicAuthRateLimitFilter(int maxRequests, long windowSeconds, int maxEntries, boolean trustForwardedFor, Clock clock) {
-        if (maxRequests < 1 || windowSeconds < 1 || maxEntries < 100) {
-            throw new IllegalArgumentException("Invalid public auth rate-limit configuration");
-        }
+        validateConfiguration(maxRequests, windowSeconds, maxEntries);
         this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxRequests, windowSeconds, maxEntries);
         this.trustForwardedFor = trustForwardedFor;
         this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    PublicAuthRateLimitFilter(
+            FixedWindowRateLimiterFactory rateLimiterFactory,
+            int maxRequests,
+            long windowSeconds,
+            int maxEntries,
+            boolean trustForwardedFor
+    ) {
+        validateConfiguration(maxRequests, windowSeconds, maxEntries);
+        this.rateLimiter = Objects.requireNonNull(rateLimiterFactory, "rateLimiterFactory")
+                .create(RATE_LIMIT_NAMESPACE, maxRequests, windowSeconds, maxEntries);
+        this.trustForwardedFor = trustForwardedFor;
+        this.clock = Clock.systemUTC();
+    }
+
+    private static void validateConfiguration(int maxRequests, long windowSeconds, int maxEntries) {
+        if (maxRequests < 1 || windowSeconds < 1 || maxEntries < 100) {
+            throw new IllegalArgumentException("Invalid public auth rate-limit configuration");
+        }
     }
 
     @Override
@@ -54,14 +72,16 @@ public class PublicAuthRateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String key = clientAddress(request) + "|" + request.getRequestURI();
-        InMemoryFixedWindowRateLimiter.Decision decision = rateLimiter.register(key, 1, clock.instant());
+        FixedWindowRateLimiter.Decision decision;
+        try {
+            decision = rateLimiter.register(key, 1, clock.instant());
+        } catch (RateLimitBackendUnavailableException exception) {
+            RateLimitHttpResponseWriter.writeBackendUnavailable(response);
+            return;
+        }
 
         if (!decision.allowed()) {
-            response.setStatus(429);
-            response.setHeader("Retry-After", Long.toString(decision.retryAfterSeconds()));
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setCharacterEncoding("UTF-8");
-            response.getWriter().write("{\"status\":429,\"error\":\"Too Many Requests\"}");
+            RateLimitHttpResponseWriter.writeTooManyRequests(response, decision.retryAfterSeconds());
             return;
         }
 

@@ -5,7 +5,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -16,10 +15,11 @@ import java.util.Objects;
 
 public class AuthenticatedOperationRateLimitFilter extends OncePerRequestFilter {
 
+    private static final String RATE_LIMIT_NAMESPACE = "authenticated-operation";
     private static final String TRANSIENT_ACCOUNT_KEY = "authenticated-without-id";
 
     private final Clock clock;
-    private final InMemoryFixedWindowRateLimiter rateLimiter;
+    private final FixedWindowRateLimiter rateLimiter;
 
     public AuthenticatedOperationRateLimitFilter(
             int maxCostUnits,
@@ -35,12 +35,33 @@ public class AuthenticatedOperationRateLimitFilter extends OncePerRequestFilter 
             int maxEntries,
             Clock clock
     ) {
+        validateConfiguration(maxCostUnits, windowSeconds, maxEntries);
+        this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxCostUnits, windowSeconds, maxEntries);
+        this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    AuthenticatedOperationRateLimitFilter(
+            FixedWindowRateLimiterFactory rateLimiterFactory,
+            int maxCostUnits,
+            long windowSeconds,
+            int maxEntries
+    ) {
+        validateConfiguration(maxCostUnits, windowSeconds, maxEntries);
+        this.rateLimiter = Objects.requireNonNull(rateLimiterFactory, "rateLimiterFactory")
+                .create(RATE_LIMIT_NAMESPACE, maxCostUnits, windowSeconds, maxEntries);
+        this.clock = Clock.systemUTC();
+    }
+
+    AuthenticatedOperationRateLimitFilter(FixedWindowRateLimiter rateLimiter, Clock clock) {
+        this.rateLimiter = Objects.requireNonNull(rateLimiter, "rateLimiter");
+        this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    private static void validateConfiguration(int maxCostUnits, long windowSeconds, int maxEntries) {
         if (maxCostUnits < AuthenticatedOperationRateLimitPolicy.MAX_SINGLE_REQUEST_COST
                 || windowSeconds < 1 || maxEntries < 100) {
             throw new IllegalArgumentException("Invalid authenticated operation rate-limit configuration");
         }
-        this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxCostUnits, windowSeconds, maxEntries);
-        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
@@ -59,17 +80,15 @@ public class AuthenticatedOperationRateLimitFilter extends OncePerRequestFilter 
         }
 
         String accountKey = user.getId() == null ? TRANSIENT_ACCOUNT_KEY : user.getId().toString();
-        InMemoryFixedWindowRateLimiter.Decision decision = rateLimiter.register(
-                accountKey,
-                costUnits(request),
-                clock.instant()
-        );
+        FixedWindowRateLimiter.Decision decision;
+        try {
+            decision = rateLimiter.register(accountKey, costUnits(request), clock.instant());
+        } catch (RateLimitBackendUnavailableException exception) {
+            RateLimitHttpResponseWriter.writeBackendUnavailable(response);
+            return;
+        }
         if (!decision.allowed()) {
-            response.setStatus(429);
-            response.setHeader("Retry-After", Long.toString(decision.retryAfterSeconds()));
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setCharacterEncoding("UTF-8");
-            response.getWriter().write("{\"status\":429,\"error\":\"Too Many Requests\"}");
+            RateLimitHttpResponseWriter.writeTooManyRequests(response, decision.retryAfterSeconds());
             return;
         }
 

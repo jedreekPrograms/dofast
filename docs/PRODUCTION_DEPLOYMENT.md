@@ -2,7 +2,7 @@
 
 ## Scope
 
-`infra/compose/compose.prod.yaml` is the repository's single-host production baseline. It keeps the API, web gateway and PostgreSQL/PostGIS configuration aligned with the current application contract. It is not a complete high-availability platform: TLS termination, managed backups, disaster recovery, external object storage and multi-node orchestration remain separate operational work.
+`infra/compose/compose.prod.yaml` is the repository's single-host production baseline. It keeps the API, web gateway, PostgreSQL/PostGIS and private Redis rate-limit backend aligned with the current application contract. It is not a complete high-availability platform: TLS termination, managed backups, disaster recovery, external object storage and multi-node orchestration remain separate operational work.
 
 The production Compose file intentionally fails closed for secrets and commercial settings that must never inherit local-development defaults.
 
@@ -12,6 +12,7 @@ The deployment environment must provide at least:
 
 - `DB_NAME`, `DB_USER`, `DB_PASSWORD`;
 - `JWT_SECRET`;
+- `RATE_LIMIT_REDIS_PASSWORD` and an independent high-entropy `RATE_LIMIT_KEY_HMAC_SECRET` of at least 32 bytes;
 - `WEBSOCKET_ALLOWED_ORIGIN_PATTERNS` with trusted HTTPS origins only;
 - `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD` for password recovery;
 - `PASSWORD_RESET_BASE_URL` pointing to the trusted HTTPS `/reset-password` page;
@@ -101,9 +102,11 @@ The encryption key must remain available for as long as encrypted objects need t
 
 A Docker volume is persistence, not a backup. Off-host database/attachment backups, restore drills and a future S3-compatible object-storage adapter are separate launch requirements.
 
+Rate-limit counters are intentionally not persistent business data. The private Redis service disables snapshots and append-only persistence, has no published host port and uses a hard memory limit with `noeviction`. All API replicas consume the same atomic counters. A Redis write/timeout failure rejects limited work fail-closed; see [DISTRIBUTED_RATE_LIMITING.md](DISTRIBUTED_RATE_LIMITING.md).
+
 ## Health and startup ordering
 
-PostgreSQL, API and web services all expose health checks. The API waits for PostgreSQL health before startup, and the web container waits for API health rather than only for container creation.
+PostgreSQL, Redis, API and web services all expose health checks. The API waits for both datastores before startup, and the web container waits for API health rather than only for container creation. The production actuator includes Redis health so a node is not considered ready while its shared abuse boundary is unavailable.
 
 This prevents a nominally running web container from being treated as ready while the backend is still unavailable.
 
@@ -117,11 +120,12 @@ Do not expose a real customer deployment over plain HTTP. Secure refresh cookies
 
 `.github/scripts/production-compose-contract-smoke.sh` renders the production Compose file with deterministic placeholder settings and verifies that:
 
-- current auth-session, password-recovery, finance, payout, submitted-payout reconciliation and tracking settings reach the API container;
+- current auth-session, shared rate-limit, password-recovery, finance, payout, submitted-payout reconciliation and tracking settings reach the API container;
+- Redis remains private, authenticated, non-persistent, `noeviction` and health-gated before API startup;
 - the production access-token default stays at 10 minutes;
 - the production Spring profile hard-wires `Secure` refresh cookies and Compose cannot override that invariant;
 - production password recovery stays on SMTP with an explicit reset URL/sender;
-- required SMTP/reset configuration fails closed when omitted;
+- required Redis, HMAC, SMTP and reset configuration fails closed when omitted;
 - sandbox payouts stay disabled;
 - attachment encryption configuration is present;
 - encrypted attachment storage is backed by a persistent volume;

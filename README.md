@@ -52,6 +52,7 @@ For IDE-based backend development you can start only the database with `docker c
 - Spring Boot 4.1.x
 - React 19 + Vite
 - PostgreSQL 18.6 + PostGIS
+- Redis 7.4 for shared application abuse budgets
 - Flyway database migrations
 - Docker / Docker Compose
 - Nginx
@@ -71,6 +72,7 @@ The core doFast workflow is transactional and money-sensitive, so the primary da
 - [Production deployment](docs/PRODUCTION_DEPLOYMENT.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Security baseline](docs/SECURITY.md)
+- [Distributed rate limiting](docs/DISTRIBUTED_RATE_LIMITING.md)
 
 ## Project status
 

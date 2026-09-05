@@ -5,7 +5,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -15,13 +14,14 @@ import java.util.Set;
 
 public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
 
+    private static final String RATE_LIMIT_NAMESPACE = "public-job-discovery";
     private static final Set<String> LIMITED_PATHS = Set.of(
             "/jobs",
             "/jobs/nearby"
     );
 
     private final Clock clock;
-    private final InMemoryFixedWindowRateLimiter rateLimiter;
+    private final FixedWindowRateLimiter rateLimiter;
     private final boolean trustForwardedFor;
 
     public PublicJobDiscoveryRateLimitFilter(
@@ -40,12 +40,30 @@ public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
             boolean trustForwardedFor,
             Clock clock
     ) {
-        if (maxRequests < 1 || windowSeconds < 1 || maxEntries < 100) {
-            throw new IllegalArgumentException("Invalid public job discovery rate-limit configuration");
-        }
+        validateConfiguration(maxRequests, windowSeconds, maxEntries);
         this.rateLimiter = new InMemoryFixedWindowRateLimiter(maxRequests, windowSeconds, maxEntries);
         this.trustForwardedFor = trustForwardedFor;
         this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    PublicJobDiscoveryRateLimitFilter(
+            FixedWindowRateLimiterFactory rateLimiterFactory,
+            int maxRequests,
+            long windowSeconds,
+            int maxEntries,
+            boolean trustForwardedFor
+    ) {
+        validateConfiguration(maxRequests, windowSeconds, maxEntries);
+        this.rateLimiter = Objects.requireNonNull(rateLimiterFactory, "rateLimiterFactory")
+                .create(RATE_LIMIT_NAMESPACE, maxRequests, windowSeconds, maxEntries);
+        this.trustForwardedFor = trustForwardedFor;
+        this.clock = Clock.systemUTC();
+    }
+
+    private static void validateConfiguration(int maxRequests, long windowSeconds, int maxEntries) {
+        if (maxRequests < 1 || windowSeconds < 1 || maxEntries < 100) {
+            throw new IllegalArgumentException("Invalid public job discovery rate-limit configuration");
+        }
     }
 
     @Override
@@ -57,14 +75,16 @@ public class PublicJobDiscoveryRateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String key = clientAddress(request) + "|" + request.getRequestURI();
-        InMemoryFixedWindowRateLimiter.Decision decision = rateLimiter.register(key, 1, clock.instant());
+        FixedWindowRateLimiter.Decision decision;
+        try {
+            decision = rateLimiter.register(key, 1, clock.instant());
+        } catch (RateLimitBackendUnavailableException exception) {
+            RateLimitHttpResponseWriter.writeBackendUnavailable(response);
+            return;
+        }
 
         if (!decision.allowed()) {
-            response.setStatus(429);
-            response.setHeader("Retry-After", Long.toString(decision.retryAfterSeconds()));
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setCharacterEncoding("UTF-8");
-            response.getWriter().write("{\"status\":429,\"error\":\"Too Many Requests\"}");
+            RateLimitHttpResponseWriter.writeTooManyRequests(response, decision.retryAfterSeconds());
             return;
         }
 

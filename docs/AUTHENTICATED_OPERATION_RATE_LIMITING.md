@@ -33,10 +33,10 @@ Provider-backed routing calls consume both this cross-operation budget and the n
 - `AUTHENTICATED_OPERATION_RATE_LIMIT_WINDOW_SECONDS` (default `60`),
 - `AUTHENTICATED_OPERATION_RATE_LIMIT_MAX_ENTRIES` (default `10000`).
 
-The maximum budget cannot be configured below the largest single-operation cost. State is bounded; if all account buckets are occupied and none has expired, a new account fails closed with `429` instead of growing process memory without limit. Public authentication and discovery keep their separate IP-and-endpoint buckets.
+The maximum budget cannot be configured below the largest single-operation cost. The local in-memory fallback is bounded; if all account buckets are occupied and none has expired, a new account fails closed with `429` instead of growing process memory without limit. Public authentication and discovery keep their separate IP-and-endpoint namespaces.
 
 ## Deployment boundary
 
-This limiter is intentionally in-process and protects each API instance. It does not claim a cluster-wide guarantee. Before horizontal scaling, replace or back it with an atomic shared store or gateway policy while preserving the same account key, weights, response semantics and contract tests. Provider-side hard quotas, Stripe controls and monitoring remain independent layers.
+Production and both Compose stacks use the atomic Redis backend, so all API replicas consume one account budget. The plain local/IDE profile retains the bounded in-memory backend. Redis key privacy, failure semantics, deployment settings and the remaining HA boundary are documented in [DISTRIBUTED_RATE_LIMITING.md](DISTRIBUTED_RATE_LIMITING.md). Provider-side hard quotas, Stripe controls and monitoring remain independent layers.
 
 Alert on sustained `429` rates by operation class and account-safe aggregate, not on raw identifiers. Raising weights or the account budget is a capacity and fraud decision and must be accompanied by a review of provider quotas and realistic load results.

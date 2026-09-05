@@ -1,20 +1,20 @@
 # doFast — roadmapa 965 punktów
 
-Stan roboczy: 2026-09-04. Bazowy snapshot listy został porównany z aktualnym kodem i historią GitHuba. Ten dokument zachowuje wszystkie punkty 1–965 dokładnie raz i nie oznacza jako ukończonych elementów wymagających prawdziwego Stripe, środowiska staging/production, decyzji prawnych ani dostępu do ustawień repozytorium.
+Stan roboczy: 2026-09-05. Bazowy snapshot listy został porównany z aktualnym kodem i historią GitHuba. Ten dokument zachowuje wszystkie punkty 1–965 dokładnie raz i nie oznacza jako ukończonych elementów wymagających prawdziwego Stripe, środowiska staging/production, decyzji prawnych ani dostępu do ustawień repozytorium.
 
-- Audytowany code baseline: `f19019e7b709f465d03fec048522c07c34967880` (merge PR #239).
-- Najnowszy pakiet bazowy: [PR #239](https://github.com/jedreekPrograms/dofast/pull/239) — scalony merge commitem po zielonym exact-head gate; bieżący pakiet domyka per-account limity kosztownych operacji (#623).
+- Audytowany code baseline: `afe43966240bdddc27ef0dc1bcc905c5377201df` (merge PR #240).
+- Najnowszy pakiet bazowy: [PR #240](https://github.com/jedreekPrograms/dofast/pull/240) — scalony merge commitem po zielonym exact-head gate; bieżący pakiet przenosi wszystkie pięć budżetów aplikacyjnych do atomowego współdzielonego Redis (#624–#625/#942).
 - Ochrona gałęzi: `master protected=false`, required checks wyłączone, brak rulesetów.
-- Otwarty techniczny priorytet: distributed/shared rate limiting (#624–#625), admin MFA (#958) i monitoring/alerting (#959).
+- Otwarty techniczny priorytet po tym pakiecie: admin MFA (#958), monitoring/alerting (#959) i disaster/release runbook (#960).
 
 ## Legenda i liczby
 
 | Status | Znaczenie | Liczba |
 |---|---|---:|
-| ✅ | zaimplementowane / zweryfikowane w repo | 622 |
+| ✅ | zaimplementowane / zweryfikowane w repo | 625 |
 | 🟢 | główna część domknięta, jawnie opisany zewnętrzny blocker | 2 |
-| 🟡 | częściowe albo aktywnie audytowane | 76 |
-| 🔴 | niewykonane, przyszłościowe lub zależne od zewnętrznego dostępu/decyzji | 265 |
+| 🟡 | częściowe albo aktywnie audytowane | 75 |
+| 🔴 | niewykonane, przyszłościowe lub zależne od zewnętrznego dostępu/decyzji | 263 |
 | **Razem** |  | **965** |
 
 ## Co doszło od poprzedniego snapshotu
@@ -28,6 +28,7 @@ Stan roboczy: 2026-09-04. Bazowy snapshot listy został porównany z aktualnym k
 | Wykonywalna macierz HTTP i zamknięta anonymous allowlista | #237 |
 | Bilateralna macierz blokad i aktualizacja Tomcata po krytycznych CVE | #238 |
 | Transport DTO, strict unknown fields i zakaz encji w odpowiedziach kontrolerów | #239 |
+| Wspólny ważony budżet wszystkich kosztownych operacji per konto | #240 |
 
 PR-y #181, #186, #190, #208 i #212 zostały zamknięte bez merge jako duplikaty/superseded i nie są liczone jako dostarczone zmiany.
 
@@ -660,8 +661,8 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 621.  ✅ Mass-assignment audit — 39 payloadów REST/STOMP wiąże wyłącznie audytowane DTO; jedyny surowy body to weryfikowany podpisem webhook Stripe, a encje/Map/Object/JSON tree są zakazane testem architektury.
 622.  ✅ DTO sensitive-field audit — jawna allowlista 38 bezpośrednich lub zagnieżdżonych request DTO, strict unknown-property `400` i rekurencyjny zakaz encji w odpowiedziach kontrolerów.
 623.  ✅ Rate-limit wszystkich kosztownych authenticated endpointów — wspólny ważony budżet per konto obejmuje wszystkie prywatne mutacje oraz 41 audytowanych provider/finance/storage/query operations; kontrakt skanuje kontrolery.
-624.  🟡 Distributed/shared rate limiting. 
-625.  🔴 Redis/shared limiter przy multi-node. 
+624.  ✅ Distributed/shared rate limiting — pięć budżetów aplikacyjnych używa w produkcji jednego atomowego backendu Redis.
+625.  ✅ Redis/shared limiter przy multi-node — Lua `INCRBY` + TTL gwarantuje wspólną decyzję między replikami, co potwierdza test integracyjny dwóch instancji i współbieżności.
 626.  🟡 WAF/API gateway przed dużą skalą. 
 627.  ✅ CI auth smoke. 
 628.  ✅ CI password recovery smoke. 
@@ -869,11 +870,11 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 830.  🔴 Personalized notification alerts. 
 831.  🔴 Automatic saved-search push. 
 832.  🔴 Geofenced new-job alerts. 
-833.  🟡 Final security review — HTTP/IDOR, blokady, granice DTO i per-account costly-operation limits są domknięte; shared multi-node limiter, branch protection i zewnętrzne testy nadal blokują sign-off.
+833.  🟡 Final security review — HTTP/IDOR, blokady, granice DTO oraz współdzielone per-account/IP/WebSocket limits są domknięte; admin MFA, branch protection i zewnętrzne testy nadal blokują sign-off.
 834.  🟡 Final privacy review — historical-resource/IDOR i blocked-user sweep HTTP są domknięte; zewnętrzny przegląd nadal pozostaje otwarty.
-835.  🟡 Final authorization review — scoped lookups, fail-closed identity oraz macierze endpointów, blokad, DTO i limitów kosztownych operacji są domknięte; pozostaje distributed/shared enforcement przed multi-node.
+835.  🟡 Final authorization review — scoped lookups, fail-closed identity oraz macierze endpointów, blokad, DTO i współdzielonych limitów kosztownych operacji są domknięte; pozostaje niezależny finalny sign-off.
 836.  🟢 Final financial review — crash-window część zakończona; real Stripe E2E nadal blockerem. 
-837.  🟡 Final abuse review — publiczne IP limits, WebSocket/tracking throttling i wspólny budżet kosztownych operacji per konto działają; multi-node, WAF i real load/penetration tests pozostają otwarte.
+837.  🟡 Final abuse review — publiczne IP limits, WebSocket throttling i ważone budżety per konto są atomowo współdzielone przez Redis; WAF, outer-ingress connection limits oraz real load/penetration tests pozostają otwarte.
 838.  🔴 External penetration test — idealnie przed większym launch. 
 839.  🔴 Real staging environment. 
 840.  🔴 Staging data reset strategy. 
@@ -978,7 +979,7 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 939.  🔴 Structured shopping. 
 940.  🔴 Expanded admin RBAC. 
 941.  🔴 HA/multi-node deployment. 
-942.  🔴 Shared distributed rate limiting. 
+942.  ✅ Shared distributed rate limiting — produkcyjny Redis, pseudonimizowane klucze, fail-closed outage path i exact concurrency proof w CI.
 943.  🔴 External object storage. 
 944.  🔴 Managed PostgreSQL lub HA DB. 
 945.  🔴 CDN/static asset strategy. 
@@ -992,9 +993,9 @@ Punkty #50–#54 i #956 nadal są czerwone. Kod i workflowy istnieją, ale sam G
 953.  ✅ **Final financial crash-window audit — główne outbound/provider/DB boundaries domknięte przez #151, #153–#177 wraz z rollback/recovery proofs.** 
 954.  🔴 **Następny finansowy blocker: real Stripe Connect E2E.** 
 955.  🟡 **Backup + restore — DB/attachment restore drills działają; off-host/encryption/schedule/retention/production DR nadal otwarte.** 
-956.  🔴 **Branch protection/ruleset — zweryfikowane 2026-09-04: `master protected=false`, required checks wyłączone, `rulesets=[]`.**
-957.  🟡 **TERAZ: distributed/shared rate limiting — lokalny ważony budżet per konto jest domknięty; #624–#625/#942 wymagają atomowego enforcementu przed multi-node.**
-958.  🔴 **Następnie: admin MFA.** 
+956.  🔴 **Branch protection/ruleset — zweryfikowane 2026-09-05: `master protected=false`, required checks wyłączone, `rulesets=[]`.**
+957.  🟡 **TERAZ: po domknięciu atomowego Redis rate limitingu (#624–#625/#942) priorytetem jest admin MFA (#958), następnie monitoring/alerting (#959).**
+958.  🔴 **TERAZ: admin MFA.**
 959.  🟡 **Następnie: monitoring/alerting.** 
 960.  🔴 **Następnie: disaster/release runbook.** 
 961.  🔴 **Następnie: staging environment.** 
